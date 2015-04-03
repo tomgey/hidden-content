@@ -20,6 +20,12 @@ namespace LinksRouting
 
   typedef std::function<void()> ExitCallback;
 
+  struct ClientInfo;
+  typedef std::shared_ptr<ClientInfo> ClientRef;
+  typedef std::weak_ptr<ClientInfo> ClientWeakRef;
+  typedef std::vector<ClientRef> ClientList;
+  typedef std::vector<ClientWeakRef> ClientWeakList;
+
 namespace LinkDescription
 {
   class HyperEdge;
@@ -311,17 +317,21 @@ namespace LinkDescription
     LinkDescription( const std::string& id,
                      uint32_t stamp,
                      const HyperEdgePtr& link,
-                     uint32_t color_id ):
+                     uint32_t color_id,
+                     const ClientWeakList& client_whitelist ):
       _id( id ),
       _stamp( stamp ),
       _link( link ),
-      _color_id( color_id )
+      _color_id( color_id ),
+      _client_whitelist( client_whitelist )
     {}
 
     const std::string   _id;
     uint32_t            _stamp;
     HyperEdgePtr        _link;
     uint32_t            _color_id;
+    ClientWeakList      _client_whitelist,
+                        _client_blacklist;
   };
 
   typedef std::list<LinkDescription> LinkList;

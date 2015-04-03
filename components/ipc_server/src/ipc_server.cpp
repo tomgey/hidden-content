@@ -16,9 +16,10 @@
 #include <QWebSocket>
 
 #include <algorithm>
-#include <map>
-#include <tuple>
 #include <limits>
+#include <map>
+#include <set>
+#include <tuple>
 
 namespace LinksRouting
 {
@@ -524,7 +525,7 @@ namespace LinksRouting
     connect(client, &QWebSocket::binaryMessageReceived, this, &IPCServer::onBinaryReceived);
     connect(client, &QWebSocket::disconnected, this, &IPCServer::onClientDisconnection);
 
-    _clients[ client ].reset(new ClientInfo(this));
+    _clients[ client ].reset(new ClientInfo(client, this));
 
     LOG_INFO( "Client connected: " << client->peerAddress().toString()
                                    << ":" << client->peerPort() );
@@ -540,8 +541,8 @@ namespace LinksRouting
       return;
     }
 
-    ClientInfo& client_info = *client->second.get();
-    std::cout << "Received (" << client_info.getWindowInfo().id << "): "
+    ClientRef client_info = client->second;
+    std::cout << "Received (" << client_info->getWindowInfo().id << "): "
               << data << std::endl;
 
     try
@@ -558,7 +559,7 @@ namespace LinksRouting
           const WindowRegions& windows = _window_monitor.getWindows();
 
           if( msg.hasChild("viewport") )
-            client_info.viewport = msg.getValue<QRect>("viewport");
+            client_info->viewport = msg.getValue<QRect>("viewport");
 
           if( task == "REGISTER" )
           {
@@ -577,16 +578,16 @@ namespace LinksRouting
               else
                 wid = windows.findId(title);
 
-              client_info.setWindowId(wid);
+              client_info->setWindowId(wid);
             }
 
             if( msg.hasChild("cmds") )
             {
               for(QString cmd: msg.getValue<QStringList>("cmds"))
-                client_info.addCommand(cmd);
+                client_info->addCommand(cmd);
             }
           }
-          client_info.update(windows);
+          client_info->update(windows);
           return;
         }
         else if( task == "SYNC" )
@@ -595,8 +596,8 @@ namespace LinksRouting
               && msg.getValue<QString>("item", "CONTENT") == "CONTENT" )
             // TODO handle ELEMENT scroll?
           {
-            client_info.setScrollPos( msg.getValue<QPoint>("pos") );
-            client_info.update(_window_monitor.getWindows());
+            client_info->setScrollPos( msg.getValue<QPoint>("pos") );
+            client_info->update(_window_monitor.getWindows());
 
             // Forward scroll events to clients which support this (eg. for
             // synchronized scrolling)
@@ -749,12 +750,12 @@ namespace LinksRouting
 
         LOG_INFO("Received "  << task << ": " << id_str);
 
-        client_info.parseScrollRegion(msg);
+        client_info->parseScrollRegion(msg);
 
         if( task == "FOUND" )
         {
           link->_link->addNode(
-            client_info.parseRegions(msg)
+            client_info->parseRegions(msg)
           );
         }
         else
@@ -767,7 +768,7 @@ namespace LinksRouting
 
             auto& hedge = n->getChildren().front();
             if(    hedge->get<WId>("client_wid")
-                == client_info.getWindowInfo().id )
+                == client_info->getWindowInfo().id )
             {
               node = n;
               break;
@@ -780,15 +781,15 @@ namespace LinksRouting
             return;
           }
 
-          client_info.parseRegions(msg, node);
+          client_info->parseRegions(msg, node);
         }
 
-        client_info.update(_window_monitor.getWindows());
+        client_info->update(_window_monitor.getWindows());
         updateCenter(link->_link.get());
       }
       else if( task == "ABORT" )
       {
-        WId abort_wid = client_info.getWindowInfo().id;
+        WId abort_wid = client_info->getWindowInfo().id;
 
         if( id.isEmpty() && stamp == (uint32_t)-1 )
           abortAll();
@@ -897,12 +898,59 @@ namespace LinksRouting
                               const QString& id,
                               uint32_t stamp,
                               const JSONParser& msg,
-                              ClientInfo& client_info )
+                              const ClientRef& client_info )
   {
     if( id.length() > 256 )
     {
       LOG_WARN("Search identifier too long!");
       return;
+    }
+
+    ClientWeakList client_whitelist;
+
+    const QString PROT_LINK("link://");
+    if( id.startsWith(PROT_LINK) )
+    {
+      QStringList path_parts = id.mid(PROT_LINK.length()).split('/');
+      if( path_parts.size() < 2 )
+      {
+        LOG_WARN("INITIATE: 'link://': to few elements for path");
+        return;
+      }
+
+      // links://window-at/<pos-x>|<pos-y>
+      if( path_parts[0] == "window-at" )
+      {
+        QStringList pos_parts;
+        if( path_parts.size() == 2 )
+          pos_parts = path_parts[1].split('|');
+
+        if( pos_parts.size() != 2 )
+        {
+          LOG_WARN( "INITIATE: invalid syntax,"
+                    " should be 'link://window-at/<pos-x>|<pos-y>'" );
+          return;
+        }
+
+        QPoint pos(pos_parts[0].toInt(), pos_parts[1].toInt());
+        auto window_list = _window_monitor.getWindows();
+        auto window = window_list.windowAt(pos);
+        if( window == window_list.rend() )
+        {
+          LOG_WARN("INITIATE: 'link://window-at/': not found");
+          return;
+        }
+
+        auto other_client = findClientInfo(window->id);
+        if( other_client == _clients.end() )
+        {
+          LOG_WARN("INITIATE: can not link to not connected windwo");
+          return;
+        }
+
+        client_whitelist.push_back(client_info);
+        client_whitelist.push_back(other_client->second);
+      }
     }
 
     const std::string id_str = to_string(id);
@@ -919,8 +967,8 @@ namespace LinksRouting
     (*_subscribe_user_config->_data)
       ->setString("QtWebsocketServer:SearchHistory", to_string(new_history));
 #endif
-    client_info.parseScrollRegion(msg);
-    client_info.update(_window_monitor.getWindows());
+    client_info->parseScrollRegion(msg);
+    client_info->update(_window_monitor.getWindows());
 
     // Remove eventually existing search for same id
     if( link != _slot_links->_data->end() )
@@ -950,26 +998,27 @@ namespace LinksRouting
     }
     auto hedge = LinkDescription::HyperEdge::make_shared();
     hedge->set("link-id", id_str);
-    hedge->addNode( client_info.parseRegions(msg) );
-    client_info.update(_window_monitor.getWindows());
+    hedge->addNode( client_info->parseRegions(msg) );
+    client_info->update(_window_monitor.getWindows());
     updateCenter(hedge.get());
 
     _slot_links->_data->push_back(
-      LinkDescription::LinkDescription(id_str, stamp, hedge, color_id)
+      LinkDescription::LinkDescription(
+        id_str,
+        stamp,
+        hedge,
+        color_id,
+        client_whitelist
+      )
     );
     _slot_links->setValid(true);
 
-    // Send request to all clients
-    QString request(
-      "{"
-        "\"task\": \"REQUEST\","
-        "\"id\": \"" + QString(id).replace('"', "\\\"") + "\","
-        "\"stamp\": " + QString::number(stamp) +
-      "}"
-    );
+    QJsonObject req;
+    req["task"] = "REQUEST";
+    req["id"] = id;
+    req["stamp"] = qint64(stamp);
 
-    for(auto socket = _clients.begin(); socket != _clients.end(); ++socket)
-      socket->first->sendTextMessage(request);
+    distributeMessage(_slot_links->_data->back(), req);
   }
 
   //----------------------------------------------------------------------------
@@ -1712,6 +1761,52 @@ namespace LinksRouting
     }
 
     return changed;
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::distributeMessage(
+    LinkDescription::LinkDescription const& link,
+    const QJsonObject& msg
+  ) const
+  {
+    QByteArray msg_data = QJsonDocument(msg).toJson(QJsonDocument::Compact);
+    std::cout << "message: "
+              << QString::fromLocal8Bit(msg_data).toStdString() << std::endl;
+
+    auto isOnList = []( ClientRef const& client,
+                        ClientWeakList const& list )
+    {
+      return std::find_if(
+        std::begin(list),
+        std::end(list),
+        [&](ClientWeakList::value_type const& weak_client)
+        {
+          return weak_client.lock() == client;
+        }
+      ) != std::end(list);
+    };
+
+    ClientWeakList const& whitelist = link._client_whitelist,
+                          blacklist = link._client_blacklist;
+
+    for(auto client: clientList<ClientList>())
+    {
+      LOG_DEBUG("check: " << client->getWindowInfo().title.toStdString());
+      if( isOnList(client, blacklist) )
+      {
+        LOG_DEBUG("on blacklist");
+        continue;
+      }
+
+      if( !whitelist.empty() && !isOnList(client, whitelist) )
+      {
+        LOG_DEBUG("not on whitelist");
+        continue;
+      }
+
+      LOG_DEBUG("allowed");
+      client->socket->sendTextMessage(msg_data);
+    }
   }
 
   //----------------------------------------------------------------------------

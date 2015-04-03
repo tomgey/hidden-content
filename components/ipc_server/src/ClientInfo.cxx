@@ -18,7 +18,8 @@ namespace LinksRouting
   static ClientInfo* a300_client = 0;
 
   //----------------------------------------------------------------------------
-  ClientInfo::ClientInfo(IPCServer* ipc_server, WId wid):
+  ClientInfo::ClientInfo(QWebSocket* socket, IPCServer* ipc_server, WId wid):
+    socket(socket),
     _dirty(~0),
     _ipc_server(ipc_server),
     _window_info(wid),

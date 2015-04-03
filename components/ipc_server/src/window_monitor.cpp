@@ -107,6 +107,18 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  WindowInfos::const_reverse_iterator WindowRegions::rbegin() const
+  {
+    return _windows.rbegin();
+  }
+
+  //----------------------------------------------------------------------------
+  WindowInfos::const_reverse_iterator WindowRegions::rend() const
+  {
+    return _windows.rend();
+  }
+
+  //----------------------------------------------------------------------------
   WindowInfos::const_reverse_iterator
   WindowRegions::windowAt(const QPoint& pos) const
   {

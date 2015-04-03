@@ -79,6 +79,9 @@ namespace LinksRouting
       WindowInfos::const_iterator begin() const;
       WindowInfos::const_iterator end() const;
 
+      WindowInfos::const_reverse_iterator rbegin() const;
+      WindowInfos::const_reverse_iterator rend() const;
+
       WindowInfos::const_reverse_iterator windowAt(const QPoint& point) const;
       WId windowIdAt(const QPoint& point) const;
 

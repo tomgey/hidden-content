@@ -68,6 +68,17 @@ namespace LinksRouting
       bool getOutsideSeeThrough() const;
       Rect desktopRect() const { return *_subscribe_desktop_rect->_data; }
 
+      template<class Container>
+      Container clientList() const
+      {
+        Container clients;
+        std::transform( _clients.begin(), _clients.end(),
+                        std::inserter(clients, clients.end()),
+                        std::bind( &ClientInfos::value_type::second,
+                                   std::placeholders::_1 ) );
+        return clients;
+      }
+
       typedef SlotType::TextPopup::Popups::iterator PopupIterator;
 
       PopupIterator addPopup( const ClientInfo& client_info,
@@ -104,13 +115,13 @@ namespace LinksRouting
 
     protected:
 
-      typedef std::map<QWebSocket*, std::unique_ptr<ClientInfo>> ClientInfos;
+      typedef std::map<QWebSocket*, ClientRef> ClientInfos;
 
       void onInitiate( LinkDescription::LinkList::iterator& link,
                        const QString& id,
                        uint32_t stamp,
                        const JSONParser& msg,
-                       ClientInfo& client_info );
+                       const ClientRef& client_info );
 
       void regionsChanged(const WindowRegions& regions);
       ClientInfos::iterator findClientInfo(WId wid);
@@ -137,6 +148,10 @@ namespace LinksRouting
                                   QWebSocket&,
                                   ClientInfo& )> preview_callback_t;
       bool foreachPreview(const preview_callback_t& cb);
+
+      /** Send message to all clients (respecting white and black list) */
+      void distributeMessage( LinkDescription::LinkDescription const& link,
+                              const QJsonObject& msg ) const;
 
       void dirtyLinks();
       void dirtyRender();

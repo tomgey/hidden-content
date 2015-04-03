@@ -17,6 +17,8 @@
 
 #include <QSet>
 
+class QWebSocket;
+
 template<typename T>
 void clamp(T& val, T min, T max)
 {
@@ -29,6 +31,8 @@ namespace LinksRouting
   class IPCServer;
   struct ClientInfo
   {
+    QWebSocket* const socket;
+
     /** Viewport (relative to application window) */
     QRect   viewport,
 
@@ -41,7 +45,9 @@ namespace LinksRouting
     HierarchicTileMapPtr tile_map,
                          tile_map_uncompressed;
 
-    explicit ClientInfo(IPCServer* ipc_server = nullptr, WId wid = 0);
+    explicit ClientInfo( QWebSocket* socket,
+                         IPCServer* ipc_server = nullptr,
+                         WId wid = 0 );
     ClientInfo(const ClientInfo&) = delete;
     ~ClientInfo();
 
