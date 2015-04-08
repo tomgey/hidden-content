@@ -294,10 +294,7 @@ namespace LinksRouting
   uint32_t CPURouting::process(unsigned int type)
   {
     if( !_subscribe_links->isValid() )
-    {
-      LOG_DEBUG("No valid routing data available.");
       return 0;
-    }
 
     LinkDescription::LinkList& links = *_subscribe_links->_data;
     for( auto it = links.begin(); it != links.end(); ++it )

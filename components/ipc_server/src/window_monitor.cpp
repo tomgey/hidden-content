@@ -216,7 +216,8 @@ namespace LinksRouting
       if(  win_type.isEmpty()
          && ( region.width() <= 64
            || region.height() <= 64
-           || region.width() * region.height() <= 8192
+           //|| region.width() * region.height() <= 8192 // concept nodes can be
+                                                         // smaller...
             )
         )
         continue;

@@ -726,9 +726,10 @@ namespace LinksRouting
       (
         _slot_links->_data->begin(),
         _slot_links->_data->end(),
-        [&id_str](const LinkDescription::LinkDescription& desc)
+        [&id](const LinkDescription::LinkDescription& desc)
         {
-          return desc._id == id_str;
+          return QString::fromStdString(desc._id)
+                         .compare(id, Qt::CaseInsensitive) == 0;
         }
       );
 
@@ -907,18 +908,22 @@ namespace LinksRouting
     }
 
     ClientWeakList client_whitelist;
-
-    const QString PROT_LINK("link://");
-    if( id.startsWith(PROT_LINK) )
+    for(QString const& entry: msg.getValue<QStringList>("whitelist", {}))
     {
-      QStringList path_parts = id.mid(PROT_LINK.length()).split('/');
-      if( path_parts.size() < 2 )
+      if( entry == "this" )
       {
-        LOG_WARN("INITIATE: 'link://': to few elements for path");
-        return;
+        client_whitelist.push_back(client_info);
+        continue;
       }
 
-      // links://window-at/<pos-x>|<pos-y>
+      QStringList path_parts = entry.split('/', QString::SkipEmptyParts);
+      if( path_parts.empty() )
+      {
+        LOG_WARN("INITIATE: skip empty whitelist entry.");
+        continue;
+      }
+
+      // window-at/<pos-x>|<pos-y>
       if( path_parts[0] == "window-at" )
       {
         QStringList pos_parts;
@@ -927,9 +932,9 @@ namespace LinksRouting
 
         if( pos_parts.size() != 2 )
         {
-          LOG_WARN( "INITIATE: invalid syntax,"
-                    " should be 'link://window-at/<pos-x>|<pos-y>'" );
-          return;
+          LOG_WARN( "INITIATE: invalid whitelist entry,"
+                    " should be 'window-at/<pos-x>|<pos-y>'" );
+          continue;
         }
 
         QPoint pos(pos_parts[0].toInt(), pos_parts[1].toInt());
@@ -937,20 +942,21 @@ namespace LinksRouting
         auto window = window_list.windowAt(pos);
         if( window == window_list.rend() )
         {
-          LOG_WARN("INITIATE: 'link://window-at/': not found");
+          LOG_WARN("INITIATE: whitelist: no match for '" << entry << "'");
           return;
         }
 
         auto other_client = findClientInfo(window->id);
         if( other_client == _clients.end() )
         {
-          LOG_WARN("INITIATE: can not link to not connected windwo");
+          LOG_WARN("INITIATE: can not link to not connected window");
           return;
         }
 
-        client_whitelist.push_back(client_info);
         client_whitelist.push_back(other_client->second);
       }
+      else
+        LOG_WARN("INITITE: unknown whitelist entry: " << entry);
     }
 
     const std::string id_str = to_string(id);
