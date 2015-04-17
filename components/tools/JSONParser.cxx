@@ -64,7 +64,7 @@ std::string JSONNode::getValue() const
 template<>
 uint32_t JSONNode::getValue() const
 {
-  if( !_node.isNumber() )
+  if( !_node.isNumber() && _node.toString() != "null" )
     throw std::runtime_error("Not a number");
   return _node.toUInt32();
 }

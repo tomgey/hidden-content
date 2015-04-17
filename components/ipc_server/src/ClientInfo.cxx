@@ -7,6 +7,7 @@
 
 #include <QPoint>
 #include <QRect>
+
 #include "ClientInfo.hxx"
 #include "ipc_server.hpp"
 
@@ -61,6 +62,30 @@ namespace LinksRouting
   const WindowInfo& ClientInfo::getWindowInfo() const
   {
     return _window_info;
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::setId(const QString& id)
+  {
+    _id = id;
+  }
+
+  //----------------------------------------------------------------------------
+  const QString& ClientInfo::id() const
+  {
+    return _id;
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::setStateData(const QJsonObject& data)
+  {
+    _state_data = data;
+  }
+
+  //----------------------------------------------------------------------------
+  const QJsonObject& ClientInfo::stateData() const
+  {
+    return _state_data;
   }
 
   //----------------------------------------------------------------------------

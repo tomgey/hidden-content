@@ -15,6 +15,7 @@
 #include "slotdata/text_popup.hpp"
 #include "window_monitor.hpp"
 
+#include <QJsonObject>
 #include <QSet>
 
 class QWebSocket;
@@ -53,6 +54,12 @@ namespace LinksRouting
 
     void setWindowId(WId wid);
     const WindowInfo& getWindowInfo() const;
+
+    void setId(const QString& id);
+    const QString& id() const;
+
+    void setStateData(const QJsonObject& data);
+    const QJsonObject& stateData() const;
 
     void addCommand(const QString& type);
     bool supportsCommand(const QString& cmd) const;
@@ -155,6 +162,9 @@ namespace LinksRouting
         RIGHT
       };
 
+      QString                       _id; //!< unique identifier (eg. used for
+                                         //   save/restore)
+      QJsonObject                   _state_data; //!< data to save/restore state
       QSet<QString>                 _cmds; //!< Supported commands
 
       uint32_t                      _dirty;

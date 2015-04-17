@@ -7,6 +7,19 @@ var ctrl_queue = null;
 var status = '';
 var status_sync = '';
 
+function getPid()
+{
+  var lock_file = Components.classes["@mozilla.org/file/directory_service;1"]
+                            .getService( Components.interfaces.nsIProperties)
+                            .get("ProfD", Components.interfaces.nsIFile);
+  lock_file.append("lock");
+
+  // <profile-path>/lock is a symlink to 127.0.1.1:+<pid>
+  return parseInt(lock_file.target.split('+')[1]);
+}
+
+var client_id = "firefox:" + Date.now() + ":" + getPid();
+
 var last_id = null;
 var last_stamp = null;
 var offset = [0,0];
@@ -375,20 +388,9 @@ function onPageLoad(event)
         document.getElementById('vislink-sync-src').style.color = color;
     }
 
-    // Automatically connect new windows created by links system.
-    if( stopped )
-      setTimeout('start(true, "' + src_id + '");', 0);
-
-    var lock_file = Components.classes["@mozilla.org/file/directory_service;1"]
-                              .getService( Components.interfaces.nsIProperties)
-                              .get("ProfD", Components.interfaces.nsIFile);
-    lock_file.append("lock");
-
-    // <profile-path>/lock is a symlink to 127.0.1.1:+<pid>
-    var pid = lock_file.target.split('+')[1];
     var msg = {
       task: "REGISTER",
-      pid: pid,
+      pid: getPid(),
       title: document.title
     };
     if( pos instanceof Array )
@@ -445,6 +447,9 @@ function onPageLoad(event)
 
     doc._hcd_scroll_listener[ xpath ] = [el, cb];
   }
+  
+  if( stopped )
+    setTimeout('start(true, "' + src_id + '");', 0);
 }
 
 var tab_changed = false;
@@ -550,7 +555,7 @@ function onKeyUp(e)
 
 function _getCurrentTabData(e)
 {
-  var tab = gBrowser.tabContainer._getDragTargetTab(e);
+  var tab = e ? gBrowser.tabContainer._getDragTargetTab(e) : null;
   var browser = tab ? tab.linkedBrowser
                     : gBrowser;
   var scroll = getScrollRegion();
@@ -571,14 +576,28 @@ function _getCurrentTabData(e)
     scrollables[ xpath ] = [el.scrollLeft, el.scrollTop];
   }
 
-  return {
+  var links = [];
+  for(var query in active_routes)
+    links[links.length] = query;
+
+  var data = {
     "url": browser.currentURI.spec,
     "scroll": [-scroll.x, -scroll.y],
     "elements-scroll": scrollables,
     "view": getViewport("abs"),
     "tab-id": doc._hcd_tab_id,
-    "screenPos": [e.screenX, e.screenY]
+    "type": "browser",
+    "links": links
   };
+
+  if( e )
+    data.screenPos = [e.screenX, e.screenY];
+
+  var syncbox = document.getElementById('vislink-sync-src');
+  if( syncbox )
+    data.color = syncbox.style.color;
+
+  return data;
 }
 
 function _websocketDrag(e)
@@ -1006,14 +1025,16 @@ function register(match_title = false, src_id = 0)
       links_socket.onopen = function(event)
       {
         setStatus('active');
-        var cmds = ['open-url'];
+        var cmds = ['open-url', 'save-state'];
         if( src_id )
           cmds.push('scroll');
         var msg = {
           task: 'REGISTER',
-          name: "Firefox",
+          type: "Firefox",
+          pid: getPid(),
           cmds: cmds,
-          viewport: getViewport()
+          viewport: getViewport(),
+          "client-id": client_id
         };
         if( match_title )
           msg.title = gBrowser.contentTitle;
@@ -1043,9 +1064,13 @@ function register(match_title = false, src_id = 0)
       };
       links_socket.onclose = function(event)
       {
+        console.log("closed" + event);
         setStatus(event.wasClean ? '' : 'error');
         removeAllRouteData();
         stop();
+
+        // automatic restart/reconnect
+        setTimeout('start(true, "' + src_id + '");', 2850);
       };
       links_socket.onerror = function(event)
       {
@@ -1058,21 +1083,24 @@ function register(match_title = false, src_id = 0)
         var msg = JSON.parse(event.data);
         if( msg.task == 'REQUEST' )
         {
-          //alert('id='+last_id+"|"+msg.id+"\nstamp="+last_stamp+"|"+msg.stamp);
-          if( msg.id == last_id && msg.stamp == last_stamp )
-            // already handled
-            return;// alert('already handled...');
+          if( !msg.id.startsWith("link://") )
+          {
+            //alert('id='+last_id+"|"+msg.id+"\nstamp="+last_stamp+"|"+msg.stamp);
+            if( msg.id == last_id && msg.stamp == last_stamp )
+              // already handled
+              return;// alert('already handled...');
 
-          last_id = msg.id;
-          last_stamp = msg.stamp;
+            last_id = msg.id;
+            last_stamp = msg.stamp;
 
-          do_report = false;
+            do_report = false;
 
-          gFindBar._findField.value = msg.id;
-          gFindBar.open(gFindBar.FIND_TYPEAHEAD);
-          gFindBar._find();
+            gFindBar._findField.value = msg.id;
+            gFindBar.open(gFindBar.FIND_TYPEAHEAD);
+            gFindBar._find();
 
-          do_report = true;
+            do_report = true;
+          }
 
           setTimeout('reportVisLinks("'+msg.id+'", true)',0);
         }
@@ -1126,6 +1154,14 @@ function register(match_title = false, src_id = 0)
               setTimeout('handleTileRequest()', 20);
               tile_timeout = true;
             }
+          }
+          else if( msg.id == '/state/all' )
+          {
+            send({
+              task: 'GET-FOUND',
+              id: '/state/all',
+              data: _getCurrentTabData()
+            });
           }
           else
             Application.console.warn("Unknown GET request: " + event.data);
@@ -1311,10 +1347,20 @@ function searchAreaTitles(doc, id)
 //------------------------------------------------------------------------------
 function searchDocument(doc, id)
 {
+  if( id.startsWith("link://") )
+  {
+    var vp = getViewport("abs");
+    var l = vp[0] + 1;
+    var t = vp[1] + 1;
+    var r = vp[0] + vp[2] - 1;
+    var b = vp[1] + vp[3] - 1;
+    return [ [[l, t], [r, t], [r, b], [l, b]] ];
+  }
+
   updateScale();
+  var	bbs	= new Array();
 
 	var id_regex = id.replace(/[\s-._]+/g, "[\\s-._]+");
-	var	bbs	= new Array();
 	var	textnodes =	doc.evaluate("//body//*/text()", doc, null,	XPathResult.ANY_TYPE, null);
 	while(node = textnodes.iterateNext())
 	{

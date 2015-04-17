@@ -50,6 +50,9 @@ namespace LinksRouting
   WindowInfos::const_iterator WindowRegions::find( uint32_t pid,
                                                    const QString& title) const
   {
+    LOG_DEBUG( "Find window by pid (" << pid << ") and title '"
+               << title.toStdString() << "'" );
+
     return std::find_if
     (
       _windows.begin(),
@@ -65,6 +68,7 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   WindowInfos::const_iterator WindowRegions::find(const QString& title) const
   {
+    LOG_DEBUG("Find window by title '" << title.toStdString() << "'");
     return std::find_if
     (
       _windows.begin(),

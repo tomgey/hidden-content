@@ -156,10 +156,14 @@ namespace LinksRouting
       void dirtyLinks();
       void dirtyRender();
 
+      /** Check state save data and send to client if complete */
+      void checkStateData();
+
     private:
 
       QWebSocketServer   *_server;
       ClientInfos         _clients;
+      ClientWeakRef       _client_requested_save;
       WindowMonitor       _window_monitor;
 
       QMutex             *_mutex_slot_links;

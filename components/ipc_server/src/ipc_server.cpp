@@ -10,6 +10,7 @@
 #include "log.hpp"
 #include "ClientInfo.hxx"
 #include "JSONParser.h"
+#include "JSON.hpp"
 #include "common/PreviewWindow.hpp"
 
 #include <QMutex>
@@ -23,6 +24,19 @@
 
 namespace LinksRouting
 {
+  QJsonArray to_json(ClientWeakList const& clients)
+  {
+    QJsonArray json;
+    for(auto client_weak: clients)
+    {
+      ClientRef client = client_weak.lock();
+      if( client )
+        json.push_back(client->id());
+    }
+
+    return json;
+  }
+
   using namespace std::placeholders;
 
   std::string to_string(const QRect& r)
@@ -586,6 +600,11 @@ namespace LinksRouting
               for(QString cmd: msg.getValue<QStringList>("cmds"))
                 client_info->addCommand(cmd);
             }
+
+            if( !msg.hasChild("client-id") )
+              LOG_WARN("REGISTER: Missing 'client-id'.");
+            else
+              client_info->setId(msg.getValue<QString>("client-id"));
           }
           client_info->update(windows);
           return;
@@ -660,6 +679,41 @@ namespace LinksRouting
               + QString::fromStdString(history).replace('"', "\\\"")
               + "\"";
         }
+        else if( id == "/state/all" ) // get state of all connected applications
+                                      // and active links
+        {
+          _client_requested_save = client_info;
+
+          QJsonObject msg;
+          msg["task"] = "GET";
+          msg["id"] = "/state/all";
+
+          QString const msg_str =
+            QString::fromLocal8Bit(
+              QJsonDocument(msg).toJson(QJsonDocument::Compact)
+            );
+
+          bool need_to_wait = false;
+          for(auto const& client: _clients)
+          {
+            if( !client.second->supportsCommand("save-state") )
+              continue;
+
+            client.second->setStateData(QJsonObject());
+            client.first->sendTextMessage(msg_str);
+
+            qDebug() << "request state"
+                     << client.second->getWindowInfo().title
+                     << client.second->getWindowInfo().region;
+
+            need_to_wait = true;
+          }
+
+          if( !need_to_wait )
+            checkStateData();
+
+          return;
+        }
         else
         {
           std::string val_std;
@@ -688,6 +742,13 @@ namespace LinksRouting
          "}");
 
         return;
+      }
+      else if( task == "GET-FOUND" )
+      {
+        QJsonObject json = parseJson(data.toLocal8Bit());
+        client_info->setStateData(json.value("data").toObject());
+
+        return checkStateData();
       }
       else if( task == "SET" )
       {
@@ -1827,6 +1888,68 @@ namespace LinksRouting
   {
     _dirty_flags |= RENDER_DIRTY;
     _cond_data_ready->wakeAll();
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::checkStateData()
+  {
+    for(auto const& client: _clients)
+      if(    client.second->supportsCommand("save-state")
+          && client.second->stateData().isEmpty() )
+      {
+        qDebug() << "Missing state for" << client.second->getWindowInfo().title;
+        return;
+      }
+
+    qDebug() << "state complete";
+
+    auto save_client = _client_requested_save.lock();
+    if( !save_client )
+    {
+      qWarning() << "Missing client which requested state.";
+      return;
+    }
+
+    QWebSocket* socket = getSocketByWId(save_client->getWindowInfo().id);
+    if( !socket )
+    {
+      qWarning() << "Failed to get socket for client";
+      return;
+    }
+
+    QJsonObject msg_state;
+    msg_state["task"] = "GET-FOUND";
+    msg_state["id"] = "/state/all";
+
+    QJsonArray client_data;
+    for(auto const& client: _clients)
+    {
+      if( !client.second->supportsCommand("save-state") )
+        continue;
+
+      QJsonObject client_state;
+      client_state["client-id"] = client.second->id();
+      client_state["data"] = client.second->stateData();
+      client_state["region"] = to_json(client.second->getWindowInfo().region);
+      client_data.append(client_state);
+    }
+    msg_state["clients"] = client_data;
+    msg_state["screen"] = to_json(desktopRect().bottomRight().toQSize());
+
+    QJsonArray links;
+    for(auto const& link: *_slot_links->_data)
+    {
+      QJsonObject link_data;
+      link_data["id"] = QString::fromStdString(link._id);
+      link_data["whitelist"] = to_json(link._client_whitelist);
+      link_data["blacklist"] = to_json(link._client_blacklist);
+      links.push_back(link_data);
+    }
+    msg_state["links"] = links;
+
+    socket->sendTextMessage(
+      QJsonDocument(msg_state).toJson(QJsonDocument::Compact)
+    );
   }
 
   //----------------------------------------------------------------------------
