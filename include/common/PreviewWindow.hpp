@@ -19,6 +19,8 @@ namespace LinksRouting
       typedef SlotType::TextPopup::Popup Popup;
       typedef SlotType::XRayPopup::HoverRect SeeThrough;
 
+      virtual ~PreviewWindow();
+
       virtual void update(double dt) = 0;
       virtual void release() = 0;
 
@@ -35,8 +37,6 @@ namespace LinksRouting
         _popup(nullptr),
         _see_through(see_through)
       {}
-
-      virtual ~PreviewWindow() = 0;
   };
 
 }
