@@ -45,6 +45,8 @@ public:
     static WindowList windows();
     static WId activeWindow();
     static int activeWindow(WId window);
+    static int iconifyWindow(WId window);
+    static int moveResizeWindow(WId window, QRect const& geom);
     static bool isVisible(WId window);
     static WId findWindow(const QString& title);
     static WId windowAt(const QPoint& pos);

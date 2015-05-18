@@ -106,26 +106,53 @@ WId QxtWindowSystem::activeWindow()
 
 int QxtWindowSystem::activeWindow(WId window)
 {
-    init();
-    XEvent ev;
-    memset(&ev, 0, sizeof(ev));
-    ev.type = ClientMessage;
-    ev.xclient.display = QX11Info::display();
-    ev.xclient.window = window;
-    ev.xclient.message_type = atomNetActive();
-    ev.xclient.format = 32;
-    ev.xclient.data.l[0] = 2L; /* 2 == Message from a window pager */
-    ev.xclient.data.l[1] = CurrentTime;
+  init();
+  XEvent ev;
+  memset(&ev, 0, sizeof(ev));
+  ev.type = ClientMessage;
+  ev.xclient.display = QX11Info::display();
+  ev.xclient.window = window;
+  ev.xclient.message_type = atomNetActive();
+  ev.xclient.format = 32;
+  ev.xclient.data.l[0] = 2L; /* 2 == Message from a window pager */
+  ev.xclient.data.l[1] = CurrentTime;
 
-    XWindowAttributes attr;
-    XGetWindowAttributes(QX11Info::display(), window, &attr);
-    return XSendEvent(
-      QX11Info::display(),
-      attr.screen->root,
-      False,
-      SubstructureNotifyMask | SubstructureRedirectMask,
-      &ev
-    ) == 0;
+  XWindowAttributes attr;
+  XGetWindowAttributes(QX11Info::display(), window, &attr);
+  return XSendEvent(
+    QX11Info::display(),
+    attr.screen->root,
+    False,
+    SubstructureNotifyMask | SubstructureRedirectMask,
+    &ev
+  ) == 0;
+}
+
+int QxtWindowSystem::iconifyWindow(WId window)
+{
+  init();
+
+  XWindowAttributes attr;
+  XGetWindowAttributes(QX11Info::display(), window, &attr);
+
+  return XIconifyWindow(
+    QX11Info::display(),
+    window,
+    XScreenNumberOfScreen(attr.screen)
+  );
+}
+
+int QxtWindowSystem::moveResizeWindow(WId window, QRect const& geom)
+{
+  init();
+  return XMoveResizeWindow(
+    QX11Info::display(),
+    window,
+    geom.left(),
+    geom.top(),
+    geom.width(),
+    geom.height()
+  );
 }
 
 bool QxtWindowSystem::isVisible(WId wid)
