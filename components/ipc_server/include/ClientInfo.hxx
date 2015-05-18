@@ -8,6 +8,7 @@
 #ifndef CLIENTINFO_HXX_
 #define CLIENTINFO_HXX_
 
+#include "common/PreviewWindow.hpp"
 #include "HierarchicTileMap.hpp"
 #include "JSONParser.h"
 #include "linkdescription.h"
@@ -110,6 +111,35 @@ namespace LinksRouting
      */
     void activateWindow();
 
+    /**
+     * Minimize/Iconify window to taskbar
+     */
+    void iconifyWindow();
+
+    /**
+     * Resize/move the window to the given rectangle
+     */
+    void moveResizeWindow(QRect const& geom);
+
+    /**
+     * Set semantic preview window/popup
+     *
+     * @note Takes ownership
+     */
+    void setSemanticPreview(PreviewWindow* win);
+
+    /**
+     * Get semantic preview
+     *
+     * @see hasSemanticPreview()
+     */
+    PreviewWindow& semanticPreview() const;
+
+    /**
+     * Check if window for semantic preview is valid
+     */
+    bool hasSemanticPreview() const;
+
     LinkDescription::nodes_t& getNodes() { return _nodes; }
 
     private:
@@ -177,6 +207,8 @@ namespace LinksRouting
       XRayPreviews                  _xray_previews;
       Outlines                      _outlines;
       float                         _avg_region_height;
+
+      std::unique_ptr<PreviewWindow>_semantic_preview;
 
       float2 getPreviewSize() const;
       void createPopup( const float2& pos,

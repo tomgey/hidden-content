@@ -352,7 +352,39 @@ namespace LinksRouting
   void ClientInfo::activateWindow()
   {
     if( _window_info.isValid() )
-      QxtWindowSystem::activeWindow( _window_info.id );
+      QxtWindowSystem::activeWindow(_window_info.id);
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::iconifyWindow()
+  {
+    if( _window_info.isValid() )
+      QxtWindowSystem::iconifyWindow(_window_info.id);
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::moveResizeWindow(QRect const& geom)
+  {
+    if( _window_info.isValid() )
+      QxtWindowSystem::moveResizeWindow(_window_info.id, geom);
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::setSemanticPreview(PreviewWindow* win)
+  {
+    _semantic_preview.reset(win);
+  }
+
+  //----------------------------------------------------------------------------
+  PreviewWindow& ClientInfo::semanticPreview() const
+  {
+    return *_semantic_preview;
+  }
+
+  //----------------------------------------------------------------------------
+  bool ClientInfo::hasSemanticPreview() const
+  {
+    return _semantic_preview.get() != nullptr;
   }
 
   //----------------------------------------------------------------------------
