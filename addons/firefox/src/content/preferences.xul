@@ -3,13 +3,17 @@
 <prefwindow xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
   <prefpane id="vislink-settings" label="VisLink settings">
     <preferences>
+      <preference id="pref-auto-connect" name="extensions.vislinks.auto-connect" type="bool"/>
       <preference id="pref-replace-route" name="extensions.vislinks.replace-route" type="bool"/>
+      <preference id="pref-invert-wheel" name="extensions.vislinks.invert-wheel" type="bool"/>
     </preferences>
     
     <groupbox id="client-settings">
 			<caption label="Client Settings"/>
 
+      <checkbox label="Automaticall connect to server." preference="pref-auto-connect"/>
       <checkbox label="Replace on new search (Keep last search active if disabled)." preference="pref-replace-route"/>
+      <checkbox label="Invert mouse wheel (only for visualization interactions, eg. for semantic zoom)" preference="pref-invert-wheel"/>
     </groupbox>
 
     <groupbox id="server-settings">

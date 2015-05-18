@@ -186,6 +186,7 @@ function ctrlSend(data, force = false)
   }
 
   ctrl_queue = [encoded_data];
+  console.log("New control WebSocket.");
   ctrl_socket = new WebSocket('ws://localhost:24803', 'VLP');
   ctrl_socket.binaryType = "arraybuffer";
   ctrl_socket.onopen = function(event)
@@ -335,7 +336,7 @@ function onPageLoad(event)
   setStatusSync("no-src");
 
   if( !stopped )
-    setTimeout("resize();", 300);
+    setTimeout(resize, 300);
   else
     checkAutoConnect(event);
 
@@ -447,9 +448,9 @@ function onPageLoad(event)
 
     doc._hcd_scroll_listener[ xpath ] = [el, cb];
   }
-  
-  if( stopped )
-    setTimeout('start(true, "' + src_id + '");', 0);
+
+  if( stopped && getPref("auto-connect") )
+    setTimeout(start, 0, true, src_id);
 }
 
 var tab_changed = false;
@@ -458,7 +459,7 @@ function onTabChange(e)
 {
   tab_changed = true;
   tab_event = e;
-  setTimeout("onTabChangeImpl();", 1);
+  setTimeout(onTabChangeImpl, 1);
 }
 
 function onTabChangeImpl()
@@ -529,7 +530,7 @@ function onUnload(e)
 
   tab_changed = true;
   tab_event = e;
-  setTimeout("onTabChangeImpl();", 1);
+  setTimeout(onTabChangeImpl, 1);
 }
 
 var last_ctrl_down = 0;
@@ -636,6 +637,21 @@ function onTabDblClick(e)
     return _websocketDrag(e);
 }
 
+function onGlobalWheel(e)
+{
+  if( !e.altKey || e.shiftKey || e.ctrlKey )
+    return;
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+
+  send({
+    'task': 'SEMANTIC-ZOOM',
+    'step': (getPref("invert-wheel") ? 1 : -1) * e.deltaY > 0 ? 1 : -1,
+    'center': [e.screenX, e.screenY]
+  });
+}
+
 /*function onDragStart(e)
 {
   return _websocketDrag(e);
@@ -663,6 +679,10 @@ window.addEventListener("load", function window_load()
   var ibox = document.getElementById("identity-box");
 //  ibox.addEventListener('dragstart', onDragStart, false);
   document.addEventListener('click', onTabDblClick, true);
+
+  // Global mousewheel handler (for semantic zoom/level of detail)
+  var main_window = document.getElementById("main-window");
+  main_window.addEventListener("wheel", onGlobalWheel, true);
 
   // Drag tabs from tab bar
 //  gBrowser.tabContainer.addEventListener('dragstart', onDragStart, true);
@@ -698,7 +718,7 @@ function smoothScrollTo(y_target)
       t = duration;
 
     var y = easeInOutQuint(t, y_cur, delta, duration);
-    setTimeout("content.scrollTo("+x_cur+","+y+")", t);
+    setTimeout(function(){ content.scrollTo(x_cur, y); }, t);
   }
 }
 
@@ -733,7 +753,7 @@ function onVisLinkButton(ev)
 function onTabSyncButton(ev)
 {
   if( ev.target.id != 'vislink-sync' )
-    // Ignore clicks outside the button (eg for dropdown menu)
+    // Ignore clicks outside the button (e{g for dropdown menu)
     return;
 
   setStatusSync(status_sync == 'sync' ? '' : 'sync');
@@ -1004,6 +1024,74 @@ function stop()
 //	window.removeEventListener('unload', stopVisLinks, false);
 	window.removeEventListener("DOMAttrModified", attrModified, false);
   window.removeEventListener('resize', resize, false);
+
+  if( links_socket )
+  {
+    links_socket.close();
+    links_socket = null;
+  }
+}
+
+function sendMsgRegister(match_title, src_id, click_pos)
+{
+  if( links_socket && links_socket.readyState == WebSocket.CONNECTING )
+  {
+    setTimeout(sendMsgRegister, 250, match_title, src_id, click_pos);
+    console.log("Socket not ready. Will try again later.");
+    return;
+  }
+  if( !links_socket || links_socket.readyState != WebSocket.OPEN )
+  {
+    setStatus('error');
+    console.warn("Can not register without active socket!", links_socket ? links_socket.readyState : 'null');
+    return;
+  }
+
+  setStatus('active');
+
+  var cmds = ['open-url', 'save-state'];
+  if( src_id )
+    cmds.push('scroll');
+
+  var msg = {
+    task: 'REGISTER',
+    type: "Firefox",
+    pid: getPid(),
+    cmds: cmds,
+    viewport: getViewport(),
+    "client-id": client_id,
+    geom: [
+      window.screenX, window.screenY,
+      window.outerWidth, window.outerHeight
+    ]
+  };
+
+  if( match_title )
+    msg.title = gBrowser.contentTitle;
+  else
+    msg.pos = click_pos;
+
+  if( src_id )
+    msg['src-id'] = src_id;
+  send(msg);
+
+  var props = {
+    'CPURouting:SegmentLength': 'Integer',
+    'CPURouting:NumIterations': 'Integer',
+    'CPURouting:NumSteps': 'Integer',
+    'CPURouting:NumSimplify': 'Integer',
+    'CPURouting:NumLinear': 'Integer',
+    'CPURouting:StepSize': 'Float',
+    'CPURouting:SpringConstant': 'Float',
+    'CPURouting:AngleCompatWeight': 'Float',
+    '/routing': 'String'
+  };
+  for(var name in props)
+    send({
+      task: 'GET',
+      id: name,
+      type: props[name]
+    });
 }
 
 //------------------------------------------------------------------------------
@@ -1012,197 +1100,170 @@ function register(match_title = false, src_id = 0)
   menu = document.getElementById("vislink_menu");
   items_routing = document.getElementById("routing-selector");
 
-    // Get the box object for the link button to get window handler from the
-    // window at the position of the box
-    var box = document.getElementById("vislink").boxObject;
+  // Get the box object for the link button to get window handler from the
+  // window at the position of the box
+  var box = document.getElementById("vislink").boxObject;
+  var click_pos = [box.screenX + box.width / 2, box.screenY + box.height / 2];
 
-    try
+  try
+  {
+    tile_requests = new Stack(); //Queue();
+
+    if( links_socket )
     {
-      tile_requests = new Stack(); //Queue();
+      console.log("State: " + links_socket.readyState);
+      return true;
+    }
 
-      links_socket = new WebSocket('ws://localhost:4487', 'VLP');
-      links_socket.binaryType = "arraybuffer";
-      links_socket.onopen = function(event)
+    console.log("Creating new WebSocket.");
+    links_socket = new WebSocket('ws://localhost:4487', 'VLP');
+    links_socket.binaryType = "arraybuffer";
+    links_socket.onopen = function(event)
+    {
+      setTimeout(sendMsgRegister, 10, match_title, src_id, click_pos);
+    };
+    links_socket.onclose = function(event)
+    {
+      console.log("closed" + event);
+      setStatus(event.wasClean ? '' : 'error');
+      removeAllRouteData();
+      stop();
+
+      if( getPref("auto-connect") )
+        setTimeout(start, 2850, true, src_id);
+    };
+    links_socket.onerror = function(event)
+    {
+      console.log("error" + event);
+      setStatus('error');
+      removeAllRouteData();
+      stop();
+    };
+    links_socket.onmessage = function(event)
+    {
+      var msg = JSON.parse(event.data);
+      if( msg.task == 'REQUEST' )
       {
-        setStatus('active');
-        var cmds = ['open-url', 'save-state'];
-        if( src_id )
-          cmds.push('scroll');
-        var msg = {
-          task: 'REGISTER',
-          type: "Firefox",
-          pid: getPid(),
-          cmds: cmds,
-          viewport: getViewport(),
-          "client-id": client_id
-        };
-        if( match_title )
-          msg.title = gBrowser.contentTitle;
-        else
-          msg.pos = [box.screenX + box.width / 2, box.screenY + box.height / 2];
-        if( src_id )
-          msg['src-id'] = src_id;
-        send(msg);
-
-        var props = {
-          'CPURouting:SegmentLength': 'Integer',
-          'CPURouting:NumIterations': 'Integer',
-          'CPURouting:NumSteps': 'Integer',
-          'CPURouting:NumSimplify': 'Integer',
-          'CPURouting:NumLinear': 'Integer',
-          'CPURouting:StepSize': 'Float',
-          'CPURouting:SpringConstant': 'Float',
-          'CPURouting:AngleCompatWeight': 'Float',
-          '/routing': 'String'
-        };
-        for(var name in props)
-          send({
-            task: 'GET',
-            id: name,
-            type: props[name]
-          });
-      };
-      links_socket.onclose = function(event)
-      {
-        console.log("closed" + event);
-        setStatus(event.wasClean ? '' : 'error');
-        removeAllRouteData();
-        stop();
-
-        // automatic restart/reconnect
-        setTimeout('start(true, "' + src_id + '");', 2850);
-      };
-      links_socket.onerror = function(event)
-      {
-        setStatus('error');
-        removeAllRouteData();
-        stop();
-      };
-      links_socket.onmessage = function(event)
-      {
-        var msg = JSON.parse(event.data);
-        if( msg.task == 'REQUEST' )
+        if( !msg.id.startsWith("link://") )
         {
-          if( !msg.id.startsWith("link://") )
-          {
-            //alert('id='+last_id+"|"+msg.id+"\nstamp="+last_stamp+"|"+msg.stamp);
-            if( msg.id == last_id && msg.stamp == last_stamp )
-              // already handled
-              return;// alert('already handled...');
+          //alert('id='+last_id+"|"+msg.id+"\nstamp="+last_stamp+"|"+msg.stamp);
+          if( msg.id == last_id && msg.stamp == last_stamp )
+            // already handled
+            return;// alert('already handled...');
 
-            last_id = msg.id;
-            last_stamp = msg.stamp;
+          last_id = msg.id;
+          last_stamp = msg.stamp;
 
-            do_report = false;
+          do_report = false;
 
-            gFindBar._findField.value = msg.id;
-            gFindBar.open(gFindBar.FIND_TYPEAHEAD);
-            gFindBar._find();
+          gFindBar._findField.value = msg.id;
+          gFindBar.open(gFindBar.FIND_TYPEAHEAD);
+          gFindBar._find();
 
-            do_report = true;
-          }
-
-          setTimeout('reportVisLinks("'+msg.id+'", true)',0);
+          do_report = true;
         }
-        else if( msg.task == 'ABORT' )
-        {
-          onAbort(msg.id, msg.stamp, false);
-        }
-        else if( msg.task == 'GET-FOUND' )
-        {
-          if( msg.id == '/routing' )
-          {
-            removeAllChildren(items_routing);
-            routing = msg.val;
-            for(var router in msg.val.available)
-            {
-              var name = msg.val.available[router][0];
-              var valid = msg.val.available[router][1];
 
-              if( typeof(name) == 'undefined' )
-                continue;
-
-              var item = document.createElement("menuitem");
-              item.setAttribute("label", name);
-              item.setAttribute("type", "radio");
-              item.setAttribute("name", "routing-algorithm");
-              item.setAttribute("tooltiptext", "Use '" + name + "' for routing.");
-
-              // Mark available (Routers not able to route are disabled)
-              if( !valid )
-                item.setAttribute("disabled", true);
-              else
-                item.setAttribute("oncommand", "reportSelectRouting('"+name+"')");
-
-              // Mark current router
-              if( msg.val.active == name )
-                item.setAttribute("checked", true);
-
-              items_routing.appendChild(item);
-            }
-          }
-          else
-            cfg[msg.id] = msg.val;
-        }
-        else if( msg.task == 'GET' )
-        {
-          if( msg.id == 'preview-tile' )
-          {
-            tile_requests.enqueue(msg);
-            if( !tile_timeout )
-            {
-              setTimeout('handleTileRequest()', 20);
-              tile_timeout = true;
-            }
-          }
-          else if( msg.id == '/state/all' )
-          {
-            send({
-              task: 'GET-FOUND',
-              id: '/state/all',
-              data: _getCurrentTabData()
-            });
-          }
-          else
-            Application.console.warn("Unknown GET request: " + event.data);
-        }
-        else if( msg.task == 'SET' )
-        {
-          if( msg.id == 'scroll-y' )
-            smoothScrollTo(msg.val);
-        }
-        else if( msg.task == 'CMD' )
-        {
-          if( msg.cmd == 'open-url' )
-          {
-            var flags = 'menubar,toolbar,location,status,scrollbars';
-            var url = msg.url;
-
-            delete msg.cmd;
-            delete msg.task;
-            delete msg.url;
-
-            if( typeof(msg.view) != 'undefined' )
-            {
-              flags += ',width=' + msg.view[0] + ',height=' + msg.view[1];
-              delete msg.view;
-            }
-
-            url += '#hidden-content-data=' + JSON.stringify(msg);
-            window.open(url, '_blank', flags);
-          }
-          else
-            alert("Unknown command: " + event.data);
-        }
-        else if( msg.task == 'SYNC' )
-          handleSyncMsg(msg);
-        else
-          alert("Unknown message: " + event.data);
+        setTimeout(reportVisLinks, 0, msg.id, true);
       }
+      else if( msg.task == 'ABORT' )
+      {
+        onAbort(msg.id, msg.stamp, false);
+      }
+      else if( msg.task == 'GET-FOUND' )
+      {
+        if( msg.id == '/routing' )
+        {
+          removeAllChildren(items_routing);
+          routing = msg.val;
+          for(var router in msg.val.available)
+          {
+            var name = msg.val.available[router][0];
+            var valid = msg.val.available[router][1];
+
+            if( typeof(name) == 'undefined' )
+              continue;
+
+            var item = document.createElement("menuitem");
+            item.setAttribute("label", name);
+            item.setAttribute("type", "radio");
+            item.setAttribute("name", "routing-algorithm");
+            item.setAttribute("tooltiptext", "Use '" + name + "' for routing.");
+
+            // Mark available (Routers not able to route are disabled)
+            if( !valid )
+              item.setAttribute("disabled", true);
+            else
+              item.setAttribute("oncommand", "reportSelectRouting('"+name+"')");
+
+            // Mark current router
+            if( msg.val.active == name )
+              item.setAttribute("checked", true);
+
+            items_routing.appendChild(item);
+          }
+        }
+        else
+          cfg[msg.id] = msg.val;
+      }
+      else if( msg.task == 'GET' )
+      {
+        if( msg.id == 'preview-tile' )
+        {
+          tile_requests.enqueue(msg);
+          if( !tile_timeout )
+          {
+            setTimeout(handleTileRequest, 20);
+            tile_timeout = true;
+          }
+        }
+        else if( msg.id == '/state/all' )
+        {
+          send({
+            task: 'GET-FOUND',
+            id: '/state/all',
+            data: _getCurrentTabData()
+          });
+        }
+        else
+          Application.console.warn("Unknown GET request: " + event.data);
+      }
+      else if( msg.task == 'SET' )
+      {
+        if( msg.id == 'scroll-y' )
+          smoothScrollTo(msg.val);
+      }
+      else if( msg.task == 'CMD' )
+      {
+        if( msg.cmd == 'open-url' )
+        {
+          var flags = 'menubar,toolbar,location,status,scrollbars';
+          var url = msg.url;
+
+          delete msg.cmd;
+          delete msg.task;
+          delete msg.url;
+
+          if( typeof(msg.view) != 'undefined' )
+          {
+            flags += ',width=' + msg.view[0] + ',height=' + msg.view[1];
+            delete msg.view;
+          }
+
+          url += '#hidden-content-data=' + JSON.stringify(msg);
+          window.open(url, '_blank', flags);
+        }
+        else
+          alert("Unknown command: " + event.data);
+      }
+      else if( msg.task == 'SYNC' )
+        handleSyncMsg(msg);
+      else
+        alert("Unknown message: " + event.data);
+    }
 	}
 	catch (err)
 	{
-		alert("Could not establish connection to visdaemon. "+err);
+		console.log("Could not establish connection to visdaemon. " + err);
     stop();
 		return false;
 	}
@@ -1228,7 +1289,7 @@ function handleTileRequest()
 
   // We need to wait a bit before sending the next tile to not congest the
   // receiver queue.
-  setTimeout('handleTileRequest()', 10);
+  setTimeout(handleTileRequest, 10);
   tile_timeout = true;
 }
 
