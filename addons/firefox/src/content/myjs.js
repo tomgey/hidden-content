@@ -35,6 +35,23 @@ var tile_requests = null;
 var tile_timeout = false;
 var do_report = true;
 
+function httpPing(address, onsuccess, onfail, timeout = 3000)
+{
+  var ping_req = new XMLHttpRequest();
+  ping_req.timeout = timeout;
+  ping_req.ontimeout = function() { onfail(address); };
+  ping_req.onloadend = function()
+  {
+    if( ping_req.status == 200 )
+      onsuccess(address);
+    else
+      onfail(address);
+  }
+
+  ping_req.open('GET', address, true);
+  ping_req.send(null);
+}
+
 //var Cc = Components.classes;
 //var Ci = Components.interfaces;
 
@@ -722,8 +739,38 @@ function smoothScrollTo(y_target)
   }
 }
 
-function start(match_title = false, src_id = 0)
+function start(match_title = false, src_id = 0, check = true)
 {
+  if( !stopped )
+  {
+    console.warn("Already running. Not starting again.");
+    return;
+  }
+
+  if( check )
+  {
+    console.log("Check if server is alive...");
+    httpPing(
+      'http://localhost:4486/',
+      function() {
+        console.log("Server alive => connect");
+        setTimeout(start, 0, match_title, src_id, false);
+      },
+      function() {
+        if( !getPref("auto-connect") )
+          console.log("Server not alive.");
+        else
+        {
+          console.log("Server not alive => wait and retry...");
+          setTimeout(start, 3459, match_title, src_id, true);
+        }
+      }
+    );
+    return;
+  }
+  else
+    console.log("Going to connect to server...");
+
   // start client
   stopped = false;
   if( register(match_title, src_id) )
@@ -1097,6 +1144,12 @@ function sendMsgRegister(match_title, src_id, click_pos)
 //------------------------------------------------------------------------------
 function register(match_title = false, src_id = 0)
 {
+  if( links_socket )
+  {
+    console.log("Socket already opened: state = " + links_socket.readyState);
+    return true;
+  }
+
   menu = document.getElementById("vislink_menu");
   items_routing = document.getElementById("routing-selector");
 
@@ -1108,12 +1161,6 @@ function register(match_title = false, src_id = 0)
   try
   {
     tile_requests = new Stack(); //Queue();
-
-    if( links_socket )
-    {
-      console.log("State: " + links_socket.readyState);
-      return true;
-    }
 
     console.log("Creating new WebSocket.");
     links_socket = new WebSocket('ws://localhost:4487', 'VLP');

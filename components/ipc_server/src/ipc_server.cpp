@@ -91,17 +91,14 @@ namespace LinksRouting
       TileRequests  _tile_requests;
       uint8_t       _tile_request_id;
       int           _new_request;
-
-      bool updateTileMap( const HierarchicTileMapPtr& tile_map,
-                          QWebSocket* socket,
-                          const Rect& rect,
-                          int zoom );
   };
 
   //----------------------------------------------------------------------------
   IPCServer::IPCServer( QMutex* mutex,
                         QWaitCondition* cond_data ):
     Configurable("QtWebsocketServer"),
+    _server(nullptr),
+    _status_server(nullptr),
     _window_monitor(std::bind(&IPCServer::regionsChanged, this, _1)),
     _mutex_slot_links(mutex),
     _cond_data_ready(cond_data),
@@ -185,7 +182,9 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   void IPCServer::init()
   {
-    int port = 4487;
+    int port = 4487,
+        port_status = 4486;
+
     _server = new QWebSocketServer(
       QStringLiteral("Hidden Content Server"),
       QWebSocketServer::NonSecureMode,
@@ -197,10 +196,20 @@ namespace LinksRouting
                 << _server->errorString() );
       return;
     }
-
     LOG_INFO("WebSocket server listening on port " << port);
     connect( _server, &QWebSocketServer::newConnection,
              this, &IPCServer::onClientConnection );
+
+    _status_server = new QTcpServer(this);
+    if( !_status_server->listen(QHostAddress::Any, port_status) )
+    {
+      LOG_ERROR("Failed to start status server on port " << port_status << ": "
+                << _status_server->errorString() );
+      return;
+    }
+    LOG_INFO("Status server listening on port " << port_status);
+    connect( _status_server, &QTcpServer::newConnection,
+             this, &IPCServer::onStatusClientConnect );
   }
 
   //----------------------------------------------------------------------------
@@ -953,6 +962,39 @@ namespace LinksRouting
     socket->deleteLater();
 
     LOG_INFO("Client disconnected");
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onStatusClientConnect()
+  {
+    QTcpSocket* client = _status_server->nextPendingConnection();
+
+    qDebug() << "status client connected"
+             << client->peerAddress()
+             << "port:"
+             << client->peerPort();
+
+    connect( client, &QTcpSocket::disconnected,
+             client, &QTcpSocket::deleteLater );
+    connect( client, &QTcpSocket::readyRead,
+             this, &IPCServer::onStatusClientReadyRead );
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onStatusClientReadyRead()
+  {
+    QTcpSocket* client = qobject_cast<QTcpSocket*>(sender());
+
+    qDebug() << client->readAll();
+    QString response(
+      "HTTP/1.0 200 OK\r\n"
+      "Connection: close\r\n"
+      "Content-Type: text/plain\r\n"
+      "Content-Size: 0\r\n"
+      "\r\n"
+    );
+    client->write(response.toLocal8Bit());
+    client->disconnectFromHost();
   }
 
   //----------------------------------------------------------------------------

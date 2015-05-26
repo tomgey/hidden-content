@@ -11,6 +11,7 @@
 
 #include <QtCore>
 #include <QtOpenGL/qgl.h>
+#include <QTcpServer>
 #include <QWebSocketServer>
 #include <qwindowdefs.h>
 
@@ -113,6 +114,9 @@ namespace LinksRouting
       void onBinaryReceived(QByteArray data);
       void onClientDisconnection();
 
+      void onStatusClientConnect();
+      void onStatusClientReadyRead();
+
     protected:
 
       typedef std::map<QWebSocket*, ClientRef> ClientInfos;
@@ -162,6 +166,7 @@ namespace LinksRouting
     private:
 
       QWebSocketServer   *_server;
+      QTcpServer         *_status_server;
       ClientInfos         _clients;
       ClientWeakRef       _client_requested_save;
       WindowMonitor       _window_monitor;
