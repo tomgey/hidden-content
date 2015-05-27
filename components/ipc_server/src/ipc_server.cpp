@@ -607,7 +607,7 @@ namespace LinksRouting
 
     ClientRef client_info = client->second;
     std::cout << "Received (" << client_info->getWindowInfo().id << "): "
-              << data << std::endl;
+              << data.left(200) << std::endl;
 
     try
     {
@@ -624,12 +624,18 @@ namespace LinksRouting
 
           if( msg.hasChild("viewport") )
             client_info->viewport = msg.getValue<QRect>("viewport");
+          client_info->parseScrollRegion(msg);
 
           if( task == "REGISTER" )
           {
             const QString title = msg.getValue<QString>("title", "");
 
-            if(    msg.hasChild("pos")
+            if( msg.hasChild("wid") )
+            {
+              LOG_DEBUG("Use window id from message.");
+              client_info->setWindowId( msg.getValue<uint64_t>("wid") );
+            }
+            else if(    msg.hasChild("pos")
                 || msg.hasChild("pid")
                 || !title.isEmpty() )
             {
@@ -637,10 +643,43 @@ namespace LinksRouting
 
               if( msg.hasChild("pos") )
                 wid = windows.windowIdAt(msg.getValue<QPoint>("pos"));
-              else if( msg.hasChild("pid") )
-                wid = windows.findId(msg.getValue<uint32_t>("pid"), title);
               else
-                wid = windows.findId(title);
+              {
+                WindowInfoIterators possible_windows;
+                if( msg.hasChild("pid") )
+                  possible_windows = windows.find_all(
+                    msg.getValue<uint32_t>("pid"),
+                    title
+                  );
+                else
+                  possible_windows = windows.find_all(title);
+
+                LOG_DEBUG("Found " << possible_windows.size() << " matches");
+
+                if( !possible_windows.empty() )
+                {
+                  QRect geom = msg.getValue<QRect>(
+                    "geom",
+                    possible_windows.front()->region
+                  );
+
+                  for(auto w: possible_windows)
+                  {
+                    if(    w->region.x() == geom.x()
+                        && w->region.y() == geom.y()
+                        && w->region.width() == geom.width()
+                           // ignore title bar of maximized windows, because
+                           // they are integrated into the global menubar
+                        && std::abs(w->region.height() - geom.height()) < 30 )
+                    {
+                      LOG_DEBUG(" - region match");
+                      wid = w->id;
+                    }
+                    else
+                      LOG_DEBUG(" - region mismatch " << to_string(w->region));
+                  }
+                }
+              }
 
               client_info->setWindowId(wid);
             }
@@ -1051,12 +1090,13 @@ namespace LinksRouting
       return;
     }
 
-    ClientWeakList client_whitelist;
+    StringList client_whitelist,
+               client_blacklist;
     for(QString const& entry: msg.getValue<QStringList>("whitelist", {}))
     {
       if( entry == "this" )
       {
-        client_whitelist.push_back(client_info);
+        client_whitelist.push_back(client_info->id().toStdString());
         continue;
       }
 
@@ -1097,10 +1137,12 @@ namespace LinksRouting
           return;
         }
 
-        client_whitelist.push_back(other_client->second);
+        client_whitelist.push_back(other_client->second->id().toStdString());
       }
       else
-        LOG_WARN("INITITE: unknown whitelist entry: " << entry);
+      {
+        client_whitelist.push_back(entry.toStdString());
+      }
     }
 
     const std::string id_str = to_string(id);
@@ -1403,6 +1445,21 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  IPCServer::ClientInfos::iterator
+  IPCServer::findClientInfoById(QString const& id)
+  {
+    return std::find_if
+    (
+      _clients.begin(),
+      _clients.end(),
+      [id](const ClientInfos::value_type& it)
+      {
+        return it.second->id() == id;
+      }
+    );
+  }
+
+  //----------------------------------------------------------------------------
   QWebSocket* IPCServer::getSocketByWId(WId wid)
   {
     auto client = findClientInfo(wid);
@@ -1417,6 +1474,24 @@ namespace LinksRouting
 
     if( client == _clients.end() )
       return 0;
+
+    return client->first;
+  }
+
+  //----------------------------------------------------------------------------
+  QWebSocket* IPCServer::getSocketForClient(ClientRef const& client_ref)
+  {
+    auto client = std::find_if(
+      _clients.begin(),
+      _clients.end(),
+      [&client_ref](const ClientInfos::value_type& c)
+      {
+        return c.second == client_ref;
+      }
+    );
+
+    if( client == _clients.end() )
+      return nullptr;
 
     return client->first;
   }
@@ -1933,22 +2008,22 @@ namespace LinksRouting
               << QString::fromLocal8Bit(msg_data).toStdString() << std::endl;
 
     auto isOnList = []( ClientRef const& client,
-                        ClientWeakList const& list )
+                        StringList const& list )
     {
       return std::find_if(
         std::begin(list),
         std::end(list),
-        [&](ClientWeakList::value_type const& weak_client)
+        [&](std::string const& client_id)
         {
-          return weak_client.lock() == client;
+          return client_id == client->id().toStdString();
         }
       ) != std::end(list);
     };
 
-    ClientWeakList const& whitelist = link._client_whitelist,
-                          blacklist = link._client_blacklist;
+    StringList const& whitelist = link._client_whitelist,
+                      blacklist = link._client_blacklist;
 
-    for(auto client: clientList<ClientList>())
+    for(auto client: clients)
     {
       LOG_DEBUG("check: " << client->getWindowInfo().title.toStdString());
       if( isOnList(client, blacklist) )
@@ -2050,7 +2125,7 @@ namespace LinksRouting
   IPCServer::abortLinking( const LinkDescription::LinkList::iterator& link,
                            WId wid )
   {
-    int remove_count = 0;
+    size_t remove_count = 0;
     for(auto& client: _clients)
     {
       if( !wid || client.second->getWindowInfo().id == wid )

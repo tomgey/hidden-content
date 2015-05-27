@@ -131,7 +131,9 @@ namespace LinksRouting
 
       void regionsChanged(const WindowRegions& regions);
       ClientInfos::iterator findClientInfo(WId wid);
+      ClientInfos::iterator findClientInfoById(QString const& cid);
       QWebSocket* getSocketByWId(WId wid);
+      QWebSocket* getSocketForClient(ClientRef const& client);
 
       bool updateHedge( const WindowRegions& regions,
                         LinkDescription::HyperEdge* hedge );

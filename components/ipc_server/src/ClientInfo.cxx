@@ -153,8 +153,8 @@ namespace LinksRouting
       return node;
     }
 
-    float2 top_left = getViewportAbs().topLeft(),
-           scroll_offset = scroll_region.topLeft();
+    float2 top_left( getViewportAbs().topLeft() ),
+           scroll_offset( scroll_region.topLeft() );
 
     LinkDescription::nodes_t nodes;
     LinkDescription::PropertyMap node_props;

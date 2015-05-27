@@ -50,8 +50,8 @@ bool JSONNode::hasChild(const QString& key) const
 template<>
 QString JSONNode::getValue() const
 {
-  if( !_node.isString() )
-    throw std::runtime_error("Not a string");
+//  if( !_node.isString() )
+//    throw std::runtime_error("Not a string");
   return _node.toString();
 }
 
@@ -60,6 +60,15 @@ template<>
 std::string JSONNode::getValue() const
 {
   return to_string(getValue<QString>());
+}
+
+//------------------------------------------------------------------------------
+template<>
+int JSONNode::getValue() const
+{
+  if( !_node.isNumber() && _node.toString() != "null" )
+    throw std::runtime_error("Not a number");
+  return _node.toInt32();
 }
 
 //------------------------------------------------------------------------------

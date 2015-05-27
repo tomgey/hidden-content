@@ -66,6 +66,34 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  WindowInfoIterators WindowRegions::find_all( uint32_t pid,
+                                               const QString& title) const
+  {
+    LOG_DEBUG( "Find all windows by pid (" << pid << ") and title '"
+                                           << title.toStdString() << "'" );
+
+    WindowInfoIterators its;
+    for(auto w = _windows.begin(); w != _windows.end(); ++w)
+      if( w->pid == pid && (title.isEmpty() || w->title.startsWith(title)) )
+        its.push_back(w);
+
+    return its;
+  }
+
+  //----------------------------------------------------------------------------
+  WindowInfoIterators WindowRegions::find_all(const QString& title) const
+  {
+    LOG_DEBUG("Find all windows by title '" << title.toStdString() << "'");
+
+    WindowInfoIterators its;
+    for(auto w = _windows.begin(); w != _windows.end(); ++w)
+      if( w->title.startsWith(title) )
+        its.push_back(w);
+
+    return its;
+  }
+
+  //----------------------------------------------------------------------------
   WindowInfos::const_iterator WindowRegions::find(const QString& title) const
   {
     LOG_DEBUG("Find window by title '" << title.toStdString() << "'");

@@ -62,8 +62,15 @@ namespace LinksRouting
     {
       return id != 0;
     }
+
+    /// Get current geometry (uncached)
+    QRect queryGeometry() const
+    {
+      return QxtWindowSystem::windowGeometry(id);
+    }
   };
   typedef std::vector<WindowInfo> WindowInfos;
+  typedef std::vector<WindowInfos::const_iterator> WindowInfoIterators;
 
   class WindowRegions
   {
@@ -73,6 +80,10 @@ namespace LinksRouting
       WindowInfos::const_iterator find(WId wid) const;
       WindowInfos::const_iterator find(uint32_t pid, const QString& title) const;
       WindowInfos::const_iterator find(const QString& title) const;
+
+      WindowInfoIterators find_all(uint32_t pid, const QString& title) const;
+      WindowInfoIterators find_all(const QString& title) const;
+
       WId findId(const QString& title) const;
       WId findId(uint32_t pid, const QString& title = "") const;
 
