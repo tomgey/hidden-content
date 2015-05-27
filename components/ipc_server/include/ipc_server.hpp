@@ -161,6 +161,11 @@ namespace LinksRouting
       void distributeMessage( LinkDescription::LinkDescription const& link,
                               const QJsonObject& msg ) const;
 
+      /** Send message to listed clients (respecting white and black list) */
+      void distributeMessage( LinkDescription::LinkDescription const& link,
+                              const QJsonObject& msg,
+                              const ClientList& clients ) const;
+
       void dirtyLinks();
       void dirtyRender();
 

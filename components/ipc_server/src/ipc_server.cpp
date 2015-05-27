@@ -694,6 +694,16 @@ namespace LinksRouting
               LOG_WARN("REGISTER: Missing 'client-id'.");
             else
               client_info->setId(msg.getValue<QString>("client-id"));
+
+            for(auto const& link: *_slot_links->_data)
+            {
+              QJsonObject req;
+              req["task"] = "REQUEST";
+              req["id"] = QString::fromStdString(link._id);
+              req["stamp"] = qint64(link._stamp);
+
+              distributeMessage(link, req, {client_info});
+            }
           }
           client_info->update(windows);
           return;
@@ -1999,8 +2009,18 @@ namespace LinksRouting
 
   //----------------------------------------------------------------------------
   void IPCServer::distributeMessage(
+      LinkDescription::LinkDescription const& link,
+      const QJsonObject& msg
+  ) const
+  {
+    distributeMessage(link, msg, clientList<ClientList>());
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::distributeMessage(
     LinkDescription::LinkDescription const& link,
-    const QJsonObject& msg
+    const QJsonObject& msg,
+    const ClientList& clients
   ) const
   {
     QByteArray msg_data = QJsonDocument(msg).toJson(QJsonDocument::Compact);
