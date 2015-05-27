@@ -946,11 +946,9 @@ function reportVisLinks(id, found)
     };
   }
 
-  var reg = getScrollRegion();
   var msg = {
     'task': (found ? 'FOUND' : 'INITIATE'),
     'title': document.title,
-    'scroll-region': [reg.x, reg.y, reg.width, reg.height],
     'id': id,
     'stamp': last_stamp,
   };
@@ -1100,14 +1098,16 @@ function sendMsgRegister(match_title, src_id, click_pos)
   if( src_id )
     cmds.push('scroll');
 
+  var reg = getScrollRegion();
   var msg = {
-    task: 'REGISTER',
-    type: "Firefox",
-    pid: getPid(),
-    cmds: cmds,
-    viewport: getViewport(),
+    'task': 'REGISTER',
+    'type': "Firefox",
+    'pid': getPid(),
+    'cmds': cmds,
+    'viewport': getViewport(),
+    'scroll-region': [reg.x, reg.y, reg.width, reg.height],
     "client-id": client_id,
-    geom: [
+    'geom': [
       window.screenX, window.screenY,
       window.outerWidth, window.outerHeight
     ]
@@ -1372,14 +1372,17 @@ function attrModified(e)
 //------------------------------------------------------------------------------
 function resize()
 {
-  send({task: 'RESIZE', viewport: getViewport()});
-
   var reg = getScrollRegion();
+  send({
+    'task': 'RESIZE',
+    'viewport': getViewport(),
+    'scroll-region': [reg.x, reg.y, reg.width, reg.height]
+  });
+
   for(var route_id in active_routes)
   {
     var msg = {
       'task': 'UPDATE',
-      'scroll-region': [reg.x, reg.y, reg.width, reg.height],
       'id': route_id,
       'stamp': active_routes[route_id].stamp,
     };

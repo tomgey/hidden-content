@@ -911,8 +911,6 @@ namespace LinksRouting
 
         LOG_INFO("Received "  << task << ": " << id_str);
 
-        client_info->parseScrollRegion(msg);
-
         if( task == "FOUND" )
         {
           link->_link->addNode(
@@ -1169,7 +1167,6 @@ namespace LinksRouting
     (*_subscribe_user_config->_data)
       ->setString("QtWebsocketServer:SearchHistory", to_string(new_history));
 #endif
-    client_info->parseScrollRegion(msg);
     client_info->update(_window_monitor.getWindows());
 
     // Remove eventually existing search for same id
