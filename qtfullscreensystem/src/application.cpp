@@ -38,7 +38,7 @@ namespace qtfullscreensystem
 
         LR::SlotSubscriber slot_subscriber = app->getSlotSubscriber();
 
-        QtPreviewWindow* w = new QtPreviewWindow(popup);
+        QtPreviewWindow* w = new PopupWindow(popup);
         w->subscribeSlots(slot_subscriber);
 
         return w;
@@ -58,7 +58,27 @@ namespace qtfullscreensystem
 
         LR::SlotSubscriber slot_subscriber = app->getSlotSubscriber();
 
-        QtPreviewWindow* w = new QtPreviewWindow(see_through);
+        QtPreviewWindow* w = new SeeThroughWindow(see_through);
+        w->subscribeSlots(slot_subscriber);
+
+        return w;
+      }
+
+      virtual
+      LinksRouting::PreviewWindow*
+      getWindow( LinksRouting::ClientWeakRef client,
+                 uint8_t dev_id = 0 )
+      {
+        Application* app = dynamic_cast<Application*>(QApplication::instance());
+        if( !app )
+        {
+          qWarning() << "no app";
+          return nullptr;
+        }
+
+        LR::SlotSubscriber slot_subscriber = app->getSlotSubscriber();
+
+        QtPreviewWindow* w = new SemanticPreviewWindow(client);
         w->subscribeSlots(slot_subscriber);
 
         return w;

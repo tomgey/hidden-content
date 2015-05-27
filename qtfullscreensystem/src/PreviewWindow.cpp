@@ -10,6 +10,7 @@
 #include <QRect>
 #include <QSize>
 
+#include "ClientInfo.hxx"
 #include "PreviewWindow.hpp"
 #include <NodeRenderer.hpp>
 
@@ -30,17 +31,38 @@ namespace qtfullscreensystem
   const int _preview_height = 400; // TODO
 
   //----------------------------------------------------------------------------
-  QtPreviewWindow::QtPreviewWindow(Popup *popup):
-    PreviewWindow(popup)
+  QtPreviewWindow::QtPreviewWindow(HierarchicTileMapWeakPtr weak_tilemap):
+    PreviewWindow(weak_tilemap),
+    _margin(2),
+    _do_drag(false),
+    _last_mouse_pos(0, 0),
+    _tile_map_change_id(0),
+    _update_pending(false),
+    _context(nullptr),
+    _device(nullptr)
   {
-    init();
-  }
+    setSurfaceType(QWindow::OpenGLSurface);
 
-  //----------------------------------------------------------------------------
-  QtPreviewWindow::QtPreviewWindow(SeeThrough *see_through):
-    PreviewWindow(see_through)
-  {
-    init();
+    // transparent, always on top window without any decoration
+    setFlags( Qt::WindowStaysOnTopHint
+            | Qt::FramelessWindowHint
+            | Qt::X11BypassWindowManagerHint
+            //| Qt::WindowTransparentForInput
+            );
+    //setMouseTracking(true);
+    setOpacity(0.5);
+    show();
+
+    qDebug() << "new preview" << this->geometry();
+
+    HierarchicTileMapPtr tilemap = _tilemap.lock();
+
+    if( tilemap )
+      tilemap->addTileChangeCallback(
+        std::bind<>(&QtPreviewWindow::onTileMapChange, this)
+      );
+    else
+      std::cerr << "missing tilemap" << std::endl;
   }
 
   //----------------------------------------------------------------------------
@@ -65,13 +87,6 @@ namespace qtfullscreensystem
   {
     _geometry = reg;
     setGeometry( reg.adjusted(-_margin, -_margin, _margin, _margin) );
-  }
-
-  //----------------------------------------------------------------------------
-  void QtPreviewWindow::render(QPainter*)
-  {
-    if( _popup )            renderPopup();
-    else if( _see_through ) renderSeeThrough();
   }
 
   //----------------------------------------------------------------------------
@@ -105,16 +120,11 @@ namespace qtfullscreensystem
   //----------------------------------------------------------------------------
   void QtPreviewWindow::update(double)
   {
-    if( !_popup )
-      return;
-
-    setOpacity(_popup->hover_region.getAlpha());
-
-    auto tile_map = _popup->hover_region.tile_map.lock();
+    auto tile_map = _tilemap.lock();
     if( tile_map && _tile_map_change_id != tile_map->getChangeId() )
     {
-      renderLater();
       _tile_map_change_id = tile_map->getChangeId();
+      renderLater();
     }
   }
 
@@ -183,11 +193,7 @@ namespace qtfullscreensystem
         if( _do_drag )
           return true;
 
-        if( _popup )
-          _popup->hover_region.delayedFadeOut();
-        if( _see_through )
-          _see_through->delayedFadeOut();
-
+        onMouseLeave();
         return true;
       default:
         return QWindow::event(event);
@@ -213,46 +219,20 @@ namespace qtfullscreensystem
   //----------------------------------------------------------------------------
   void QtPreviewWindow::mouseMoveEvent(QMouseEvent *event)
   {
-    if( _popup )
-      _popup->hover_region.show();
+    float2 pos(event->globalX(), event->globalY());
+    float2 delta = pos - _last_mouse_pos;
+    _last_mouse_pos = pos;
 
-//    auto& mouse = *_subscribe_mouse->_data;
-//    qDebug() << "mouse" << event;
-//
-    if( !event->buttons() )
+    // if( !event->buttons() )
+    onMouseMove(delta);
+
+    if( event->buttons() & Qt::LeftButton )
     {
-      //qDebug() << "move" << event->globalX() << event->globalY();
-    }
-    else if( event->buttons() & Qt::LeftButton )
-    {
-      float2 pos(event->globalX(), event->globalY());
       if( !_do_drag )
         _do_drag = true;
       else
-      {
-        if( _popup )
-        {
-          float preview_aspect = _preview_width
-                               / static_cast<float>(_preview_height);
-
-          float2 delta = pos - _last_mouse_pos;
-          const float2& scroll_size = _popup->hover_region.scroll_region.size;
-          float step_y = scroll_size.y
-                       / pow(2.0f, static_cast<float>(_popup->hover_region.zoom))
-                       / _preview_height;
-
-          _popup->hover_region.src_region.pos.y -= delta.y * step_y;
-          float step_x = step_y * preview_aspect;
-          _popup->hover_region.src_region.pos.x -= delta.x * step_x;
-
-          _subscribe_tile_handler->_data->updateRegion(*_popup);
-          renderLater();
-        }
-      }
-      _last_mouse_pos = pos;
+        onMouseDrag(delta);
     }
-
-    renderLater();
   }
 
   //----------------------------------------------------------------------------
@@ -268,7 +248,33 @@ namespace qtfullscreensystem
   }
 
   //----------------------------------------------------------------------------
-  void QtPreviewWindow::renderPopup()
+  void QtPreviewWindow::updateGeometry()
+  {
+    QRect geom = getGeometry();
+    if( geom == _geometry )
+      return;
+
+    setPreviewGeometry(geom);
+    //    setFixedSize(size());
+  }
+
+  //----------------------------------------------------------------------------
+  void QtPreviewWindow::onTileMapChange()
+  {
+    std::cout << "tilemap changed" << std::endl;
+    renderLater();
+  }
+
+  //----------------------------------------------------------------------------
+  PopupWindow::PopupWindow(Popup* popup):
+    QtPreviewWindow(popup->hover_region.tile_map),
+    _popup(popup)
+  {
+    assert(popup);
+  }
+
+  //----------------------------------------------------------------------------
+  void PopupWindow::render(QPainter*)
   {
     LR::SlotType::TextPopup::HoverRect const& preview = _popup->hover_region;
 
@@ -276,7 +282,8 @@ namespace qtfullscreensystem
       return;
 
     std::cout << "render preview:" << std::endl;
-    auto tile_map = preview.tile_map.lock();
+    //auto tile_map = preview.tile_map.lock();
+    auto tile_map = _tilemap.lock();
     if( tile_map )
       tile_map->render( preview.src_region,
                         preview.scroll_region.size,
@@ -349,9 +356,63 @@ namespace qtfullscreensystem
   }
 
   //----------------------------------------------------------------------------
-  void QtPreviewWindow::renderSeeThrough()
+  void PopupWindow::update(double dt)
   {
-    HierarchicTileMapPtr tile_map = _see_through->tile_map.lock();
+    QtPreviewWindow::update(dt);
+
+    setOpacity(_popup->hover_region.getAlpha());
+  }
+
+  //----------------------------------------------------------------------------
+  void PopupWindow::onMouseMove(float2 const& delta)
+  {
+    _popup->hover_region.show();
+  }
+
+  //----------------------------------------------------------------------------
+  void PopupWindow::onMouseDrag(float2 const& delta)
+  {
+    float preview_aspect = _preview_width
+                         / static_cast<float>(_preview_height);
+
+    const float2& scroll_size = _popup->hover_region.scroll_region.size;
+    float step_y = scroll_size.y
+                 / pow(2.0f, static_cast<float>(_popup->hover_region.zoom))
+                 / _preview_height;
+
+    _popup->hover_region.src_region.pos.y -= delta.y * step_y;
+    float step_x = step_y * preview_aspect;
+    _popup->hover_region.src_region.pos.x -= delta.x * step_x;
+
+    _subscribe_tile_handler->_data->updateRegion(*_popup);
+
+    renderLater();
+  }
+
+  //----------------------------------------------------------------------------
+  void PopupWindow::onMouseLeave()
+  {
+    _popup->hover_region.delayedFadeOut();
+  }
+
+  //----------------------------------------------------------------------------
+  QRect PopupWindow::getGeometry() const
+  {
+    return _popup->hover_region.region.toQRect();
+  }
+
+  //----------------------------------------------------------------------------
+  SeeThroughWindow::SeeThroughWindow(SeeThrough* seethrough):
+    QtPreviewWindow(seethrough->tile_map),
+    _see_through(seethrough)
+  {
+    assert(seethrough);
+  }
+
+  //----------------------------------------------------------------------------
+  void SeeThroughWindow::render(QPainter*)
+  {
+    HierarchicTileMapPtr tile_map = /*_see_through->tile_map*/ _tilemap.lock();
     if( !tile_map )
     {
       std::cout << "SeeThrough tile_map expired!" << std::endl;
@@ -371,67 +432,97 @@ namespace qtfullscreensystem
   }
 
   //----------------------------------------------------------------------------
-  void QtPreviewWindow::init()
+  void SeeThroughWindow::onMouseMove(float2 const& delta)
   {
-    _margin = 2;
-    _do_drag = false;
-    _last_mouse_pos = float2(0,0);
-    _tile_map_change_id = 0;
-    _update_pending = false;
-    _context = nullptr;
-    _device = nullptr;
 
-    setSurfaceType(QWindow::OpenGLSurface);
-    updateGeometry();
-
-    // transparent, always on top window without any decoration
-    setFlags( Qt::WindowStaysOnTopHint
-            | Qt::FramelessWindowHint
-            | Qt::X11BypassWindowManagerHint
-            //| Qt::WindowTransparentForInput
-            );
-    //setMouseTracking(true);
-    setOpacity(0.5);
-    show();
-
-    qDebug() << "new preview" << this->geometry();
-
-    HierarchicTileMapPtr tile_map;
-
-    if( _popup )
-      tile_map = _popup->hover_region.tile_map.lock();
-    else if( _see_through )
-      tile_map = _see_through->tile_map.lock();
-
-    if( tile_map )
-      tile_map->addTileChangeCallback(
-        std::bind<>(&QtPreviewWindow::onTileMapChange, this)
-      );
-    else
-      std::cout << "missing tilemap" << std::endl;
   }
 
   //----------------------------------------------------------------------------
-  void QtPreviewWindow::updateGeometry()
+  void SeeThroughWindow::onMouseDrag(float2 const& delta)
   {
-    Rect geom;
-    if( _popup )
-      geom = _popup->hover_region.region;
-    else if( _see_through )
-      geom = _see_through->preview_region;
 
-    if( geom.toQRect() == _geometry )
+  }
+
+  //----------------------------------------------------------------------------
+  void SeeThroughWindow::onMouseLeave()
+  {
+    _see_through->delayedFadeOut();
+  }
+
+  //----------------------------------------------------------------------------
+  QRect SeeThroughWindow::getGeometry() const
+  {
+    return _see_through->preview_region.toQRect();
+  }
+
+  //----------------------------------------------------------------------------
+  SemanticPreviewWindow::SemanticPreviewWindow(LR::ClientWeakRef client):
+    QtPreviewWindow(client.lock()->tile_map_uncompressed),
+    _client(client)
+  {
+    assert(!client.expired());
+
+    setFlags(Qt::FramelessWindowHint);
+    setOpacity(1);
+  }
+
+  //----------------------------------------------------------------------------
+  void SemanticPreviewWindow::render(QPainter*)
+  {
+    glClearColor(.3f, .3f, .3f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    auto client = _client.lock();
+    if( !client )
+    {
+      qWarning() << "Semantic PreviewWindow client expired!";
       return;
+    }
 
-    setPreviewGeometry(geom.toQRect());
-    //    setFixedSize(size());
+    HierarchicTileMapPtr tile_map = /*_see_through->tile_map*/ _tilemap.lock();
+    if( !tile_map )
+    {
+      qWarning() << "SemanticPreviewWindow tile_map expired!";
+      return;
+    }
+
+    qDebug() << "update scroll_region:" << client->scroll_region
+             << "vp:" << client->viewport;
+
+    _subscribe_tile_handler->_data->updateTileMap(tile_map, client, client->viewport, -1);
+
+    //      renderRect( preview.preview_region );
+    tile_map->render( client->viewport,
+                      client->viewport.size(),
+                      Rect(float2(0, 0), size()),
+                      -1,
+                      false,
+                      1,
+                      &_image_cache );
   }
 
   //----------------------------------------------------------------------------
-  void QtPreviewWindow::onTileMapChange()
+  void SemanticPreviewWindow::onMouseMove(float2 const& delta)
   {
-    std::cout << "tilemap changed" << std::endl;
     renderLater();
+  }
+
+  //----------------------------------------------------------------------------
+  void SemanticPreviewWindow::onMouseDrag(float2 const& delta)
+  {
+
+  }
+
+  //----------------------------------------------------------------------------
+  void SemanticPreviewWindow::onMouseLeave()
+  {
+
+  }
+
+  //----------------------------------------------------------------------------
+  QRect SemanticPreviewWindow::getGeometry() const
+  {
+    return _client.lock()->getWindowInfo().region;
   }
 
 } // namespace qtfullscreensystem

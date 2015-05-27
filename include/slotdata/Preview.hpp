@@ -23,6 +23,8 @@ namespace SlotType
                                         uint8_t dev_id = 0 ) = 0;
       virtual PreviewWindow* getWindow( XRayPopup::HoverRect*,
                                         uint8_t dev_id = 0 ) = 0;
+      virtual PreviewWindow* getWindow( ClientWeakRef,
+                                        uint8_t dev_id = 0 ) = 0;
   };
 
 } // namespace SlotType

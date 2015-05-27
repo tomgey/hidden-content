@@ -91,6 +91,10 @@ namespace LinksRouting
                                  float2 center = float2(-9999, -9999),
                                  float2 rel_pos = float2() );
       virtual bool updateRegion( SlotType::XRayPopup::HoverRect& popup );
+      virtual bool updateTileMap( const HierarchicTileMapPtr& tile_map,
+                                  ClientRef client,
+                                  const Rect& rect,
+                                  int zoom );
 
     protected:
       friend class IPCServer;
@@ -741,6 +745,54 @@ namespace LinksRouting
           }
           return;
         }
+      }
+
+      if( task == "SEMANTIC-ZOOM" )
+      {
+        int step = msg.getValue<int>("step");
+        qreal fac = exp2(step);
+
+        qDebug() << "zoom" << step << fac;
+
+        QRect geom = client_info->getWindowInfo().queryGeometry();
+        qDebug() << "geom" << geom;
+
+        if( step < 0 && geom.width() <= 400 && geom.height() <= 300 )
+        {
+          client_info->tile_map_uncompressed;
+          //addOutline(*client_info);
+          client_info->iconifyWindow();
+
+          if( !client_info->hasSemanticPreview() )
+            client_info->setSemanticPreview(
+              _subscribe_previews->_data->getWindow(client_info)
+            );
+        }
+
+        geom.setSize(geom.size() * fac);
+
+        QSize desktop_size = _subscribe_desktop_rect->_data->size.toQSize();
+        if(    geom.width() > 1.8 * desktop_size.width()
+            || geom.height() > 1.8 * desktop_size.height() )
+        {
+          qDebug() << "no larger anymore" << geom << desktop_size;
+          // Don't let the window size go crazy
+          return;
+        }
+
+        QPoint center = msg.getValue<QPoint>("center", geom.center()),
+               offset = geom.topLeft() - center,
+               new_pos = center + fac * offset;
+
+        geom.moveTo( std::max(0, new_pos.x()),
+                     std::max(0, new_pos.y()) );
+
+        qDebug() << "moveResize" << geom;
+
+        client_info->moveResizeWindow(geom);
+
+//        client_info->activateWindow();
+        return;
       }
 
       QString id = msg.getValue<QString>("id").trimmed(),
@@ -2251,7 +2303,12 @@ namespace LinksRouting
       return true;
     }
 
-    return !updateTileMap(tile_map, socket, src, popup.hover_region.zoom);
+    return !updateTileMap(
+      tile_map,
+      client->second,
+      src,
+      popup.hover_region.zoom
+    );
   }
 
   //----------------------------------------------------------------------------
@@ -2259,8 +2316,14 @@ namespace LinksRouting
     SlotType::XRayPopup::HoverRect& popup
   )
   {
+    auto client = _ipc_server->_clients.find(
+      static_cast<QWebSocket*>(popup.client_socket)
+    );
+    if( client == _ipc_server->_clients.end() )
+      return false;
+
     return updateTileMap( popup.tile_map.lock(),
-                          static_cast<QWebSocket*>(popup.client_socket),
+                          client->second,
                           popup.source_region,
                           -1 );
   }
@@ -2268,7 +2331,7 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   bool IPCServer::TileHandler::updateTileMap(
     const HierarchicTileMapPtr& tile_map,
-    QWebSocket* socket,
+    ClientRef client,
     const Rect& src,
     int zoom )
   {
@@ -2278,10 +2341,29 @@ namespace LinksRouting
       return false;
     }
 
+    if( !client )
+    {
+      LOG_WARN("Client has expired!");
+      return false;
+    }
+
+    QWebSocket* socket = _ipc_server->getSocketForClient(client);
+    if( !socket )
+    {
+      LOG_WARN("Failed to get socket!");
+      return false;
+    }
+
     bool sent = false;
     MapRect rect = tile_map->requestRect(src, zoom);
+    std::cout << rect.min_tile[0] << "|" << rect.min_tile[1]
+              << " -> "
+              << rect.max_tile[0] << "|" << rect.max_tile[1]
+              << std::endl;
+
     rect.foreachTile([&](Tile& tile, size_t x, size_t y)
     {
+      std::cout << " - tile " << x << "|" << y << std::endl;
       if( tile.type == Tile::NONE )
       {
         auto req = std::find_if
@@ -2304,7 +2386,7 @@ namespace LinksRouting
           return;
 
         TileRequest tile_req = {
-          socket,
+          static_cast<QWebSocket*>(socket),
           tile_map,
           zoom,
           x, y,

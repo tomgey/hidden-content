@@ -28,8 +28,7 @@ namespace qtfullscreensystem
     public LR::PreviewWindow
   {
     public:
-      QtPreviewWindow(Popup *popup);
-      QtPreviewWindow(SeeThrough *see_through);
+      explicit QtPreviewWindow(HierarchicTileMapWeakPtr tilemap);
 
       void subscribeSlots(LR::SlotSubscriber& slot_subscriber);
 
@@ -38,7 +37,7 @@ namespace qtfullscreensystem
       /// Send geometry for preview (excluding space for margin/border)
       virtual void setPreviewGeometry(QRect const&);
 
-      virtual void render(QPainter *painter);
+      virtual void render(QPainter *painter) = 0;
       virtual void render();
 
       virtual void update(double dt);
@@ -62,15 +61,18 @@ namespace qtfullscreensystem
       LR::slot_t<LR::SlotType::TextPopup>::type   _subscribe_popups;
       LR::slot_t<LR::SlotType::TileHandler>::type _subscribe_tile_handler;
 
+      virtual QRect getGeometry() const = 0;
+
+      virtual void onMouseMove(float2 const& delta) {}
+      virtual void onMouseDrag(float2 const& delta) {}
+      virtual void onMouseLeave() {}
+
       virtual bool event(QEvent*);
       virtual void exposeEvent(QExposeEvent*);
 
       virtual void mouseReleaseEvent(QMouseEvent*);
       virtual void mouseMoveEvent(QMouseEvent*);
       virtual void wheelEvent(QWheelEvent*);
-
-      void renderPopup();
-      void renderSeeThrough();
 
     private:
       bool _update_pending;
@@ -82,6 +84,62 @@ namespace qtfullscreensystem
       void updateGeometry();
 
       void onTileMapChange();
+  };
+
+  class PopupWindow:
+    public QtPreviewWindow
+  {
+    public:
+      explicit PopupWindow(Popup* popup);
+
+      virtual void render(QPainter *painter);
+      virtual void update(double dt);
+
+      virtual void onMouseMove(float2 const& delta);
+      virtual void onMouseDrag(float2 const& delta);
+      virtual void onMouseLeave();
+
+    protected:
+      Popup *_popup;
+
+      virtual QRect getGeometry() const;
+  };
+
+  class SeeThroughWindow:
+    public QtPreviewWindow
+  {
+    public:
+      explicit SeeThroughWindow(SeeThrough* seethrough);
+
+      virtual void render(QPainter *painter);
+
+      virtual void onMouseMove(float2 const& delta);
+      virtual void onMouseDrag(float2 const& delta);
+      virtual void onMouseLeave();
+
+
+    protected:
+      SeeThrough *_see_through;
+
+      virtual QRect getGeometry() const;
+  };
+
+  class SemanticPreviewWindow:
+    public QtPreviewWindow
+  {
+    public:
+      explicit SemanticPreviewWindow(LR::ClientWeakRef client);
+
+      virtual void render(QPainter *painter);
+
+      virtual void onMouseMove(float2 const& delta);
+      virtual void onMouseDrag(float2 const& delta);
+      virtual void onMouseLeave();
+
+    protected:
+      LR::ClientWeakRef _client;
+
+      virtual QRect getGeometry() const;
   };
 
 } // namespace qtfullscreensystem

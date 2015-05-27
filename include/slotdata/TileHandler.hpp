@@ -20,6 +20,10 @@ namespace SlotType
                                  float2 center = float2(-9999, -9999),
                                  float2 rel_pos = float2() ) = 0;
       virtual bool updateRegion( XRayPopup::HoverRect& popup ) = 0;
+      virtual bool updateTileMap( const HierarchicTileMapPtr& tile_map,
+                                  ClientRef client,
+                                  const Rect& rect,
+                                  int zoom ) = 0;
   };
 
 } // namespace SlotType

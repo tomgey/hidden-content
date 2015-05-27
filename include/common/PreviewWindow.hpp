@@ -25,17 +25,10 @@ namespace LinksRouting
       virtual void release() = 0;
 
     protected:
-      Popup      *_popup;
-      SeeThrough *_see_through;
+      HierarchicTileMapWeakPtr _tilemap;
 
-      explicit PreviewWindow(Popup* popup):
-        _popup(popup),
-        _see_through(nullptr)
-      {}
-
-      explicit PreviewWindow(SeeThrough* see_through):
-        _popup(nullptr),
-        _see_through(see_through)
+      explicit PreviewWindow(HierarchicTileMapWeakPtr const& tilemap):
+        _tilemap(tilemap)
       {}
   };
 
