@@ -43,4 +43,4 @@ add_definitions(-DNOMULTISAMPLING)
 add_library(tools ${HEADER_FILES} ${SOURCE_FILES})
 
 add_library(tools-qt ${HEADER_FILES_QT} ${SOURCE_FILES_QT})
-qt5_use_modules(tools-qt Script)
+qt5_use_modules(tools-qt Script Gui)

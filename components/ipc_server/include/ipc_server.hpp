@@ -53,6 +53,8 @@ namespace LinksRouting
       void publishSlots(SlotCollector& slot_collector);
       void subscribeSlots(SlotSubscriber& slot_subscriber);
 
+      bool setString(const std::string& name, const std::string& val) override;
+
       bool startup(Core* core, unsigned int type);
       void init();
       void shutdown();
@@ -174,6 +176,8 @@ namespace LinksRouting
       QMutex             *_mutex_slot_links;
       QWaitCondition     *_cond_data_ready;
       uint32_t            _dirty_flags;
+
+      std::vector<Color>  _colors; //!< Available link colors
 
       /* List of all open searches */
       slot_t<LinkDescription::LinkList>::type _slot_links;

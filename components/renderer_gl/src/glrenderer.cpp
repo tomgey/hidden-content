@@ -155,7 +155,8 @@ namespace LinksRouting
                   ? 1
                   : 0.5;
 
-        renderer.renderRect(reg_title, 0, 0, fac * _colors.front());
+        Color default_color(.9, .1, .1);
+        renderer.renderRect(reg_title, 0, 0, fac * default_color);
       }
     }
 
@@ -234,27 +235,6 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  bool GlRenderer::setString(const std::string& name, const std::string& val)
-  {
-    if( name != "link-color" )
-      return ComponentArguments::setString(name, val);
-
-    char *end;
-    long int color[3];
-    color[0] = strtol(val.c_str(), &end, 10);
-    color[1] = strtol(end,         &end, 10);
-    color[2] = strtol(end,         0,    10);
-
-    _colors.push_back( Color( color[0] / 256.f,
-                              color[1] / 256.f,
-                              color[2] / 256.f,
-                              0.7f ) );
-    //std::cout << "GlRenderer: Added color (" << val << ")" << std::endl;
-
-    return true;
-  }
-
-  //----------------------------------------------------------------------------
   Color GlRenderer::getCurrentColor() const
   {
     GLfloat cur_color[4];
@@ -309,8 +289,7 @@ namespace LinksRouting
 
     for(auto link = links.begin(); link != links.end(); ++link)
     {
-      if( !_colors.empty() )
-        _color_cur = _colors[ link->_color_id % _colors.size() ];
+      _color_cur = link->_color;
       _color_covered_cur = 0.4f * _color_cur;
 
       renderer.setColor(_color_cur, _color_covered_cur);

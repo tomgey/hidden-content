@@ -7,7 +7,9 @@
 
 #include "JSONParser.h"
 #include "float2.hpp"
+#include "color.h"
 
+#include <QColor>
 #include <QStringList>
 
 //------------------------------------------------------------------------------
@@ -133,6 +135,26 @@ QRect JSONNode::getValue() const
                 region_list.at(1).toInt(),
                 region_list.at(2).toInt(),
                 region_list.at(3).toInt() );
+}
+
+//------------------------------------------------------------------------------
+template<>
+QColor JSONNode::getValue() const
+{
+  return getValue<QString>();
+}
+
+//------------------------------------------------------------------------------
+template<>
+LinksRouting::Color JSONNode::getValue() const
+{
+  QColor color = getValue<QColor>();
+  return {
+    static_cast<float>(color.redF()),
+    static_cast<float>(color.greenF()),
+    static_cast<float>(color.blueF()),
+    static_cast<float>(color.alphaF())
+  };
 }
 
 //------------------------------------------------------------------------------

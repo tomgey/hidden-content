@@ -15,6 +15,11 @@
     <PreviewHeight type="Integer" val="400" />
     <PreviewAutoWidth type="Bool" val="true" />
     <OutsideSeeThrough type="Bool" val="false" />
+    <link-color type="String" val="228 26 28" />
+    <link-color type="String" val="55 126 184" />
+    <link-color type="String" val="77 175 74" />
+    <link-color type="String" val="152 78 163" />
+    <link-color type="String" val="255 127 0" />
   </QtWebsocketServer>
 
   <ComponentCostanalysis>
@@ -41,11 +46,6 @@
   <GLRenderer>
     <enabled type="Bool" val="true" />
     <NumBlur type="Integer" val="1" />
-    <link-color type="String" val="228 26 28" />
-    <link-color type="String" val="55 126 184" />
-    <link-color type="String" val="77 175 74" />
-    <link-color type="String" val="152 78 163" />
-    <link-color type="String" val="255 127 0" />
   </GLRenderer>
   
 </config>

@@ -34,6 +34,10 @@ namespace LinksRouting
       a(a)
     {}
 #endif
+    bool isVisible() const
+    {
+      return a > 0.05;
+    }
     operator const float*() const
     {
       return &r;

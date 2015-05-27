@@ -38,11 +38,8 @@ namespace LinksRouting
 
       uint32_t process(unsigned int type) override;
 
-      virtual bool setString(const std::string& name, const std::string& val);
-
     protected:
 
-      std::vector<Color>    _colors;
       Color                 _color_cur,
                             _color_covered_cur;
       int                   _num_blur;

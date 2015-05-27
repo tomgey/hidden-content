@@ -13,6 +13,8 @@
 #include <memory>
 #include <iostream>
 
+typedef std::vector<std::string> StringList;
+
 namespace LinksRouting
 {
   enum class Direction { LEFT, UP, RIGHT, DOWN };
@@ -317,20 +319,22 @@ namespace LinkDescription
     LinkDescription( const std::string& id,
                      uint32_t stamp,
                      const HyperEdgePtr& link,
-                     uint32_t color_id,
-                     const ClientWeakList& client_whitelist ):
+                     const Color& color,
+                     const StringList& client_whitelist,
+                     const StringList& client_blacklist):
       _id( id ),
       _stamp( stamp ),
       _link( link ),
-      _color_id( color_id ),
-      _client_whitelist( client_whitelist )
+      _color( color ),
+      _client_whitelist( client_whitelist ),
+      _client_blacklist( client_blacklist )
     {}
 
     const std::string   _id;
     uint32_t            _stamp;
     HyperEdgePtr        _link;
-    uint32_t            _color_id;
-    ClientWeakList      _client_whitelist,
+    Color               _color;
+    StringList          _client_whitelist,
                         _client_blacklist;
   };
 

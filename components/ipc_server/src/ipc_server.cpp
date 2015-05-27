@@ -37,6 +37,25 @@ namespace LinksRouting
     return json;
   }
 
+  QJsonArray to_json(StringList const& list)
+  {
+    QJsonArray json;
+    for(auto const& s: list)
+      json.push_back(QString::fromStdString(s));
+
+    return json;
+  }
+
+  QJsonValue to_json(Color const& color)
+  {
+    return QColor(
+      color.r * 255 + .5f,
+      color.g * 255 + .5f,
+      color.b * 255 + .5f,
+      color.a * 255 + .5f
+    ).name();
+  }
+
   using namespace std::placeholders;
 
   std::string to_string(const QRect& r)
@@ -170,6 +189,28 @@ namespace LinksRouting
     (
       std::bind(&IPCServer::onDrag, this, _1)
     );
+  }
+
+
+  //----------------------------------------------------------------------------
+  bool IPCServer::setString(const std::string& name, const std::string& val)
+  {
+    if( name != "link-color" )
+      return ComponentArguments::setString(name, val);
+
+    char *end;
+    long int color[3];
+    color[0] = strtol(val.c_str(), &end, 10);
+    color[1] = strtol(end,         &end, 10);
+    color[2] = strtol(end,         0,    10);
+
+    _colors.push_back( Color( color[0] / 255.f,
+                              color[1] / 255.f,
+                              color[2] / 255.f,
+                              0.7f ) );
+    //std::cout << "GlRenderer: Added color (" << val << ")" << std::endl;
+
+    return true;
   }
 
   //----------------------------------------------------------------------------
@@ -1064,7 +1105,7 @@ namespace LinksRouting
 
     const std::string id_str = to_string(id);
     LOG_INFO("Received INITIATE: " << id_str);
-    uint32_t color_id = 0;
+    Color link_color = msg.getValue<Color>("color", {});
 #if 0
     std::string history;
     (*_subscribe_user_config->_data)->getString("QtWebsocketServer:SearchHistory", history);
@@ -1082,29 +1123,37 @@ namespace LinksRouting
     // Remove eventually existing search for same id
     if( link != _slot_links->_data->end() )
     {
-      // keep color
-      color_id = link->_color_id;
+      if( !link_color.isVisible() )
+        // keep color if none is requested
+        link_color = link->_color;
 
       LOG_INFO("Replacing search for " << link->_id);
       abortLinking(link);
     }
-    else
+    else if( !link_color.isVisible() )
     {
       // get first unused color
-      while
-      (
-        std::find_if
-        (
-          _slot_links->_data->begin(),
-          _slot_links->_data->end(),
-          [color_id](const LinkDescription::LinkDescription& desc)
-          {
-            return desc._color_id == color_id;
-          }
-        ) != _slot_links->_data->end()
-      )
-        ++color_id;
+      for(Color const& color: _colors)
+      {
+        if( std::find_if(
+              _slot_links->_data->begin(),
+              _slot_links->_data->end(),
+              [color](const LinkDescription::LinkDescription& desc)
+              {
+                return desc._color == color;
+              }
+            ) == _slot_links->_data->end() )
+        {
+          link_color = color;
+          break;
+        }
+      }
+
+      if( !link_color.isVisible() )
+        // No unused color available -> need to reuse, so use a "random" one.
+        link_color = _colors[ _slot_links->_data->size() % _colors.size() ];
     }
+
     auto hedge = LinkDescription::HyperEdge::make_shared();
     hedge->set("link-id", id_str);
     hedge->addNode( client_info->parseRegions(msg) );
@@ -1116,8 +1165,9 @@ namespace LinksRouting
         id_str,
         stamp,
         hedge,
-        color_id,
-        client_whitelist
+        link_color,
+        client_whitelist,
+        client_blacklist
       )
     );
     _slot_links->setValid(true);
@@ -1983,6 +2033,7 @@ namespace LinksRouting
     {
       QJsonObject link_data;
       link_data["id"] = QString::fromStdString(link._id);
+      link_data["color"] = to_json(link._color);
       link_data["whitelist"] = to_json(link._client_whitelist);
       link_data["blacklist"] = to_json(link._client_blacklist);
       links.push_back(link_data);
