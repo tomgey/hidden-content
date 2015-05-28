@@ -163,11 +163,19 @@ function send(data)
     if( !links_socket )
       throw "No socket available!";
 
+    if( links_socket.readyState != 1 )
+    {
+      console.log("Socket not ready for message: " + JSON.stringify(data));
+      return;
+    }
+
     links_socket.send(JSON.stringify(data));
   }
   catch(e)
   {
 //    alert(e);
+    console.log(e);
+    console.log(arguments.callee.caller.toString());
     links_socket = 0;
     stop();
     checkAutoConnect();
@@ -426,7 +434,6 @@ function onPageLoad(event)
   {
     doc._hcd_src_id = src_id;
     session_store.setTabValue(tab, "hcd/src-id", src_id);
-    setStatusSync("sync");
   }
 
   content.addEventListener("keydown", onKeyDown, false);
@@ -800,7 +807,7 @@ function onVisLinkButton(ev)
 function onTabSyncButton(ev)
 {
   if( ev.target.id != 'vislink-sync' )
-    // Ignore clicks outside the button (e{g for dropdown menu)
+    // Ignore clicks outside the button (eg. for dropdown menu)
     return;
 
   setStatusSync(status_sync == 'sync' ? '' : 'sync');
@@ -1034,6 +1041,8 @@ function handleSyncMsg(msg)
   if( msg['tab-id'] != content.document._hcd_src_id )
     return;
 
+  setStatusSync("sync");
+
   var type = msg['type'];
 
   if( type == 'SCROLL' )
@@ -1167,6 +1176,7 @@ function register(match_title = false, src_id = 0)
     links_socket.binaryType = "arraybuffer";
     links_socket.onopen = function(event)
     {
+      console.log("opened -> sending REGISTER" + links_socket + window.links_socket);
       setTimeout(sendMsgRegister, 10, match_title, src_id, click_pos);
     };
     links_socket.onclose = function(event)
