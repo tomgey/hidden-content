@@ -25,11 +25,7 @@ namespace LinksRouting
       virtual void release() = 0;
 
     protected:
-      HierarchicTileMapWeakPtr _tilemap;
-
-      explicit PreviewWindow(HierarchicTileMapWeakPtr const& tilemap):
-        _tilemap(tilemap)
-      {}
+      PreviewWindow() {}
   };
 
 }

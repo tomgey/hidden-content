@@ -330,12 +330,12 @@ namespace LinkDescription
       _client_blacklist( client_blacklist )
     {}
 
-    const std::string   _id;
-    uint32_t            _stamp;
-    HyperEdgePtr        _link;
-    Color               _color;
-    StringList          _client_whitelist,
-                        _client_blacklist;
+    std::string   _id;
+    uint32_t      _stamp;
+    HyperEdgePtr  _link;
+    Color         _color;
+    StringList    _client_whitelist,
+                  _client_blacklist;
   };
 
   typedef std::list<LinkDescription> LinkList;

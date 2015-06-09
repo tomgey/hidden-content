@@ -31,8 +31,7 @@ namespace qtfullscreensystem
   const int _preview_height = 400; // TODO
 
   //----------------------------------------------------------------------------
-  QtPreviewWindow::QtPreviewWindow(HierarchicTileMapWeakPtr weak_tilemap):
-    PreviewWindow(weak_tilemap),
+  QtPreviewWindow::QtPreviewWindow():
     _margin(2),
     _do_drag(false),
     _last_mouse_pos(0, 0),
@@ -54,15 +53,6 @@ namespace qtfullscreensystem
     show();
 
     qDebug() << "new preview" << this->geometry();
-
-    HierarchicTileMapPtr tilemap = _tilemap.lock();
-
-    if( tilemap )
-      tilemap->addTileChangeCallback(
-        std::bind<>(&QtPreviewWindow::onTileMapChange, this)
-      );
-    else
-      std::cerr << "missing tilemap" << std::endl;
   }
 
   //----------------------------------------------------------------------------
@@ -120,8 +110,17 @@ namespace qtfullscreensystem
   //----------------------------------------------------------------------------
   void QtPreviewWindow::update(double)
   {
-    auto tile_map = _tilemap.lock();
-    if( tile_map && _tile_map_change_id != tile_map->getChangeId() )
+    auto tile_map = getTilemap();
+    if( tile_map != _last_tilemap.lock() )
+    {
+      _last_tilemap = tile_map;
+      _tile_map_change_id = -1;
+
+      tile_map->addTileChangeCallback(
+        std::bind<>(&QtPreviewWindow::onTileMapChange, this)
+      );
+    }
+    else if( tile_map && _tile_map_change_id != tile_map->getChangeId() )
     {
       _tile_map_change_id = tile_map->getChangeId();
       renderLater();
@@ -267,7 +266,6 @@ namespace qtfullscreensystem
 
   //----------------------------------------------------------------------------
   PopupWindow::PopupWindow(Popup* popup):
-    QtPreviewWindow(popup->hover_region.tile_map),
     _popup(popup)
   {
     assert(popup);
@@ -283,7 +281,7 @@ namespace qtfullscreensystem
 
     std::cout << "render preview:" << std::endl;
     //auto tile_map = preview.tile_map.lock();
-    auto tile_map = _tilemap.lock();
+    auto tile_map = getTilemap();
     if( tile_map )
       tile_map->render( preview.src_region,
                         preview.scroll_region.size,
@@ -402,8 +400,13 @@ namespace qtfullscreensystem
   }
 
   //----------------------------------------------------------------------------
+  HierarchicTileMapPtr PopupWindow::getTilemap() const
+  {
+    return _popup->hover_region.tile_map.lock();
+  }
+
+  //----------------------------------------------------------------------------
   SeeThroughWindow::SeeThroughWindow(SeeThrough* seethrough):
-    QtPreviewWindow(seethrough->tile_map),
     _see_through(seethrough)
   {
     assert(seethrough);
@@ -412,7 +415,7 @@ namespace qtfullscreensystem
   //----------------------------------------------------------------------------
   void SeeThroughWindow::render(QPainter*)
   {
-    HierarchicTileMapPtr tile_map = /*_see_through->tile_map*/ _tilemap.lock();
+    HierarchicTileMapPtr tile_map = getTilemap();
     if( !tile_map )
     {
       std::cout << "SeeThrough tile_map expired!" << std::endl;
@@ -456,8 +459,13 @@ namespace qtfullscreensystem
   }
 
   //----------------------------------------------------------------------------
+  HierarchicTileMapPtr SeeThroughWindow::getTilemap() const
+  {
+    return _see_through->tile_map.lock();
+  }
+
+  //----------------------------------------------------------------------------
   SemanticPreviewWindow::SemanticPreviewWindow(LR::ClientWeakRef client):
-    QtPreviewWindow(client.lock()->tile_map_uncompressed),
     _client(client)
   {
     assert(!client.expired());
@@ -479,25 +487,42 @@ namespace qtfullscreensystem
       return;
     }
 
-    HierarchicTileMapPtr tile_map = /*_see_through->tile_map*/ _tilemap.lock();
+    auto tile_map = getTilemap();
     if( !tile_map )
     {
       qWarning() << "SemanticPreviewWindow tile_map expired!";
       return;
     }
 
+    if( client->tile_map_uncompressed != tile_map )
+      tile_map = client->tile_map_uncompressed;
+
     qDebug() << "update scroll_region:" << client->scroll_region
              << "vp:" << client->viewport;
 
-    _subscribe_tile_handler->_data->updateTileMap(tile_map, client, client->viewport, -1);
+    // scale = (pow(2, zoom) * tile_height) / height;
+    double scale = 0.5;
+    double zoom_for_scale = std::log2(scale * tile_map->getHeight() / tile_map->getTileHeight());
+    std::cout << "zoom_for_scale=" << zoom_for_scale << std::endl;
+
+    int zoom = std::round(zoom_for_scale);
+    double real_scale = std::pow(2, zoom) * tile_map->getTileHeight() / tile_map->getHeight();
+    std::cout << "real scale: " << real_scale << std::endl;
+
+    Rect src_reg( -client->scroll_region.topLeft(),
+                  size() / real_scale ); // TODO check that rect stays within scrollable
+                                //      area (move upwards if pos + size > scroll
+                                //      area size).
+
+    _subscribe_tile_handler->_data->updateTileMap(tile_map, client, src_reg, zoom);
 
     //      renderRect( preview.preview_region );
-    tile_map->render( client->viewport,
-                      client->viewport.size(),
+    tile_map->render( src_reg,
+                      src_reg.size,
                       Rect(float2(0, 0), size()),
-                      -1,
+                      zoom,
                       false,
-                      1,
+                      1.,
                       &_image_cache );
   }
 
@@ -520,9 +545,34 @@ namespace qtfullscreensystem
   }
 
   //----------------------------------------------------------------------------
+  void SemanticPreviewWindow::wheelEvent(QWheelEvent* event)
+  {
+    if( !(event->modifiers() & Qt::AltModifier) )
+      return;
+
+    qDebug() << "Semantic zoom";
+    if( event->delta() > 0 )
+    {
+      _client.lock()->moveResizeWindow(geometry());
+      _client.lock()->activateWindow();
+      _client.lock()->setSemanticPreview(nullptr);
+    }
+    else
+    {
+      qDebug() << "out";
+    }
+  }
+
+  //----------------------------------------------------------------------------
   QRect SemanticPreviewWindow::getGeometry() const
   {
     return _client.lock()->getWindowInfo().region;
+  }
+
+  //----------------------------------------------------------------------------
+  HierarchicTileMapPtr SemanticPreviewWindow::getTilemap() const
+  {
+    return _client.lock()->tile_map_uncompressed;
   }
 
 } // namespace qtfullscreensystem

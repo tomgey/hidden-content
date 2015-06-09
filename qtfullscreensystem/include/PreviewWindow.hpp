@@ -28,7 +28,7 @@ namespace qtfullscreensystem
     public LR::PreviewWindow
   {
     public:
-      explicit QtPreviewWindow(HierarchicTileMapWeakPtr tilemap);
+      QtPreviewWindow();
 
       void subscribeSlots(LR::SlotSubscriber& slot_subscriber);
 
@@ -62,6 +62,7 @@ namespace qtfullscreensystem
       LR::slot_t<LR::SlotType::TileHandler>::type _subscribe_tile_handler;
 
       virtual QRect getGeometry() const = 0;
+      virtual HierarchicTileMapPtr getTilemap() const = 0;
 
       virtual void onMouseMove(float2 const& delta) {}
       virtual void onMouseDrag(float2 const& delta) {}
@@ -76,6 +77,7 @@ namespace qtfullscreensystem
 
     private:
       bool _update_pending;
+      HierarchicTileMapWeakPtr _last_tilemap;
 
       QOpenGLContext     *_context;
       QOpenGLPaintDevice *_device;
@@ -103,6 +105,7 @@ namespace qtfullscreensystem
       Popup *_popup;
 
       virtual QRect getGeometry() const;
+      virtual HierarchicTileMapPtr getTilemap() const;
   };
 
   class SeeThroughWindow:
@@ -122,6 +125,7 @@ namespace qtfullscreensystem
       SeeThrough *_see_through;
 
       virtual QRect getGeometry() const;
+      virtual HierarchicTileMapPtr getTilemap() const;
   };
 
   class SemanticPreviewWindow:
@@ -136,10 +140,13 @@ namespace qtfullscreensystem
       virtual void onMouseDrag(float2 const& delta);
       virtual void onMouseLeave();
 
+      virtual void wheelEvent(QWheelEvent*);
+
     protected:
       LR::ClientWeakRef _client;
 
       virtual QRect getGeometry() const;
+      virtual HierarchicTileMapPtr getTilemap() const;
   };
 
 } // namespace qtfullscreensystem

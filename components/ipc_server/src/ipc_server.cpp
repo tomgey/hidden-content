@@ -971,6 +971,30 @@ namespace LinksRouting
         }
         else
         {
+          QString new_id = msg.getValue<QString>("new-id", "");
+          if( !new_id.isEmpty() )
+          {
+            qDebug() << "Renaming link" << id << "==>" << new_id;
+            link->_id = to_string(new_id);
+
+            QJsonObject msg_fwd;
+            msg_fwd["task"] = "UPDATE";
+            msg_fwd["id"] = id;
+            msg_fwd["stamp"] = qint64(stamp);
+            msg_fwd["new-id"] = new_id;
+
+            QString const msg_fwd_str =
+              QString::fromLocal8Bit(
+                QJsonDocument(msg_fwd).toJson(QJsonDocument::Compact)
+              );
+
+            for(auto const& socket: _clients)
+            {
+              if( sender() != socket.first )
+                socket.first->sendTextMessage(msg_fwd_str);
+            }
+          }
+
           LinkDescription::NodePtr node;
           for(auto& n: link->_link->getNodes())
           {
@@ -2195,7 +2219,7 @@ namespace LinksRouting
                            WId wid )
   {
     size_t remove_count = 0;
-    for(auto& client: _clients)
+    for(auto const& client: _clients)
     {
       if( !wid || client.second->getWindowInfo().id == wid )
       {

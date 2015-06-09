@@ -856,6 +856,14 @@ function selectVisLink()
 }
 
 //------------------------------------------------------------------------------
+function updateRouteItemData(item, id, stamp)
+{
+  item.setAttribute("label", id);
+  item.setAttribute("tooltiptext", "Remove routing for '" + id + "'");
+  item.setAttribute("oncommand", "onAbort('" + id + "', " + stamp + ")");
+}
+
+//------------------------------------------------------------------------------
 function removeRouteData(id)
 {
   var route = active_routes[id];
@@ -942,9 +950,7 @@ function reportVisLinks(id, found)
   if( !active_routes[id] )
   {
     var item = document.createElement("menuitem");
-    item.setAttribute("label", id);
-    item.setAttribute("tooltiptext", "Remove routing for '"+id+"'");
-    item.setAttribute("oncommand", "onAbort('"+id+"', "+last_stamp+")");
+    updateRouteItemData(item, id, last_stamp);
     menu.appendChild(item);
 
     active_routes[id] = {
@@ -1211,16 +1217,38 @@ function register(match_title = false, src_id = 0)
           last_id = msg.id;
           last_stamp = msg.stamp;
 
-          do_report = false;
+          if( getPref("use-gfindbar") )
+          {
+            do_report = false;
 
-          gFindBar._findField.value = msg.id;
-          gFindBar.open(gFindBar.FIND_TYPEAHEAD);
-          gFindBar._find();
+            gFindBar._findField.value = msg.id;
+            gFindBar.open(gFindBar.FIND_TYPEAHEAD);
+            gFindBar._find();
 
-          do_report = true;
+            do_report = true;
+          }
         }
 
         setTimeout(reportVisLinks, 0, msg.id, true);
+      }
+      else if( msg.task == 'UPDATE' )
+      {
+        let id = msg.id, new_id = msg['new-id'];
+        console.log('UPDATE: ' + id + ' ==> ' + new_id);
+
+        var route = active_routes[id];
+        if( !route )
+        {
+          console.warn('No such route: ' + id);
+          return true;
+        }
+
+        active_routes[ new_id ] = route;
+        delete active_routes[id];
+        console.log(active_routes);
+
+        updateRouteItemData(route.menu_item, new_id, route.stamp);
+        sendRouteUpdate(new_id);
       }
       else if( msg.task == 'ABORT' )
       {
@@ -1380,6 +1408,22 @@ function attrModified(e)
 }
 
 //------------------------------------------------------------------------------
+function sendRouteUpdate(route_id)
+{
+  var msg = {
+    'task': 'UPDATE',
+    'id': route_id,
+    'stamp': active_routes[route_id].stamp,
+  };
+
+  var bbs = searchDocument(content.document, route_id);
+  if( bbs.length > 0 )
+    msg['regions'] = bbs;
+
+  send(msg);
+}
+
+//------------------------------------------------------------------------------
 function resize()
 {
   var reg = getScrollRegion();
@@ -1390,19 +1434,7 @@ function resize()
   });
 
   for(var route_id in active_routes)
-  {
-    var msg = {
-      'task': 'UPDATE',
-      'id': route_id,
-      'stamp': active_routes[route_id].stamp,
-    };
-
-    var bbs = searchDocument(content.document, route_id);
-    if( bbs.length > 0 )
-      msg['regions'] = bbs;
-
-    send(msg);
-  }
+    sendRouteUpdate(route_id);
 }
 
 //------------------------------------------------------------------------------

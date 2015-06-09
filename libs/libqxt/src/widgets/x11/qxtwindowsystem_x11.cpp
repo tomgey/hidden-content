@@ -36,30 +36,39 @@
 
 #include <iostream>
 
+static Atom getXAtom(const char* name)
+{
+  return XInternAtom(QX11Info::display(), name, False);
+}
+
+//------------------------------------------------------------------------------
 static WindowList qxt_getWindows(Atom prop)
 {
   QxtWindowSystem::init();
-    Display* display = QX11Info::display();
-    Window window = QX11Info::appRootWindow();
+  Display* display = QX11Info::display();
+  Window window = QX11Info::appRootWindow();
 
-    WindowList res;
-    Atom type = 0;
-    int format = 0;
-    uchar* data = 0;
-    ulong count, after;
+  WindowList res;
+  Atom type = 0;
+  int format = 0;
+  uchar* data = 0;
+  ulong count, after;
 
-    if( XGetWindowProperty(display, window, prop, 0, 1024 * sizeof(Window) / 4, False, AnyPropertyType,
-                           &type, &format, &count, &after, &data) == Success )
-    {
-        Window* list = reinterpret_cast<Window*>(data);
-        for( uint i = 0; i < count; ++i )
-          res += list[i];
-        if( data )
-            XFree(data);
-    }
-    return res;
+  if( XGetWindowProperty( display, window, prop,
+                          0, 1024 * sizeof(Window) / 4,
+                          False, AnyPropertyType,
+                          &type, &format, &count, &after, &data) == Success )
+  {
+      Window* list = reinterpret_cast<Window*>(data);
+      for( uint i = 0; i < count; ++i )
+        res += list[i];
+      if( data )
+          XFree(data);
+  }
+  return res;
 }
 
+//------------------------------------------------------------------------------
 static int qxtX11ErrorHandler(Display* dpy, XErrorEvent* error)
 {
   const size_t msg_size = 256;
@@ -72,38 +81,30 @@ static int qxtX11ErrorHandler(Display* dpy, XErrorEvent* error)
   return 0;
 }
 
+//------------------------------------------------------------------------------
 void QxtWindowSystem::init()
 {
   static bool initDone = false;
-  if( !initDone )
-  {
-    XSetErrorHandler(&qxtX11ErrorHandler);
-    initDone = true;
-  }
+  if( initDone )
+    return;
+
+  XSetErrorHandler(&qxtX11ErrorHandler);
+  initDone = true;
 }
 
+//------------------------------------------------------------------------------
 WindowList QxtWindowSystem::windows()
 {
-    static Atom net_clients = 0;
-    if (!net_clients)
-        net_clients = XInternAtom(QX11Info::display(), "_NET_CLIENT_LIST_STACKING", True);
-
-    return qxt_getWindows(net_clients);
+  return qxt_getWindows(getXAtom("_NET_CLIENT_LIST_STACKING"));
 }
 
-static Atom atomNetActive()
-{
-  static Atom net_active = 0;
-  if (!net_active)
-      net_active = XInternAtom(QX11Info::display(), "_NET_ACTIVE_WINDOW", True);
-  return net_active;
-}
-
+//------------------------------------------------------------------------------
 WId QxtWindowSystem::activeWindow()
 {
-    return qxt_getWindows(atomNetActive()).value(0);
+    return qxt_getWindows(getXAtom("_NET_ACTIVE_WINDOW")).value(0);
 }
 
+//------------------------------------------------------------------------------
 int QxtWindowSystem::activeWindow(WId window)
 {
   init();
@@ -112,7 +113,7 @@ int QxtWindowSystem::activeWindow(WId window)
   ev.type = ClientMessage;
   ev.xclient.display = QX11Info::display();
   ev.xclient.window = window;
-  ev.xclient.message_type = atomNetActive();
+  ev.xclient.message_type = getXAtom("_NET_ACTIVE_WINDOW");
   ev.xclient.format = 32;
   ev.xclient.data.l[0] = 2L; /* 2 == Message from a window pager */
   ev.xclient.data.l[1] = CurrentTime;
@@ -128,6 +129,7 @@ int QxtWindowSystem::activeWindow(WId window)
   ) == 0;
 }
 
+//------------------------------------------------------------------------------
 int QxtWindowSystem::iconifyWindow(WId window)
 {
   init();
@@ -142,6 +144,31 @@ int QxtWindowSystem::iconifyWindow(WId window)
   );
 }
 
+//------------------------------------------------------------------------------
+int QxtWindowSystem::unmaxizeWindow(WId window)
+{
+  init();
+
+  XEvent xev;
+  memset(&xev, 0, sizeof(xev));
+  xev.type = ClientMessage;
+  xev.xclient.window = window;
+  xev.xclient.message_type = getXAtom("_NET_WM_STATE");
+  xev.xclient.format = 32;
+  xev.xclient.data.l[0] = 0; //_NET_WM_STATE_REMOVE
+  xev.xclient.data.l[1] = getXAtom("_NET_WM_STATE_MAXIMIZED_HORZ");
+  xev.xclient.data.l[2] = getXAtom("_NET_WM_STATE_MAXIMIZED_VERT");
+
+  return XSendEvent(
+    QX11Info::display(),
+    DefaultRootWindow(QX11Info::display()),
+    False,
+    SubstructureNotifyMask,
+    &xev
+  );
+}
+
+//------------------------------------------------------------------------------
 int QxtWindowSystem::moveResizeWindow(WId window, QRect const& geom)
 {
   init();
@@ -155,14 +182,15 @@ int QxtWindowSystem::moveResizeWindow(WId window, QRect const& geom)
   );
 }
 
+//------------------------------------------------------------------------------
 bool QxtWindowSystem::isVisible(WId wid)
 {
   init();
   Display* display = QX11Info::display();
   bool hidden = false;
 
-  static Atom wm_state  = XInternAtom(display, "_NET_WM_STATE", True),
-              wm_hidden = XInternAtom(display, "_NET_WM_STATE_HIDDEN", True);
+  static Atom wm_state  = getXAtom("_NET_WM_STATE"),
+              wm_hidden = getXAtom("_NET_WM_STATE_HIDDEN");
 
   Atom type = 0;
   int format = 0;
@@ -189,6 +217,7 @@ bool QxtWindowSystem::isVisible(WId wid)
   return hidden;
 }
 
+//------------------------------------------------------------------------------
 WId QxtWindowSystem::findWindow(const QString& title)
 {
     Window result = 0;
@@ -204,6 +233,7 @@ WId QxtWindowSystem::findWindow(const QString& title)
     return result;
 }
 
+//------------------------------------------------------------------------------
 WId QxtWindowSystem::windowAt(const QPoint& pos)
 {
     Window result = 0;
@@ -220,6 +250,7 @@ WId QxtWindowSystem::windowAt(const QPoint& pos)
     return result;
 }
 
+//------------------------------------------------------------------------------
 QString QxtWindowSystem::windowTitle(WId window)
 {
     init();
@@ -268,6 +299,7 @@ QString QxtWindowSystem::windowTitle(WId window)
     return title;
 }
 
+//------------------------------------------------------------------------------
 QRect QxtWindowSystem::windowGeometry(WId window)
 {
   init();
@@ -290,9 +322,7 @@ QRect QxtWindowSystem::windowGeometry(WId window)
 
   rect.moveTo(x, y);
 
-  static Atom net_frame = 0;
-  if( !net_frame )
-    net_frame = XInternAtom(QX11Info::display(), "_NET_FRAME_EXTENTS", True);
+  static Atom net_frame = getXAtom("_NET_FRAME_EXTENTS");
 
   Atom type = 0;
   int format = 0;
@@ -318,11 +348,12 @@ QRect QxtWindowSystem::windowGeometry(WId window)
   return rect;
 }
 
+//------------------------------------------------------------------------------
 uint32_t QxtWindowSystem::applicationPID(WId window)
 {
   init();
 
-  static Atom wm_pid = XInternAtom(QX11Info::display(), "_NET_WM_PID", False);
+  static Atom wm_pid = getXAtom("_NET_WM_PID");
 
   Atom type = 0;
   int format = 0;
@@ -353,6 +384,7 @@ uint32_t QxtWindowSystem::applicationPID(WId window)
   return win_pid;
 }
 
+//------------------------------------------------------------------------------
 void QxtWindowSystem::setWindowProperty( WId window,
                                          QString const& key,
                                          QString const& val )
@@ -364,7 +396,7 @@ void QxtWindowSystem::setWindowProperty( WId window,
   XChangeProperty(
     QX11Info::display(),
     window,
-    XInternAtom(QX11Info::display(), key.toLocal8Bit().data(), False),
+    getXAtom(key.toLocal8Bit().data()),
     XA_STRING,
     8,
     PropModeReplace,
@@ -377,9 +409,6 @@ QString QxtWindowSystem::getWindowProperty(WId window, QString const& key)
 {
   init();
 
-  Atom prop_atom =
-    XInternAtom(QX11Info::display(), key.toLocal8Bit().data(), False);
-
   Atom type = 0;
   int format = 0;
   ulong after, prop_count;
@@ -387,7 +416,7 @@ QString QxtWindowSystem::getWindowProperty(WId window, QString const& key)
 
   if( XGetWindowProperty( QX11Info::display(),
                           window,
-                          prop_atom,
+                          getXAtom(key.toLocal8Bit().data()),
                           0, (~0L),
                           False,
                           XA_STRING,

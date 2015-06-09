@@ -365,8 +365,11 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   void ClientInfo::moveResizeWindow(QRect const& geom)
   {
-    if( _window_info.isValid() )
-      QxtWindowSystem::moveResizeWindow(_window_info.id, geom);
+    if( !_window_info.isValid() )
+      return;
+
+    QxtWindowSystem::unmaxizeWindow(_window_info.id);
+    QxtWindowSystem::moveResizeWindow(_window_info.id, geom);
   }
 
   //----------------------------------------------------------------------------
