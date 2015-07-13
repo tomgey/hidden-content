@@ -684,6 +684,55 @@ function onGlobalWheel(e)
   dt.mozSetDataAt("text/plain", JSON.stringify(_getCurrentTabData()), 0);
 }*/
 
+function onContextMenu()
+{
+  var shouldShow = gContextMenu.isContentSelected;
+
+  gContextMenu.showItem("context-concepts", shouldShow);
+  gContextMenu.showItem("context-sep-concepts", shouldShow);
+}
+
+function imgToBase64(url, cb_done)
+{
+  var img = new Image();
+  img.src = url;
+  img.onload = function ()
+  {
+    var canvas =
+      document.createElementNS("http://www.w3.org/1999/xhtml", "html:canvas");
+    canvas.width = this.width;
+    canvas.height = this.height;
+
+    var ctx = canvas.getContext("2d");
+    ctx.drawImage(this, 0, 0);
+
+    var data = canvas.toDataURL("image/png");
+    cb_done( data /*.replace(/^data:image\/(png|jpg);base64,/, "")*/ );
+  }
+}
+
+function onConceptNodeNew(el, event)
+{
+  var sel = content.getSelection().toString().trim();
+  var url = content.location.href;
+
+  imgToBase64(gBrowser.getIcon(), function(img_data)
+  {
+    send({
+      'task': 'CMD',
+      'cmd': 'create-concept',
+      'id': sel,
+      'src-url': url,
+      'src-icon': img_data
+    });
+  });
+}
+
+function onConceptEdgeNew(el, event)
+{
+  
+}
+
 /**
  * Load window hook
  */
@@ -709,6 +758,10 @@ window.addEventListener("load", function window_load()
   // Drag tabs from tab bar
 //  gBrowser.tabContainer.addEventListener('dragstart', onDragStart, true);
 //  gBrowser.tabContainer.addEventListener('click', onTabDblClick, true);
+
+  // Dynamic context menu entries
+  var menu = document.getElementById("contentAreaContextMenu");
+  menu.addEventListener("popupshowing", onContextMenu, false);
 });
 
 /**

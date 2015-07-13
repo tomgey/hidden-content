@@ -55,4 +55,24 @@
   </toolbarbutton>
 </toolbarpalette>
 
+<menupopup id="contentAreaContextMenu">
+  <menugroup id="context-concepts" insertafter="context-sep-navigation">
+    <menuitem id="context-concepts-label"
+              class="menuitem-non-iconic"
+              label="Concept"
+              disabled="true" />
+    <menuitem id="context-concepts-new-node"
+              class="menuitem-iconic"
+              tooltiptext="Create new concept node from selected text."
+              onclick="onConceptNodeNew(this, event);"
+              label="New Object" />
+    <menuitem id="context-concepts-link-selection"
+              class="menuitem-iconic"
+              tooltiptext="Link selection to concept or relation."
+              onclick="onConceptEdgeNew(this, event);"
+              label="Link Selection"/>
+  </menugroup>
+  <menuseparator id="context-sep-concepts" insertafter="context-concepts"/>
+</menupopup>
+
 </overlay>
