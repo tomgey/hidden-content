@@ -4,6 +4,7 @@
 <overlay id="Scrapper-Overlay" xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
 
 <script type="application/x-javascript" src="chrome://hidden-content/content/grab.js" />
+<script type="application/x-javascript" src="chrome://hidden-content/content/httpPing.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/Queue.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/sha1.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/throttle.js" />

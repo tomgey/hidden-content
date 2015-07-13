@@ -1,6 +1,7 @@
 var debug = false;
 
 var stopped = true;
+var suspend_autostart = false;
 var links_socket = null;
 var ctrl_socket = null;
 var ctrl_queue = null;
@@ -34,23 +35,6 @@ var cfg = new Object();
 var tile_requests = null;
 var tile_timeout = false;
 var do_report = true;
-
-function httpPing(address, onsuccess, onfail, timeout = 3000)
-{
-  var ping_req = new XMLHttpRequest();
-  ping_req.timeout = timeout;
-  ping_req.ontimeout = function() { onfail(address); };
-  ping_req.onloadend = function()
-  {
-    if( ping_req.status == 200 )
-      onsuccess(address);
-    else
-      onfail(address);
-  }
-
-  ping_req.open('GET', address, true);
-  ping_req.send(null);
-}
 
 //var Cc = Components.classes;
 //var Ci = Components.interfaces;
@@ -178,7 +162,6 @@ function send(data)
     console.log(arguments.callee.caller.toString());
     links_socket = 0;
     stop();
-    checkAutoConnect();
 //    throw e;
   }
 }
@@ -344,15 +327,6 @@ function getElementForXPath(xpath, root)
              .singleNodeValue;
 }
 
-function checkAutoConnect(event)
-{
-  var doc = event ? event.originalTarget : content.document;
-  var loc = doc.defaultView ? doc.defaultView.location : null;
-
-  if( loc && loc.host == "localhost" && loc.pathname.startsWith("/userstudy/") )
-    start(true);
-}
-
 /**
  * Page/Tab load hook
  */
@@ -360,14 +334,38 @@ function onPageLoad(event)
 {
   setStatusSync("no-src");
 
-  if( !stopped )
-    setTimeout(resize, 300);
-  else
-    checkAutoConnect(event);
-
   var doc = content.document;
   var view = doc.defaultView;
-  var location = view ? view.location : null;
+  var location = view ? view.location : {};
+  var html_data = doc.documentElement.dataset || {};
+
+  var ignore = null;
+  if( location.href === "about:newtab" )
+    ignore = "new tab";
+  else if( html_data.isLinksClient )
+    ignore = "is a links client";
+  else if( !doc )
+    ignore = "missing document";
+
+  if( ignore )
+  {
+    console.log("Ignoring onLoad: " + ignore);
+    suspend_autostart = true;
+
+    if( !stopped )
+    {
+      console.log("No active page: disconnect..");
+      stop();
+    }
+    return;
+  }
+
+  suspend_autostart = false;
+  console.log("autoconnect", getPref("auto-connect"));
+  if( !stopped )
+    setTimeout(resize, 300);
+  else if( getPref("auto-connect") )
+    setTimeout(start, 0, true, src_id);
 
   var tab = gBrowser.selectedTab;
   var src_id = doc._hcd_src_id;
@@ -472,9 +470,6 @@ function onPageLoad(event)
 
     doc._hcd_scroll_listener[ xpath ] = [el, cb];
   }
-
-  if( stopped && getPref("auto-connect") )
-    setTimeout(start, 0, true, src_id);
 }
 
 var tab_changed = false;
@@ -552,9 +547,12 @@ function onUnload(e)
   content.removeEventListener("keyup", onKeyUp, false);
   content.removeEventListener('scroll', onScroll, false);
 
+/* TODO check why this should trigger a tab change event and
+        therfore also a load event
   tab_changed = true;
   tab_event = e;
   setTimeout(onTabChangeImpl, 1);
+*/
 }
 
 var last_ctrl_down = 0;
@@ -756,19 +754,22 @@ function start(match_title = false, src_id = 0, check = true)
 
   if( check )
   {
-    console.log("Check if server is alive...");
+    if( suspend_autostart )
+      return;
+
+    // console.log("Check if server is alive...");
     httpPing(
       'http://localhost:4486/',
       function() {
-        console.log("Server alive => connect");
+        // console.log("Server alive => connect");
         setTimeout(start, 0, match_title, src_id, false);
       },
       function() {
         if( !getPref("auto-connect") )
-          console.log("Server not alive.");
+          ; //console.log("Server not alive.");
         else
         {
-          console.log("Server not alive => wait and retry...");
+          // console.log("Server not alive => wait and retry...");
           setTimeout(start, 3459, match_title, src_id, true);
         }
       }
@@ -1245,7 +1246,7 @@ function register(match_title = false, src_id = 0)
 
         active_routes[ new_id ] = route;
         delete active_routes[id];
-        console.log(active_routes);
+        console.log(JSON.stringify(active_routes));
 
         updateRouteItemData(route.menu_item, new_id, route.stamp);
         sendRouteUpdate(new_id);
