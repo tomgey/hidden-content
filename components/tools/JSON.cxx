@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
+//------------------------------------------------------------------------------
 QJsonObject parseJson(const QByteArray& msg)
 {
   QJsonParseError error;
@@ -15,6 +16,7 @@ QJsonObject parseJson(const QByteArray& msg)
   return QJsonObject();
 }
 
+//------------------------------------------------------------------------------
 QJsonValue to_json(const QPoint& p)
 {
   QJsonArray a;
@@ -23,11 +25,13 @@ QJsonValue to_json(const QPoint& p)
   return a;
 }
 
+//------------------------------------------------------------------------------
 QJsonValue to_json(const QSize& size)
 {
   return to_json(QPoint(size.width(), size.height()));
 }
 
+//------------------------------------------------------------------------------
 QJsonValue to_json(const QRect& rect)
 {
   QJsonArray a;
@@ -38,41 +42,145 @@ QJsonValue to_json(const QRect& rect)
   return a;
 }
 
+//------------------------------------------------------------------------------
 template<>
-QPoint from_json<QPoint>(const QJsonValue& val)
+QString from_json<QString>( const QJsonValue& val,
+                            const QString& def )
+{
+  return val.toString(def);
+}
+
+//------------------------------------------------------------------------------
+template<>
+quintptr from_json<quintptr>( const QJsonValue& val,
+                              const quintptr& def )
+{
+  bool ok;
+  quintptr ret = val.toVariant().toULongLong(&ok);
+  return ok ? ret : def;
+}
+
+//----------------------------------------------------------------------------
+template<>
+int32_t from_json<int32_t>( const QJsonValue& val,
+                            const int32_t& def )
+{
+  bool ok;
+  int32_t ret = val.toVariant().toInt(&ok);
+  return ok ? ret : def;
+}
+
+//----------------------------------------------------------------------------
+template<>
+uint32_t from_json<uint32_t>( const QJsonValue& val,
+                              const uint32_t& def )
+{
+  bool ok;
+  uint32_t ret = val.toVariant().toUInt(&ok);
+  return ok ? ret : def;
+}
+
+//----------------------------------------------------------------------------
+template<>
+uint64_t from_json<uint64_t>( const QJsonValue& val,
+                              const uint64_t& def )
+{
+  bool ok;
+  uint64_t ret = val.toVariant().toULongLong(&ok);
+  return ok ? ret : def;
+}
+
+//------------------------------------------------------------------------------
+template<>
+QVariantList from_json<QVariantList>( const QJsonValue& val,
+                                      const QVariantList& def )
 {
   if( !val.isArray() )
-    return QPoint();
+    return def;
+
+  return val.toArray().toVariantList();
+}
+
+//------------------------------------------------------------------------------
+template<>
+QStringList from_json<QStringList>( const QJsonValue& val,
+                                    const QStringList& def )
+{
+  if( !val.isArray() )
+    return def;
+
+  QStringList list;
+  for(auto entry: val.toArray())
+    list << entry.toString();
+
+  return list;
+}
+
+//------------------------------------------------------------------------------
+template<>
+QColor from_json<QColor>( const QJsonValue& val,
+                          const QColor& def )
+{
+  return from_json<QString>(val, def.name(QColor::HexArgb));
+}
+
+//------------------------------------------------------------------------------
+template<>
+LinksRouting::Color from_json<LinksRouting::Color>( const QJsonValue& val,
+                                                    const LinksRouting::Color& def )
+{
+  QColor color_def;
+  color_def.setRgbF(def.r, def.g, def.b, def.a);
+  QColor color = from_json<QColor>(val, color_def);
+  return {
+    static_cast<float>(color.redF()),
+    static_cast<float>(color.greenF()),
+    static_cast<float>(color.blueF()),
+    static_cast<float>(color.alphaF())
+  };
+}
+
+//------------------------------------------------------------------------------
+template<>
+QPoint from_json<QPoint>( const QJsonValue& val,
+                          const QPoint& def )
+{
+  if( !val.isArray() )
+    return def;
 
   QJsonArray a = val.toArray();
   if( a.size() != 2 )
-    return QPoint();
+    return def;
 
   return QPoint(a.at(0).toInt(0), a.at(1).toInt(0));
 }
 
+//------------------------------------------------------------------------------
 template<>
-QSize from_json<QSize>(const QJsonValue& val)
+QSize from_json<QSize>( const QJsonValue& val,
+                        const QSize& def )
 {
   if( !val.isArray() )
-    return QSize();
+    return def;
 
   QJsonArray a = val.toArray();
   if( a.size() != 2 )
-    return QSize();
+    return def;
 
   return QSize(a.at(0).toInt(-1), a.at(1).toInt(-1));
 }
 
+//------------------------------------------------------------------------------
 template<>
-QRect from_json<QRect>(const QJsonValue& val)
+QRect from_json<QRect>( const QJsonValue& val,
+                        const QRect& def )
 {
   if( !val.isArray() )
-    return QRect();
+    return def;
 
   QJsonArray a = val.toArray();
   if( a.size() != 4 )
-    return QRect();
+    return def;
 
   return QRect( a.at(0).toInt(-1), a.at(1).toInt(-1),
                 a.at(2).toInt(-1), a.at(3).toInt(-1) );

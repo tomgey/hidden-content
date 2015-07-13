@@ -24,6 +24,7 @@
       <menuseparator />
       <menuitem label="Abort all" oncommand="onAbort('', -1)"/>
       <menuitem label="Settings" oncommand="window.open('chrome://hidden-content/content/preferences.xul', 'VisLinks - Settings', 'chrome');"/>
+      <menuitem label="Dump Links" oncommand="onDump()"/>
       <menuseparator />
     </menupopup>
   </toolbarbutton>

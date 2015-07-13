@@ -8,6 +8,27 @@
 #include <linkdescription.h>
 #include <limits>
 
+namespace std
+{
+  template<class T>
+  std::ostream& operator<<(std::ostream& strm, std::vector<T> const& list)
+  {
+    strm << "[";
+
+    bool first = true;
+    for(T const& str: list)
+    {
+      if( first )
+        first = false;
+      else
+        strm << ", ";
+      strm << '"' << str << '"';
+    }
+
+    return strm << "]";
+  }
+}
+
 namespace LinksRouting
 {
 
@@ -24,11 +45,21 @@ namespace LinkDescription
 {
 
   //----------------------------------------------------------------------------
-  std::ostream& operator<<(std::ostream& strm, const PropertyMap& m)
+//  std::ostream& operator<<(std::ostream& strm, const PropertyMap& m)
+//  {
+//    m.print(strm);
+//    return strm;
+//  }
+
+  //----------------------------------------------------------------------------
+  void PropertyMap::print( std::ostream& strm,
+                           std::string const& indent,
+                           std::string const& indent_incr ) const
   {
-    for(auto& prop: m._props)
-      strm << '"' << prop.first << "\" = \"" << prop.second << "\"\n";
-    return strm;
+    strm << indent << "{\n";
+    for(auto& prop: _props)
+      strm << indent << indent_incr << '"' << prop.first << "\": \"" << prop.second << "\"\n";
+    strm << indent << "}\n";
   }
 
   //----------------------------------------------------------------------------
@@ -236,6 +267,27 @@ namespace LinkDescription
   }
 
   //----------------------------------------------------------------------------
+  void Node::print( std::ostream& strm,
+                    std::string const& indent,
+                    std::string const& indent_incr ) const
+  {
+    strm << indent << "<Node address=\"" << this << "\">\n"/*
+         << indent << indent_incr << "center: " << _center << "\n"
+         << indent << indent_incr << "revision: " << _revision << "\n"*/;
+
+    _props.print(strm, indent + indent_incr, indent_incr);
+
+    strm << indent << indent_incr << "points: " << _points << "\n"
+         << indent << indent_incr << "link_points: " << _link_points << "\n"
+         << indent << indent_incr << "link_points_children: " << _link_points_children << "\n";
+
+    for(auto const& child: _children)
+      child->print(strm, indent + indent_incr, indent_incr);
+
+    strm << indent << "</Node>\n";
+  }
+
+  //----------------------------------------------------------------------------
   std::string Node::getImpl(const std::string& key) const
   {
     props_t::const_iterator prop = _props.getMap().find(key);
@@ -363,6 +415,23 @@ namespace LinkDescription
   }
 
   //----------------------------------------------------------------------------
+  void HyperEdge::print( std::ostream& strm,
+                         std::string const& indent,
+                         std::string const& indent_incr ) const
+  {
+    strm << indent << "<HyperEdge address=\"" << this << "\">\n"
+         << indent << indent_incr << "center: " << _center << "\n"
+         << indent << indent_incr << "revision: " << _revision << "\n";
+
+    _props.print(strm, indent + indent_incr, indent_incr);
+    printNodeList(_nodes, strm, indent + indent_incr, indent_incr);
+
+//    HyperEdgeDescriptionForkationPtr _fork;
+
+    strm << indent << "</HyperEdge>\n";
+  }
+
+  //----------------------------------------------------------------------------
   HyperEdge::HyperEdge():
     _parent(0),
     _revision( 0 )
@@ -393,6 +462,47 @@ namespace LinkDescription
       return _parent->get<std::string>(key);
 
     return std::string();
+  }
+
+  //----------------------------------------------------------------------------
+  void LinkDescription::print( std::ostream& strm,
+                               std::string const& indent,
+                               std::string const& indent_incr ) const
+  {
+    strm << indent << "<LinkDescription>\n"
+         << indent << indent_incr << "id: \"" << _id << "\"\n"
+         << indent << indent_incr << "stamp: " << _stamp << "\n"
+         << indent << indent_incr << "color: " << _color << "\n"
+         << indent << indent_incr << "whitelist: " << _client_whitelist << "\n"
+         << indent << indent_incr << "blacklist: " << _client_blacklist << "\n";
+
+    _link->print(strm, indent + indent_incr, indent_incr);
+
+    strm << indent << "</LinkDescription>\n";
+  }
+
+  //----------------------------------------------------------------------------
+  void printLinkList( LinkList const& links,
+                      std::ostream& strm,
+                      std::string const& indent,
+                      std::string const& indent_incr )
+  {
+    strm << indent << "<LinkList>\n";
+    for(auto const& link: links)
+      link.print(strm, indent + indent_incr, indent_incr);
+    strm << indent << "</LinkList>\n";
+  }
+
+  //----------------------------------------------------------------------------
+  void printNodeList( nodes_t const& nodes,
+                      std::ostream& strm,
+                      std::string const& indent,
+                      std::string const& indent_incr )
+  {
+    strm << indent << "<NodeList>\n";
+    for(auto const& node: nodes)
+      node->print(strm, indent + indent_incr, indent_incr);
+    strm << indent << "</NodeList>\n";
   }
 
 } // namespace LinkDescription

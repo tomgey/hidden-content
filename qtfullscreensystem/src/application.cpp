@@ -89,7 +89,8 @@ namespace qtfullscreensystem
   Application::Application(int& argc, char *argv[]):
     Configurable("Application"),
     QApplication(argc, argv),
-    _server(&_mutex_slot_links, &_cond_render)
+    _server(&_mutex_slot_links, &_cond_render),
+    _mutex_slot_links(QMutex::Recursive)
   {
 //    _cur_fbo(0),
 //    _do_drag(false),
@@ -278,7 +279,7 @@ namespace qtfullscreensystem
     glMatrixMode(GL_PROJECTION);
     glOrtho(desktop.l(), desktop.r(), desktop.t(), desktop.b(), -1.0, 1.0);
 
-    uint32_t old_flags = _flags;
+    //uint32_t old_flags = _flags;
     {
       QMutexLocker lock_links(&_mutex_slot_links);
       uint32_t types = pass == 0
@@ -299,21 +300,21 @@ namespace qtfullscreensystem
     ++counter;
 
     //--------------------------------------------------------------------------
-    auto writeTexture = []
-    (
-      const LinksRouting::slot_t<LinksRouting::SlotType::Image>::type& slot,
-      const QString& name
-    )
-    {
-      QImage image( QSize(slot->_data->width,
-                          slot->_data->height),
-                    QImage::Format_RGB888 );
-      glEnable(GL_TEXTURE_2D);
-      glBindTexture(GL_TEXTURE_2D, slot->_data->id);
-      glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, image.bits());
-      glDisable(GL_TEXTURE_2D);
-      image.save(name);
-    };
+//    auto writeTexture = []
+//    (
+//      const LinksRouting::slot_t<LinksRouting::SlotType::Image>::type& slot,
+//      const QString& name
+//    )
+//    {
+//      QImage image( QSize(slot->_data->width,
+//                          slot->_data->height),
+//                    QImage::Format_RGB888 );
+//      glEnable(GL_TEXTURE_2D);
+//      glBindTexture(GL_TEXTURE_2D, slot->_data->id);
+//      glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, image.bits());
+//      glDisable(GL_TEXTURE_2D);
+//      image.save(name);
+//    };
 
     glFinish();
     //writeTexture(_subscribe_links, QString("links%1.png").arg(counter));

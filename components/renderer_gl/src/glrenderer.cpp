@@ -370,9 +370,18 @@ namespace LinksRouting
 
             // Collect nodes for drawing them after the links to prevent links
             // crossing regions.
-            nodes.insert( nodes.end(),
-                          segment.nodes.begin(),
-                          segment.nodes.end() );
+//            nodes.insert( nodes.end(),
+//                          segment.nodes.begin(),
+//                          segment.nodes.end() );
+
+            rendered_anything |= renderer.renderNodes( segment.nodes,
+                                                       &hedges_open,
+                                                       &hedges_done,
+                                                       false,
+                                                       pass );
+
+//            std::cout << "addSegmentNodes" << std::endl;
+//            LinkDescription::printNodeList(segment.nodes);
           }
 
           rendered_anything |= renderer.renderNodes( nodes,

@@ -127,13 +127,40 @@ namespace LinksRouting
     _cond_data_ready(cond_data),
     _dirty_flags(0)
   {
-    //assert(widget);
+    assert(_mutex_slot_links);
+    assert(_mutex_slot_links->isRecursive());
+
     registerArg("DebugRegions", _debug_regions);
     registerArg("DebugFullPreview", _debug_full_preview_path);
     registerArg("PreviewWidth", _preview_width = 800);
     registerArg("PreviewHeight", _preview_height = 400);
     registerArg("PreviewAutoWidth", _preview_auto_width = true);
     registerArg("OutsideSeeThrough", _outside_see_through = true);
+
+    _msg_handlers["ABORT"] =
+      std::bind(&IPCServer::onLinkAbort, this, _1, _2, _3);
+    _msg_handlers["CMD"] =
+      std::bind(&IPCServer::onClientCmd, this, _1, _2, _3);
+    _msg_handlers["DUMP"] =
+      std::bind(&IPCServer::dumpState, this, std::ref(std::cout));
+    _msg_handlers["FOUND"] = // TODO remove and just use UPDATE?
+      std::bind(&IPCServer::onLinkUpdate, this, _1, _2);
+    _msg_handlers["GET"] =
+      std::bind(&IPCServer::onValueGet, this, _1, _2);
+    _msg_handlers["INITIATE"] =
+      std::bind(&IPCServer::onLinkInitiate, this, _1, _2);
+    _msg_handlers["REGISTER"] =
+      std::bind(&IPCServer::onClientRegister, this, _1, _2);
+    _msg_handlers["RESIZE"] =
+      std::bind(&IPCServer::onClientResize, this, _1, _2);
+    _msg_handlers["SEMANTIC-ZOOM"] =
+      std::bind(&IPCServer::onClientSemanticZoom, this, _1, _2);
+    _msg_handlers["SET"] =
+      std::bind(&IPCServer::onValueSet, this, _1, _2);
+    _msg_handlers["SYNC"] =
+      std::bind(&IPCServer::onClientSync, this, _1, _2);
+    _msg_handlers["UPDATE"] =
+      std::bind(&IPCServer::onLinkUpdate, this, _1, _2);
   }
 
   //----------------------------------------------------------------------------
@@ -585,6 +612,18 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  void IPCServer::dumpState(std::ostream& strm) const
+  {
+    QMutexLocker lock_links(_mutex_slot_links);
+
+    LinkDescription::printLinkList(*_slot_links->_data.get(), strm);
+    strm << "<ClientList>\n";
+    for(auto const& client: _clients)
+      client.second->print(strm);
+    strm << "</ClientList>" << std::endl;
+  }
+
+  //----------------------------------------------------------------------------
   void IPCServer::onClientConnection()
   {
     QWebSocket* client = _server->nextPendingConnection();
@@ -615,433 +654,24 @@ namespace LinksRouting
 
     try
     {
-      JSONParser msg(data);
-
-      QString task = msg.getValue<QString>("task");
-
       {
-        QMutexLocker lock_links(_mutex_slot_links);
+        QJsonObject msg = parseJson(data.toLocal8Bit());
+        QString task = msg.value("task").toString();
 
-        if( task == "REGISTER" || task == "RESIZE" )
-        {
-          const WindowRegions& windows = _window_monitor.getWindows();
-
-          if( msg.hasChild("viewport") )
-            client_info->viewport = msg.getValue<QRect>("viewport");
-          client_info->parseScrollRegion(msg);
-
-          if( task == "REGISTER" )
-          {
-            const QString title = msg.getValue<QString>("title", "");
-
-            if( msg.hasChild("wid") )
-            {
-              LOG_DEBUG("Use window id from message.");
-              client_info->setWindowId( msg.getValue<uint64_t>("wid") );
-            }
-            else if(    msg.hasChild("pos")
-                || msg.hasChild("pid")
-                || !title.isEmpty() )
-            {
-              WId wid = 0;
-
-              if( msg.hasChild("pos") )
-                wid = windows.windowIdAt(msg.getValue<QPoint>("pos"));
-              else
-              {
-                WindowInfoIterators possible_windows;
-                if( msg.hasChild("pid") )
-                  possible_windows = windows.find_all(
-                    msg.getValue<uint32_t>("pid"),
-                    title
-                  );
-                else
-                  possible_windows = windows.find_all(title);
-
-                LOG_DEBUG("Found " << possible_windows.size() << " matches");
-
-                if( !possible_windows.empty() )
-                {
-                  QRect geom = msg.getValue<QRect>(
-                    "geom",
-                    possible_windows.front()->region
-                  );
-
-                  for(auto w: possible_windows)
-                  {
-                    if(    w->region.x() == geom.x()
-                        && w->region.y() == geom.y()
-                        && w->region.width() == geom.width()
-                           // ignore title bar of maximized windows, because
-                           // they are integrated into the global menubar
-                        && std::abs(w->region.height() - geom.height()) < 30 )
-                    {
-                      LOG_DEBUG(" - region match");
-                      wid = w->id;
-                    }
-                    else
-                      LOG_DEBUG(" - region mismatch " << to_string(w->region));
-                  }
-                }
-              }
-
-              client_info->setWindowId(wid);
-            }
-
-            if( msg.hasChild("cmds") )
-            {
-              for(QString cmd: msg.getValue<QStringList>("cmds"))
-                client_info->addCommand(cmd);
-            }
-
-            if( !msg.hasChild("client-id") )
-              LOG_WARN("REGISTER: Missing 'client-id'.");
-            else
-              client_info->setId(msg.getValue<QString>("client-id"));
-
-            for(auto const& link: *_slot_links->_data)
-            {
-              QJsonObject req;
-              req["task"] = "REQUEST";
-              req["id"] = QString::fromStdString(link._id);
-              req["stamp"] = qint64(link._stamp);
-
-              distributeMessage(link, req, {client_info});
-            }
-          }
-          client_info->update(windows);
-          return;
-        }
-        else if( task == "SYNC" )
-        {
-          if(    msg.getValue<QString>("type") == "SCROLL"
-              && msg.getValue<QString>("item", "CONTENT") == "CONTENT" )
-            // TODO handle ELEMENT scroll?
-          {
-            client_info->setScrollPos( msg.getValue<QPoint>("pos") );
-            client_info->update(_window_monitor.getWindows());
-
-            // Forward scroll events to clients which support this (eg. for
-            // synchronized scrolling)
-//            for(auto const& socket: _clients)
-//            {
-//              if(    sender() != socket.first
-//                  && socket.second->supportsCommand("scroll") )
-//                socket.first->sendTextMessage(data);
-//            }
-            dirtyLinks();
-          }
-
-          return;
-        }
-        else if( task == "CMD" )
-        {
-          QString cmd = msg.getValue<QString>("cmd");
-          for(auto socket = _clients.begin(); socket != _clients.end(); ++socket)
-          {
-            if(    sender() != socket->first
-                && socket->second->supportsCommand(cmd) )
-              return (void)socket->first->sendTextMessage(data);
-          }
-          return;
-        }
-      }
-
-      if( task == "SEMANTIC-ZOOM" )
-      {
-        int step = msg.getValue<int>("step");
-        qreal fac = exp2(step);
-
-        qDebug() << "zoom" << step << fac;
-
-        QRect geom = client_info->getWindowInfo().queryGeometry();
-        qDebug() << "geom" << geom;
-
-        if( step < 0 && geom.width() <= 400 && geom.height() <= 300 )
-        {
-          client_info->tile_map_uncompressed;
-          //addOutline(*client_info);
-          client_info->iconifyWindow();
-
-          if( !client_info->hasSemanticPreview() )
-            client_info->setSemanticPreview(
-              _subscribe_previews->_data->getWindow(client_info)
-            );
-        }
-
-        geom.setSize(geom.size() * fac);
-
-        QSize desktop_size = _subscribe_desktop_rect->_data->size.toQSize();
-        if(    geom.width() > 1.8 * desktop_size.width()
-            || geom.height() > 1.8 * desktop_size.height() )
-        {
-          qDebug() << "no larger anymore" << geom << desktop_size;
-          // Don't let the window size go crazy
-          return;
-        }
-
-        QPoint center = msg.getValue<QPoint>("center", geom.center()),
-               offset = geom.topLeft() - center,
-               new_pos = center + fac * offset;
-
-        geom.moveTo( std::max(0, new_pos.x()),
-                     std::max(0, new_pos.y()) );
-
-        qDebug() << "moveResize" << geom;
-
-        client_info->moveResizeWindow(geom);
-
-//        client_info->activateWindow();
-        return;
-      }
-
-      QString id = msg.getValue<QString>("id").trimmed(),
-              title = msg.getValue<QString>("title", "");
-      const std::string& id_str = to_string(id);
-
-      if( task == "GET" )
-      {
-        QString val;
-        if( id == "/routing" )
-        {
-          val = "{\"active\": \""
-              + QString::fromStdString(_subscribe_routing->_data->active)
-              + "\", \"default\": \""
-              + QString::fromStdString(_subscribe_routing->_data->getDefault())
-              + "\", \"available\":[";
-          if( !_subscribe_routing->_data->available.empty() )
-          {
-            for( auto comp = _subscribe_routing->_data->available.begin();
-                 comp != _subscribe_routing->_data->available.end();
-                 ++comp )
-              val += "[\"" + QString::fromStdString(comp->first) + "\","
-                   + (comp->second ? '1' : '0') + "],";
-            val.replace(val.length() - 1, 1, ']');
-          }
-          else
-            val.push_back(']');
-          val.push_back('}');
-        }
-        else if( id == "/search-history" )
-        {
-          std::string history;
-          (*_subscribe_user_config->_data)->getString("QtWebsocketServer:SearchHistory", history);
-          val = "\""
-              + QString::fromStdString(history).replace('"', "\\\"")
-              + "\"";
-        }
-        else if( id == "/state/all" ) // get state of all connected applications
-                                      // and active links
-        {
-          _client_requested_save = client_info;
-
-          QJsonObject msg;
-          msg["task"] = "GET";
-          msg["id"] = "/state/all";
-
-          QString const msg_str =
-            QString::fromLocal8Bit(
-              QJsonDocument(msg).toJson(QJsonDocument::Compact)
-            );
-
-          bool need_to_wait = false;
-          for(auto const& client: _clients)
-          {
-            if( !client.second->supportsCommand("save-state") )
-              continue;
-
-            client.second->setStateData(QJsonObject());
-            client.first->sendTextMessage(msg_str);
-
-            qDebug() << "request state"
-                     << client.second->getWindowInfo().title
-                     << client.second->getWindowInfo().region;
-
-            need_to_wait = true;
-          }
-
-          if( !need_to_wait )
-            checkStateData();
-
-          return;
-        }
+        auto msg_handler = _msg_handlers.find(task);
+        if( msg_handler == _msg_handlers.end() )
+          LOG_WARN("Unknown message type: " << task.toStdString());
         else
-        {
-          std::string val_std;
-          if( !(*_subscribe_user_config->_data)
-               ->getParameter
-                (
-                  id_str,
-                  val_std,
-                  msg.getValue<std::string>("type")
-                ) )
-          {
-            LOG_WARN("Requesting unknown value: " << id_str);
-            return;
-          }
-
-          val = "\""
-              + QString::fromStdString(val_std).replace('"', "\\\"")
-              + "\"";
-        }
-
-        client->first->sendTextMessage
-        ("{"
-            "\"task\": \"GET-FOUND\","
-            "\"id\": \"" + id.replace('"', "\\\"") + "\","
-            "\"val\":" + val +
-         "}");
-
-        return;
-      }
-      else if( task == "GET-FOUND" )
-      {
-        QJsonObject json = parseJson(data.toLocal8Bit());
-        client_info->setStateData(json.value("data").toObject());
-
-        return checkStateData();
-      }
-      else if( task == "SET" )
-      {
-        if( id == "/routing" )
-        {
-          _subscribe_routing->_data->request = msg.getValue<std::string>("val");
-          for( auto link = _slot_links->_data->begin();
-                   link != _slot_links->_data->end();
-                   ++link )
-            link->_stamp += 1;
-          LOG_INFO("Trigger reroute -> routing algorithm changed");
-          dirtyLinks();
-        }
-        else
-        {
-          if( !(*_subscribe_user_config->_data)
-               ->setParameter
-                (
-                  id_str,
-                  msg.getValue<std::string>("val"),
-                  msg.getValue<std::string>("type")
-                ) )
-          {
-            LOG_WARN("Request setting unknown value: " << id_str);
-            return;
-          }
-          dirtyLinks();
-        }
-        return;
+          msg_handler->second(client_info, msg, data);
       }
 
-      uint32_t stamp = msg.getValue<uint32_t>("stamp");
-      QMutexLocker lock_links(_mutex_slot_links);
-
-      auto link = std::find_if
-      (
-        _slot_links->_data->begin(),
-        _slot_links->_data->end(),
-        [&id](const LinkDescription::LinkDescription& desc)
-        {
-          return QString::fromStdString(desc._id)
-                         .compare(id, Qt::CaseInsensitive) == 0;
-        }
-      );
-
-      if( task == "INITIATE" )
-        onInitiate(link, id, stamp, msg, client_info);
-      else if( task == "FOUND" || task == "UPDATE" )
-      {
-        if( link == _slot_links->_data->end() )
-        {
-          LOG_WARN("Received FOUND for none existing REQUEST");
-          return;
-        }
-
-//        if( link->_stamp != stamp )
-//        {
-//          LOG_WARN("Received FOUND for wrong REQUEST (different stamp)");
-//          return;
-//        }
-
-        LOG_INFO("Received "  << task << ": " << id_str);
-
-        if( task == "FOUND" )
-        {
-          link->_link->addNode(
-            client_info->parseRegions(msg)
-          );
-        }
-        else
-        {
-          QString new_id = msg.getValue<QString>("new-id", "");
-          if( !new_id.isEmpty() )
-          {
-            qDebug() << "Renaming link" << id << "==>" << new_id;
-            link->_id = to_string(new_id);
-
-            QJsonObject msg_fwd;
-            msg_fwd["task"] = "UPDATE";
-            msg_fwd["id"] = id;
-            msg_fwd["stamp"] = qint64(stamp);
-            msg_fwd["new-id"] = new_id;
-
-            QString const msg_fwd_str =
-              QString::fromLocal8Bit(
-                QJsonDocument(msg_fwd).toJson(QJsonDocument::Compact)
-              );
-
-            for(auto const& socket: _clients)
-            {
-              if( sender() != socket.first )
-                socket.first->sendTextMessage(msg_fwd_str);
-            }
-          }
-
-          LinkDescription::NodePtr node;
-          for(auto& n: link->_link->getNodes())
-          {
-            if( n->getChildren().empty() )
-              continue;
-
-            auto& hedge = n->getChildren().front();
-            if(    hedge->get<WId>("client_wid")
-                == client_info->getWindowInfo().id )
-            {
-              node = n;
-              break;
-            }
-          }
-
-          if( !node )
-          {
-            LOG_WARN("Received UPDATE for none existing client");
-            return;
-          }
-
-          client_info->parseRegions(msg, node);
-        }
-
-        client_info->update(_window_monitor.getWindows());
-        updateCenter(link->_link.get());
-      }
-      else if( task == "ABORT" )
-      {
-        WId abort_wid = client_info->getWindowInfo().id;
-
-        if( id.isEmpty() && stamp == (uint32_t)-1 )
-          abortAll();
-        else if( link != _slot_links->_data->end() )
-          abortLinking(link, abort_wid);
-        else
-          LOG_WARN("Received ABORT for none existing REQUEST");
-
-        for(auto socket = _clients.begin(); socket != _clients.end(); ++socket)
-          if( sender() != socket->first )
-            socket->first->sendTextMessage(data);
-      }
-      else
-      {
-        LOG_WARN("Unknown task: " << task);
-        return;
-      }
+//      if( task == "GET-FOUND" )
+//      {
+//        QJsonObject json = parseJson(data.toLocal8Bit());
+//        client_info->setStateData(json.value("data").toObject());
+//
+//        return checkStateData();
+//      }
     }
     catch(std::runtime_error& ex)
     {
@@ -1152,6 +782,7 @@ namespace LinksRouting
     qDebug() << client->readAll();
     QString response(
       "HTTP/1.0 200 OK\r\n"
+      "Access-Control-Allow-Origin: *\r\n"
       "Connection: close\r\n"
       "Content-Type: text/plain\r\n"
       "Content-Size: 0\r\n"
@@ -1162,25 +793,354 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  void IPCServer::onInitiate( LinkDescription::LinkList::iterator& link,
-                              const QString& id,
-                              uint32_t stamp,
-                              const JSONParser& msg,
-                              const ClientRef& client_info )
+  void IPCServer::onClientRegister(ClientRef client, QJsonObject const& msg)
   {
+    const QString title = from_json<QString>(msg.value("title"));
+    const WindowRegions& windows = _window_monitor.getWindows();
+
+    // Identify window and get its id
+
+    WId wid = 0;
+    if( msg.contains("wid") )
+    {
+      LOG_DEBUG("Use window id from message.");
+      wid = from_json<quintptr>(msg.value("wid"));
+    }
+    else if(    msg.contains("pos")
+             || msg.contains("pid")
+             || !title.isEmpty() )
+    {
+
+
+      if( msg.contains("pos") )
+        wid = windows.windowIdAt( from_json<QPoint>(msg.value("pos")) );
+      else
+      {
+        WindowInfoIterators possible_windows;
+        if( msg.contains("pid") )
+          possible_windows = windows.find_all(
+            from_json<uint32_t>(msg.value("pid")),
+            title
+          );
+        else
+          possible_windows = windows.find_all(title);
+
+        LOG_DEBUG("Found " << possible_windows.size() << " matches");
+
+        if( !possible_windows.empty() )
+        {
+          QRect geom = from_json<QRect>( msg.value("geom"),
+                                         possible_windows.front()->region );
+
+          for(auto w: possible_windows)
+          {
+            if(    w->region.x() == geom.x()
+                && w->region.y() == geom.y()
+                && w->region.width() == geom.width()
+                   // ignore title bar of maximized windows, because
+                   // they are integrated into the global menubar
+                && std::abs(w->region.height() - geom.height()) < 30 )
+            {
+              LOG_DEBUG(" - region match");
+              wid = w->id;
+            }
+            else
+              LOG_DEBUG(" - region mismatch " << to_string(w->region));
+          }
+        }
+      }
+    }
+
+    if( wid )
+      client->setWindowId(wid);
+    else
+      LOG_DEBUG("Can not get window id for client.");
+
+    // Supported commands
+
+    if( msg.contains("cmds") )
+    {
+      for(QJsonValue cmd: msg.value("cmds").toArray())
+        client->addCommand( from_json<QString>(cmd) );
+    }
+
+    // Unique client identifier
+
+    if( !msg.contains("client-id") )
+      LOG_WARN("REGISTER: Missing 'client-id'.");
+    else
+      client->setId( from_json<QString>(msg.value("client-id")) );
+
+    // Viewport/Scroll region
+
+    client->parseView(msg);
+
+    // Connect to all active links
+
+    for(auto const& link: *_slot_links->_data)
+    {
+      QJsonObject req;
+      req["task"] = "REQUEST";
+      req["id"] = QString::fromStdString(link._id);
+      req["stamp"] = qint64(link._stamp);
+
+      distributeMessage(link, req, {client});
+    }
+
+    QMutexLocker lock_links(_mutex_slot_links);
+    client->update(windows);
+
+    qDebug() << "connected"
+             << "\n  region:" << client->getWindowInfo().region
+             << "\n  viewport:" << client->getViewportAbs();
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onClientResize(ClientRef client, QJsonObject const& msg)
+  {
+    QMutexLocker lock_links(_mutex_slot_links);
+
+    client->parseView(msg);
+    client->update(_window_monitor.getWindows());
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onClientSync(ClientRef client, QJsonObject const& msg)
+  {
+    if(    from_json<QString>(msg.value("type")) != "SCROLL"
+        || from_json<QString>(msg.value("item"), "CONTENT") != "CONTENT" )
+      // TODO handle ELEMENT scroll?
+      return;
+
+    QMutexLocker lock_links(_mutex_slot_links);
+
+    client->setScrollPos( from_json<QPoint>(msg.value("pos")) );
+    client->update(_window_monitor.getWindows());
+
+    // Forward scroll events to clients which support this (eg. for
+    // synchronized scrolling)
+//    for(auto const& socket: _clients)
+//    {
+//      if(    sender() != socket.first
+//          && socket.second->supportsCommand("scroll") )
+//        socket.first->sendTextMessage(data);
+//    }
+
+    dirtyLinks();
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onClientCmd( ClientRef client,
+                               QJsonObject const& msg,
+                               QString const& msg_raw )
+  {
+    QString cmd = from_json<QString>(msg.value("cmd"));
+    for(auto socket: _clients)
+    {
+      if(    client != socket.second
+          && socket.second->supportsCommand(cmd) )
+        return (void)socket.first->sendTextMessage(msg_raw);
+    }
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onClientSemanticZoom(ClientRef client, QJsonObject const& msg)
+  {
+    int step = from_json<int>(msg.value("step"));
+    qreal fac = exp2(step);
+    qDebug() << "zoom" << step << fac;
+
+    QRect geom = client->getWindowInfo().queryGeometry();
+    qDebug() << "geom" << geom;
+
+    if( step < 0 && geom.width() <= 400 && geom.height() <= 300 )
+    {
+      //client->tile_map_uncompressed;
+      //addOutline(*client_info);
+      client->iconifyWindow();
+      fac = 1;
+
+      if( !client->hasSemanticPreview() )
+        client->setSemanticPreview(
+          _subscribe_previews->_data->getWindow(client)
+        );
+    }
+
+    geom.setSize(geom.size() * fac);
+
+    QSize desktop_size = _subscribe_desktop_rect->_data->size.toQSize();
+    if(    geom.width() > 1.8 * desktop_size.width()
+        || geom.height() > 1.8 * desktop_size.height() )
+    {
+      qDebug() << "no larger anymore" << geom << desktop_size;
+      // Don't let the window size go crazy
+      return;
+    }
+
+    QPoint center = from_json<QPoint>(msg.value("center"), geom.center()),
+           offset = geom.topLeft() - center,
+           new_pos = center + fac * offset;
+
+    geom.moveTo( std::max(0, new_pos.x()),
+                 std::max(0, new_pos.y()) );
+
+    qDebug() << "moveResize" << geom;
+
+    client->moveResizeWindow(geom);
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onValueGet(ClientRef client, QJsonObject const& msg)
+  {
+    QString id = from_json<QString>(msg.value("id"));
+
+    QJsonObject msg_ret;
+    msg_ret["task"] = "GET-FOUND";
+    msg_ret["id"] = id;
+
+    if( id == "/routing" )
+    {
+      QJsonObject routing;
+      routing["active"] = _subscribe_routing->_data->active.c_str();
+      routing["default"] = _subscribe_routing->_data->getDefault().c_str();
+
+      QJsonArray available;
+      for(auto comp: _subscribe_routing->_data->available)
+        available << QJsonArray::fromStringList({ comp.first.c_str(),
+                                                  comp.second ? "1" : "0" });
+      routing["available"] = available;
+      msg_ret["val"] = routing;
+    }
+    else if( id == "/search-history" )
+    {
+      std::string history;
+      (*_subscribe_user_config->_data)->getString("QtWebsocketServer:SearchHistory", history);
+      msg_ret["val"] = QString::fromStdString(history);
+    }
+    else if( id == "/state/all" ) // get state of all connected applications
+                                  // and active links
+    {
+      _client_requested_save = client;
+
+      QJsonObject msg;
+      msg["task"] = "GET";
+      msg["id"] = "/state/all";
+
+      QString const msg_str =
+        QString::fromLocal8Bit(
+          QJsonDocument(msg).toJson(QJsonDocument::Compact)
+        );
+
+      bool need_to_wait = false;
+      for(auto const& client: _clients)
+      {
+        if( !client.second->supportsCommand("save-state") )
+          continue;
+
+        client.second->setStateData(QJsonObject());
+        client.first->sendTextMessage(msg_str);
+
+        qDebug() << "request state"
+                 << client.second->getWindowInfo().title
+                 << client.second->getWindowInfo().region;
+
+        need_to_wait = true;
+      }
+
+      if( !need_to_wait )
+        checkStateData();
+
+      return;
+    }
+    else
+    {
+      std::string val_std;
+      if( !(*_subscribe_user_config->_data)
+           ->getParameter
+            (
+              to_string(id),
+              val_std,
+              to_string(from_json<QString>(msg.value("type")))
+            ) )
+      {
+        LOG_WARN("Requesting unknown value: " << id);
+        return;
+      }
+
+      msg_ret["val"] = QString::fromStdString(val_std);
+    }
+
+    client->socket->sendTextMessage(
+      QJsonDocument(msg_ret).toJson(QJsonDocument::Compact)
+    );
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onValueSet(ClientRef client, QJsonObject const& msg)
+  {
+    QString id = from_json<QString>(msg.value("id"));
+    if( id == "/routing" )
+    {
+      _subscribe_routing->_data->request =
+        to_string(from_json<QString>(msg.value("val")));
+
+      for( auto link = _slot_links->_data->begin();
+               link != _slot_links->_data->end();
+               ++link )
+        link->_stamp += 1;
+      LOG_INFO("Trigger reroute -> routing algorithm changed");
+    }
+    else
+    {
+      if( !(*_subscribe_user_config->_data)
+           ->setParameter
+            (
+              to_string(id),
+              to_string(from_json<QString>(msg.value("val"))),
+              to_string(from_json<QString>(msg.value("type")))
+            ) )
+      {
+        LOG_WARN("Request setting unknown value: " << id);
+        return;
+      }
+    }
+
+    dirtyLinks();
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onLinkInitiate(ClientRef client, QJsonObject const& msg)
+  {
+    QString const id = from_json<QString>(msg.value("id")).trimmed();
     if( id.length() > 256 )
     {
       LOG_WARN("Search identifier too long!");
       return;
     }
 
+    qDebug() << "INITATE" << id;
+
+#if 0
+    std::string history;
+    (*_subscribe_user_config->_data)->getString("QtWebsocketServer:SearchHistory", history);
+
+    QString clean_id = QString(id).replace(",","") + ",";
+    QString new_history = clean_id
+                        + QString::fromStdString(history).replace(clean_id, "");
+
+    (*_subscribe_user_config->_data)
+      ->setString("QtWebsocketServer:SearchHistory", to_string(new_history));
+#endif
+
+    auto window_list = _window_monitor.getWindows();
     StringList client_whitelist,
                client_blacklist;
-    for(QString const& entry: msg.getValue<QStringList>("whitelist", {}))
+    for( QString const& entry:
+           from_json<QStringList>(msg.value("whitelist"), {}) )
     {
       if( entry == "this" )
       {
-        client_whitelist.push_back(client_info->id().toStdString());
+        client_whitelist.push_back(client->id().toStdString());
         continue;
       }
 
@@ -1206,7 +1166,6 @@ namespace LinksRouting
         }
 
         QPoint pos(pos_parts[0].toInt(), pos_parts[1].toInt());
-        auto window_list = _window_monitor.getWindows();
         auto window = window_list.windowAt(pos);
         if( window == window_list.rend() )
         {
@@ -1229,23 +1188,10 @@ namespace LinksRouting
       }
     }
 
-    const std::string id_str = to_string(id);
-    LOG_INFO("Received INITIATE: " << id_str);
-    Color link_color = msg.getValue<Color>("color", {});
-#if 0
-    std::string history;
-    (*_subscribe_user_config->_data)->getString("QtWebsocketServer:SearchHistory", history);
-
-    QString clean_id = QString(id).replace(",","") + ",";
-    QString new_history = clean_id
-                        + QString::fromStdString(history).replace(clean_id, "");
-
-    (*_subscribe_user_config->_data)
-      ->setString("QtWebsocketServer:SearchHistory", to_string(new_history));
-#endif
-    client_info->update(_window_monitor.getWindows());
+    Color link_color = from_json<Color>(msg.value("color"));
 
     // Remove eventually existing search for same id
+    auto link = findLink(id);
     if( link != _slot_links->_data->end() )
     {
       if( !link_color.isVisible() )
@@ -1253,7 +1199,7 @@ namespace LinksRouting
         link_color = link->_color;
 
       LOG_INFO("Replacing search for " << link->_id);
-      abortLinking(link);
+      abortLinking(link, client->getWindowInfo().id);
     }
     else if( !link_color.isVisible() )
     {
@@ -1279,12 +1225,14 @@ namespace LinksRouting
         link_color = _colors[ _slot_links->_data->size() % _colors.size() ];
     }
 
+    std::string id_str = to_string(id);
     auto hedge = LinkDescription::HyperEdge::make_shared();
     hedge->set("link-id", id_str);
-    hedge->addNode( client_info->parseRegions(msg) );
-    client_info->update(_window_monitor.getWindows());
+    hedge->addNode( client->parseRegions(msg) );
+    client->update(window_list);
     updateCenter(hedge.get());
 
+    uint32_t stamp = from_json<uint32_t>(msg.value("stamp"));
     _slot_links->_data->push_back(
       LinkDescription::LinkDescription(
         id_str,
@@ -1306,10 +1254,111 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  void IPCServer::onLinkUpdate(ClientRef client, QJsonObject const& msg)
+  {
+    QMutexLocker lock_links(_mutex_slot_links);
+    LinkDescription::LinkList::iterator link;
+    if( !requireLink(msg, link) )
+      return;
+
+    QString const task = from_json<QString>(msg.value("task"));
+    qDebug() << "Handling link update:" << task;
+
+    QString new_id = from_json<QString>(msg.value("new-id"), "");
+    if( !new_id.isEmpty() )
+    {
+      qDebug() << "Renaming link" << link->_id.c_str() << "==>" << new_id;
+      link->_id = to_string(new_id);
+
+      QJsonObject msg_fwd;
+      msg_fwd["task"] = "UPDATE";
+      msg_fwd["id"] = link->_id.c_str();
+      msg_fwd["stamp"] = qint64(link->_stamp);
+      msg_fwd["new-id"] = new_id;
+
+      QString const msg_fwd_str =
+        QString::fromLocal8Bit(
+          QJsonDocument(msg_fwd).toJson(QJsonDocument::Compact)
+        );
+
+      for(auto const& socket: _clients)
+      {
+        if( sender() != socket.first )
+          socket.first->sendTextMessage(msg_fwd_str);
+      }
+    }
+
+    // Check for existing regions and remove them before parsing the new ones
+    LinkDescription::NodePtr node;
+    for(auto& n: link->_link->getNodes())
+    {
+      if( n->getChildren().empty() )
+        continue;
+
+      auto& hedge = n->getChildren().front();
+      if( hedge->get<WId>("client_wid") == client->getWindowInfo().id )
+      {
+        node = n;
+        break;
+      }
+    }
+
+    if( node )
+      client->parseRegions(msg, node);
+    else
+      link->_link->addNode(client->parseRegions(msg));
+
+    client->update(_window_monitor.getWindows());
+    updateCenter(link->_link.get());
+
+    dirtyLinks();
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onLinkAbort( ClientRef client,
+                               QJsonObject const& msg,
+                               QString const& msg_raw )
+  {
+    QString const id = from_json<QString>(msg.value("id"));
+    uint32_t stamp = from_json<uint32_t>(msg.value("stamp"));
+
+    if( id.isEmpty() && stamp == (uint32_t)-1 )
+      return abortAll();
+
+    QMutexLocker lock_links(_mutex_slot_links);
+    LinkDescription::LinkList::iterator link;
+    if( !requireLink(msg, link) )
+      return;
+
+    WId abort_wid = client->getWindowInfo().id;
+    QString const scope = from_json<QString>(msg.value("scope"), "all");
+
+    if( scope == "all" )
+    {
+      // Abort from all windows
+      abort_wid = 0;
+
+      // Forward to clients
+      for(auto socket = _clients.begin(); socket != _clients.end(); ++socket)
+        if( sender() != socket->first )
+          socket->first->sendTextMessage(msg_raw);
+    }
+    else if( scope == "this" )
+    {
+      std::remove( link->_client_whitelist.begin(),
+                   link->_client_whitelist.end(),
+                   client->id().toStdString() );
+    }
+
+    abortLinking(link, abort_wid);
+  }
+
+  //----------------------------------------------------------------------------
   void IPCServer::regionsChanged(const WindowRegions& regions)
   {
+    QMutexLocker lock_links(_mutex_slot_links);
+
     _window_monitor.setDesktopRect( desktopRect().toQRect() );
-    _mutex_slot_links->lock();
 
     bool need_update = true; // TODO update checks to also detect eg. changes in
                              //      outside icons.
@@ -1323,7 +1372,6 @@ namespace LinksRouting
         need_update = true;
       }
     }
-    _mutex_slot_links->unlock();
 
     if( !need_update )
       return;
@@ -1577,6 +1625,41 @@ namespace LinksRouting
       return nullptr;
 
     return client->first;
+  }
+
+  //----------------------------------------------------------------------------
+  LinkDescription::LinkList::iterator IPCServer::findLink(const QString& id)
+  {
+    return std::find_if
+    (
+      _slot_links->_data->begin(),
+      _slot_links->_data->end(),
+      [&id](const LinkDescription::LinkDescription& desc)
+      {
+        return QString::fromStdString(desc._id)
+                       .compare(id, Qt::CaseInsensitive) == 0;
+      }
+    );
+  }
+
+  //----------------------------------------------------------------------------
+  bool IPCServer::requireLink( const QJsonObject& msg,
+                               LinkDescription::LinkList::iterator& link )
+  {
+    link = findLink( from_json<QString>(msg.value("id")).trimmed() );
+    if( link == _slot_links->_data->end() )
+    {
+      qWarning() << "No matching link for message:" << msg;
+      return false;
+    }
+
+//    if( link->_stamp != stamp )
+//    {
+//      LOG_WARN("Received FOUND for wrong REQUEST (different stamp)");
+//      return false;
+//    }
+
+    return true;
   }
 
   //----------------------------------------------------------------------------
@@ -2236,6 +2319,7 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   void IPCServer::abortAll()
   {
+    QMutexLocker lock_links(_mutex_slot_links);
     for(auto link = _slot_links->_data->begin();
              link != _slot_links->_data->end(); )
       link = abortLinking(link);

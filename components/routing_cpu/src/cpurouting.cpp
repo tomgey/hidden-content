@@ -345,7 +345,7 @@ namespace LinksRouting
 
             segment_t segment;
             segment.set("covered", node->get<bool>("covered") && !node->get<bool>("hover"));
-            segment.set("widen-end", node->get<bool>("widen-end", true));
+            segment.set("widen-end", node->get<bool>("widen-end", false));
             segment.nodes.push_back(node);
             segment.trail.push_back(_global_center);
             segment.trail.push_back(offset + node->getBestLinkPoint(_global_center - offset, !node->get<bool>("is-icon")));

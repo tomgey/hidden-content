@@ -877,7 +877,7 @@ function removeRouteData(id)
 }
 
 //------------------------------------------------------------------------------
-function onAbort(id, stamp, send_msg = true)
+function onAbort(id, stamp, send_msg = true, all_clients = true)
 {
   // TODO
   last_id = null;
@@ -899,7 +899,8 @@ function onAbort(id, stamp, send_msg = true)
     send({
       'task': 'ABORT',
       'id': id,
-      'stamp': stamp
+      'stamp': stamp,
+      'scope': (all_clients ? 'all' : 'this')
     });
 }
 
@@ -918,6 +919,12 @@ function removeAllRouteData()
   // menu
   for(var route_id in active_routes)
     removeRouteData(route_id);
+}
+
+//------------------------------------------------------------------------------
+function onDump()
+{
+  send({'task': 'DUMP'});
 }
 
 //------------------------------------------------------------------------------
@@ -1503,12 +1510,18 @@ function searchDocument(doc, id)
 {
   if( id.startsWith("link://") )
   {
-    var vp = getViewport("abs");
-    var l = vp[0] + 1;
-    var t = vp[1] + 1;
-    var r = vp[0] + vp[2] - 1;
-    var b = vp[1] + vp[3] - 1;
-    return [ [[l, t], [r, t], [r, b], [l, b]] ];
+    var vp = getViewport();
+    var l = 1;
+    var t = 1;
+    var r = vp[2] - vp[0] - 1;
+    var b = vp[3] - vp[0] - 1;
+    return [
+      [[l, t], [r, t], [r, b], [l, b]],
+      {
+        "is-window-outline": true,
+        "ref": "viewport"
+      }
+    ];
   }
 
   updateScale();

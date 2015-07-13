@@ -109,6 +109,8 @@ namespace LinksRouting
 
       bool routingActive() const;
 
+      void dumpState(std::ostream& strm = std::cout) const;
+
     private slots:
 
       void onClientConnection();
@@ -122,18 +124,37 @@ namespace LinksRouting
     protected:
 
       typedef std::map<QWebSocket*, ClientRef> ClientInfos;
+      typedef std::function<void ( ClientRef client,
+                                   QJsonObject const& msg,
+                                   QString const& msg_raw )> MsgCallback;
+      typedef std::map<QString, MsgCallback> MsgCallbackMap;
 
-      void onInitiate( LinkDescription::LinkList::iterator& link,
-                       const QString& id,
-                       uint32_t stamp,
-                       const JSONParser& msg,
-                       const ClientRef& client_info );
+      void onClientRegister(ClientRef, QJsonObject const& msg);
+      void onClientResize(ClientRef, QJsonObject const& msg);
+      void onClientSync(ClientRef, QJsonObject const& msg);
+
+      void onClientCmd( ClientRef, QJsonObject const& msg,
+                                   QString const& msg_raw );
+      void onClientSemanticZoom(ClientRef, QJsonObject const& msg);
+
+      void onValueGet(ClientRef, QJsonObject const& msg);
+      void onValueSet(ClientRef, QJsonObject const& msg);
+
+      void onLinkInitiate(ClientRef, QJsonObject const& msg);
+      void onLinkUpdate(ClientRef, QJsonObject const& msg);
+      void onLinkAbort( ClientRef, QJsonObject const& msg,
+                                   QString const& msg_raw );
 
       void regionsChanged(const WindowRegions& regions);
       ClientInfos::iterator findClientInfo(WId wid);
       ClientInfos::iterator findClientInfoById(QString const& cid);
       QWebSocket* getSocketByWId(WId wid);
       QWebSocket* getSocketForClient(ClientRef const& client);
+
+      LinkDescription::LinkList::iterator findLink(const QString& id);
+      bool requireLink( const QJsonObject& msg,
+                        LinkDescription::LinkList::iterator& link );
+
 
       bool updateHedge( const WindowRegions& regions,
                         LinkDescription::HyperEdge* hedge );
@@ -184,6 +205,7 @@ namespace LinksRouting
       QWaitCondition     *_cond_data_ready;
       uint32_t            _dirty_flags;
 
+      MsgCallbackMap      _msg_handlers;
       std::vector<Color>  _colors; //!< Available link colors
 
       /* List of all open searches */

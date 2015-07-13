@@ -101,10 +101,13 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  void ClientInfo::parseScrollRegion( const JSONParser& json )
+  void ClientInfo::parseView(const QJsonObject& msg)
   {
-    if( json.hasChild("scroll-region") )
-      scroll_region = json.getValue<QRect>("scroll-region");
+    if( msg.contains("viewport") )
+      viewport = from_json<QRect>(msg.value("viewport"));
+
+    if( msg.contains("scroll-region") )
+      scroll_region = from_json<QRect>(msg.value("scroll-region"));
     else
       // If no scroll-region is given assume only content within viewport is
       // accessible
@@ -130,19 +133,16 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   LinkDescription::NodePtr ClientInfo::parseRegions
   (
-    const JSONParser& json,
+    const QJsonObject& msg,
     LinkDescription::NodePtr node
   )
   {
-    std::cout << "Parse regions ("
-              << to_string(_window_info.title)
-              << ")" << std::endl;
+    qDebug() << "Parse regions of" << _window_info.title;
 
     _avg_region_height = 0;
-
     _dirty |= REGIONS;
 
-    if( !json.hasChild("regions") )
+    if( !msg.contains("regions") )
     {
       if( node )
         node->getChildren().front()->getNodes().clear();
@@ -153,25 +153,33 @@ namespace LinksRouting
       return node;
     }
 
-    float2 top_left( getViewportAbs().topLeft() ),
-           scroll_offset( scroll_region.topLeft() );
+    QVariantList regions = from_json<QVariantList>(msg.value("regions"));
 
-    LinkDescription::nodes_t nodes;
     LinkDescription::PropertyMap node_props;
-
-    QVariantList regions = json.getValue<QVariantList>("regions");
     for(auto region = regions.begin(); region != regions.end(); ++region)
     {
-      if( region->type() == QVariant::Map )
-      {
-        auto map = region->toMap();
-        for( auto it = map.constBegin(); it != map.constEnd(); ++it )
-          node_props.set(to_string(it.key()), it->toString());
+      if( region->type() != QVariant::Map )
         continue;
-      }
+
+      auto map = region->toMap();
+      for( auto it = map.constBegin(); it != map.constEnd(); ++it )
+        node_props.set(to_string(it.key()), it->toString());
+    }
+
+    float2 top_left( getViewportAbs().topLeft() ),
+           scroll_offset( scroll_region.topLeft() );
+    LinkDescription::nodes_t nodes;
+
+    bool const node_rel = node_props.get<bool>("rel", false);
+    std::string const node_ref = node_props.get<std::string>("ref", "abs");
+
+    for(auto region = regions.begin(); region != regions.end(); ++region)
+    {
+      if( region->type() != QVariant::List )
+        continue;
 
       LinkDescription::points_t points;
-      LinkDescription::PropertyMap props;
+      LinkDescription::PropertyMap region_props;
 
       float min_y = std::numeric_limits<float>::max(),
             max_y = std::numeric_limits<float>::lowest();
@@ -184,7 +192,7 @@ namespace LinksRouting
         {
           auto map = point->toMap();
           for( auto it = map.constBegin(); it != map.constEnd(); ++it )
-            props.set(to_string(it.key()), it->toString());
+            region_props.set(to_string(it.key()), it->toString());
         }
         else
         {
@@ -203,30 +211,35 @@ namespace LinksRouting
       _avg_region_height += max_y - min_y;
       float2 center;
 
-      bool rel = props.get<bool>("rel");
+      bool rel = region_props.get<bool>("rel", node_rel);
+      std::string ref = region_props.get<std::string>("ref", node_ref);
+
       for(size_t i = 0; i < points.size(); ++i)
       {
-        // Transform to local coordinates within applications scrollable area
-        if( !rel )
-          points[i] -= top_left;
-        points[i] -= scroll_offset;
+        if( ref == "abs" )
+        {
+          // Transform to local coordinates within applications scrollable area
+          if( !rel )
+            points[i] -= top_left;
+          points[i] -= scroll_offset;
+        }
         center += points[i];
       }
 
       center /= points.size();
       LinkDescription::points_t link_points;
-      link_points.push_back(center);
+      //link_points.push_back(center); // TODO linkpoints...
 
       nodes.push_back
       (
-        std::make_shared<LinkDescription::Node>(points, link_points, props)
+        std::make_shared<LinkDescription::Node>(points, link_points, region_props)
       );
     }
 
     if( !nodes.empty() )
       _avg_region_height /= nodes.size();
 
-    size_t num_regions = json.getValue<size_t>("display-num", 0);
+    size_t num_regions = from_json<size_t>(msg.value("display-num"), 0);
     if( !num_regions )
       num_regions = nodes.size();
 
@@ -242,7 +255,7 @@ namespace LinksRouting
     }
     else
     {
-      node->clearChildren();
+      node->clearChildren(); // TODO allow also adding regions?
       node->addChild(hedge);
     }
 
@@ -388,6 +401,20 @@ namespace LinksRouting
   bool ClientInfo::hasSemanticPreview() const
   {
     return _semantic_preview.get() != nullptr;
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::print( std::ostream& strm,
+                          std::string const& indent,
+                          std::string const& indent_incr ) const
+  {
+    strm << indent << "<ClientInfo address=\"" << this << "\">\n"
+         << indent << indent_incr << "title: " << _window_info.title << "\n";
+
+    for(auto const& node: _nodes)
+      node->print(strm, indent + indent_incr, indent_incr);
+
+    strm << indent << "</ClientInfo>\n";
   }
 
   //----------------------------------------------------------------------------
@@ -791,19 +818,26 @@ namespace LinksRouting
     if( node.getVertices().empty() )
       return false;
 
-    bool modified = false;
-    QPoint center_rel = node.getCenter().toQPoint(),
-           center_abs = center_rel
-                      + getScrollRegionAbs().topLeft();
-
+    bool modified = false,
+         onscreen = true,
+         covered = false,
+         outside = false;
     Rect covering_region;
     WId covering_wid = 0;
-    bool onscreen   = desktop.contains(center_rel),
-         covered    = windows.hit( first_above,
-                                   center_abs,
-                                   &covering_region,
-                                   &covering_wid ),
-         outside    = !view.contains(center_rel);
+
+    if( !node.get<bool>("is-window-outline", false) )
+    {
+      QPoint center_rel = node.getCenter().toQPoint(),
+             center_abs = center_rel
+                        + getScrollRegionAbs().topLeft();
+
+      onscreen   = desktop.contains(center_rel),
+      covered    = windows.hit( first_above,
+                                center_abs,
+                                &covering_region,
+                                &covering_wid ),
+      outside    = !view.contains(center_rel);
+    }
 
     modified |= node.set("on-screen", onscreen);
     modified |= node.set("covered", covered);
@@ -875,10 +909,16 @@ namespace LinksRouting
   {
     for(auto& hedge: hedges)
     {
+      QPoint offset;
+      if( hedge->get<std::string>("ref", "abs") == "viewport" )
+        offset = getViewportAbs().topLeft();
+      else if( !_window_info.minimized )
+        offset = getScrollRegionAbs().topLeft();
+
+      qDebug() << this << hedge.get() << "setOffset" << offset;
+
       hedge->set("client_wid", _window_info.id);
-      hedge->set( "screen-offset", _window_info.minimized
-                                 ? QPoint()
-                                 : getScrollRegionAbs().topLeft() );
+      hedge->set("screen-offset", offset);
 
       if( first )
       {

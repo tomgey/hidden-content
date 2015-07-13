@@ -121,7 +121,9 @@ namespace LinkDescription
       props_t&       getMap()       { return _props; }
       props_t const& getMap() const { return _props; }
 
-      friend std::ostream& operator<<(std::ostream& strm, const PropertyMap& m);
+      void print( std::ostream& strm = std::cout,
+                  std::string const& indent = "",
+                  std::string const& indent_incr = "  ") const;
 
     protected:
       props_t _props;
@@ -219,6 +221,10 @@ namespace LinkDescription
       void addChild(const HyperEdgePtr& hedge);
       void clearChildren();
 
+      void print( std::ostream& strm = std::cout,
+                  std::string const& indent = "",
+                  std::string const& indent_incr = "  ") const;
+
     private:
 
       points_t _points;
@@ -273,6 +279,10 @@ namespace LinkDescription
       HyperEdgeDescriptionForkationConstPtr getHyperEdgeDescription() const;
 
       void removeRoutingInformation();
+
+      void print( std::ostream& strm = std::cout,
+                  std::string const& indent = "",
+                  std::string const& indent_incr = "  ") const;
 
     private:
 
@@ -330,6 +340,10 @@ namespace LinkDescription
       _client_blacklist( client_blacklist )
     {}
 
+    void print( std::ostream& strm = std::cout,
+                std::string const& indent = "",
+                std::string const& indent_incr = "  ") const;
+
     std::string   _id;
     uint32_t      _stamp;
     HyperEdgePtr  _link;
@@ -339,6 +353,17 @@ namespace LinkDescription
   };
 
   typedef std::list<LinkDescription> LinkList;
+  void printLinkList( LinkList const& links,
+                      std::ostream& strm = std::cout,
+                      std::string const& indent = "",
+                      std::string const& indent_incr = "  " );
+
+  void printNodeList( nodes_t const& nodes,
+                      std::ostream& strm = std::cout,
+                      std::string const& indent = "",
+                      std::string const& indent_incr = "  " );
+
+  //std::ostream& operator<<(std::ostream& strm, const PropertyMap& m);
 
 } // namespace LinkDescription
 } // namespace LinksRouting

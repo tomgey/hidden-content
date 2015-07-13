@@ -117,7 +117,10 @@ namespace LinksRouting
         color_cur *= 0.5;
 
       bool filled = (*node)->get<bool>("filled", false);
-      if( !filled && !render_all && !(*node)->get<bool>("outline-only") )
+      if(    !filled
+          && !render_all
+          && !(*node)->get<bool>("outline-only")
+          && !(*node)->get<bool>("is-window-outline") )
       {
         Color light(0,0,0,0);// = 0.5 * color_cur;
         light.a *= 0.6;

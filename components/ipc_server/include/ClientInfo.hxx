@@ -10,6 +10,7 @@
 
 #include "common/PreviewWindow.hpp"
 #include "HierarchicTileMap.hpp"
+#include "JSON.hpp"
 #include "JSONParser.h"
 #include "linkdescription.h"
 #include "PartitionHelper.hxx"
@@ -66,18 +67,18 @@ namespace LinksRouting
     bool supportsCommand(const QString& cmd) const;
 
     /**
-     * Parse and update scroll region
+     * Parse and update viewport and scroll region
      */
-    void parseScrollRegion( const JSONParser& json );
+    void parseView(const QJsonObject& msg);
 
-    void setScrollPos( const QPoint& offset );
+    void setScrollPos(const QPoint& offset);
 
     /**
      * Parse regions from JSON and replace current regions in node if given
      */
     LinkDescription::NodePtr parseRegions
     (
-      const JSONParser& json,
+      const QJsonObject& msg,
       LinkDescription::NodePtr node = nullptr
     );
 
@@ -141,6 +142,10 @@ namespace LinksRouting
     bool hasSemanticPreview() const;
 
     LinkDescription::nodes_t& getNodes() { return _nodes; }
+
+    void print( std::ostream& strm = std::cout,
+                std::string const& indent = "",
+                std::string const& indent_incr = "  ") const;
 
     private:
 

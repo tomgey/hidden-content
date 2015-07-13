@@ -265,7 +265,7 @@ QJsonArray TextWidget::jsonBoundingBox() const
 
   QJsonObject props;
   props["rel"] = true;
-  props["type"] = "window-outline";
+  //props["type"] = "window-outline";
   bb.append(props);
 
   QJsonArray regs;
