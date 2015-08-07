@@ -1,5 +1,3 @@
-
-
 set(COMPONENTROOT ${CMAKE_CURRENT_SOURCE_DIR})
 set(COMPONENTSRC_DIR ${COMPONENTROOT}/src)
 set(COMPONENTINC_DIR ${COMPONENTROOT}/include)
@@ -13,4 +11,5 @@ set(SOURCE_FILES ${COMPONENTSRC_DIR}/cpurouting.cpp
     )
 
 add_library(cpurouting ${HEADER_FILES} ${SOURCE_FILES})
+target_link_libraries(cpurouting Qt5::Core)
 add_component_data(${COMPONENTINC_DIR} cpurouting)

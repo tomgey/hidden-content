@@ -6,6 +6,9 @@
 #include "float2.hpp"
 #include "string_utils.h"
 
+#include <QMap>
+#include <QVariant>
+
 #include <functional>
 #include <list>
 #include <map>
@@ -17,6 +20,8 @@ typedef std::vector<std::string> StringList;
 
 namespace LinksRouting
 {
+  typedef QMap<QString, QVariant> Properties;
+
   enum class Direction { LEFT, UP, RIGHT, DOWN };
   Direction dirFromNorm(const float2& normal);
 
@@ -326,30 +331,33 @@ namespace LinkDescription
 
   struct LinkDescription
   {
-    LinkDescription( const std::string& id,
+    LinkDescription( const QString& id,
                      uint32_t stamp,
                      const HyperEdgePtr& link,
                      const Color& color,
                      const StringList& client_whitelist,
-                     const StringList& client_blacklist):
+                     const StringList& client_blacklist,
+                     const Properties& props ):
       _id( id ),
       _stamp( stamp ),
       _link( link ),
       _color( color ),
       _client_whitelist( client_whitelist ),
-      _client_blacklist( client_blacklist )
+      _client_blacklist( client_blacklist ),
+      _props( props )
     {}
 
     void print( std::ostream& strm = std::cout,
                 std::string const& indent = "",
                 std::string const& indent_incr = "  ") const;
 
-    std::string   _id;
+    QString       _id;
     uint32_t      _stamp;
     HyperEdgePtr  _link;
     Color         _color;
     StringList    _client_whitelist,
                   _client_blacklist;
+    Properties    _props;
   };
 
   typedef std::list<LinkDescription> LinkList;

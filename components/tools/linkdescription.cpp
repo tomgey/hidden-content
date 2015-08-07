@@ -470,7 +470,7 @@ namespace LinkDescription
                                std::string const& indent_incr ) const
   {
     strm << indent << "<LinkDescription>\n"
-         << indent << indent_incr << "id: \"" << _id << "\"\n"
+         << indent << indent_incr << "id: \"" << _id.toLocal8Bit().data() << "\"\n"
          << indent << indent_incr << "stamp: " << _stamp << "\n"
          << indent << indent_incr << "color: " << _color << "\n"
          << indent << indent_incr << "whitelist: " << _client_whitelist << "\n"

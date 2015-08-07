@@ -17,4 +17,5 @@ set(SOURCE_FILES
 )
 
 add_library(cpurouting-dijkstra ${HEADER_FILES} ${SOURCE_FILES})
+target_link_libraries(cpurouting-dijkstra Qt5::Core)
 add_component_data(${COMPONENTINC_DIR} cpurouting-dijkstra)

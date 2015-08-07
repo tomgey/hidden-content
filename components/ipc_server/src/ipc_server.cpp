@@ -881,8 +881,9 @@ namespace LinksRouting
     {
       QJsonObject req;
       req["task"] = "REQUEST";
-      req["id"] = QString::fromStdString(link._id);
+      req["id"] = link._id;
       req["stamp"] = qint64(link._stamp);
+      req["data"] = QJsonObject::fromVariantMap(link._props);
 
       distributeMessage(link, req, {client});
     }
@@ -939,7 +940,7 @@ namespace LinksRouting
     {
       if(    client != socket.second
           && socket.second->supportsCommand(cmd) )
-        return (void)socket.first->sendTextMessage(msg_raw);
+        socket.first->sendTextMessage(msg_raw);
     }
   }
 
@@ -992,7 +993,7 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   void IPCServer::onValueGet(ClientRef client, QJsonObject const& msg)
   {
-    QString id = from_json<QString>(msg.value("id"));
+    QString const id = from_json<QString>(msg.value("id"));
 
     QJsonObject msg_ret;
     msg_ret["task"] = "GET-FOUND";
@@ -1198,7 +1199,7 @@ namespace LinksRouting
         // keep color if none is requested
         link_color = link->_color;
 
-      LOG_INFO("Replacing search for " << link->_id);
+      qDebug() << "Replacing search for" << link->_id;
       abortLinking(link, client->getWindowInfo().id);
     }
     else if( !link_color.isVisible() )
@@ -1225,32 +1226,41 @@ namespace LinksRouting
         link_color = _colors[ _slot_links->_data->size() % _colors.size() ];
     }
 
-    std::string id_str = to_string(id);
     auto hedge = LinkDescription::HyperEdge::make_shared();
-    hedge->set("link-id", id_str);
+    hedge->set("link-id", to_string(id));
     hedge->addNode( client->parseRegions(msg) );
     client->update(window_list);
     updateCenter(hedge.get());
 
+    QJsonObject link_props(msg);
+    link_props.remove("color"); // TODO sync color? store it here?
+    link_props.remove("id");
+    link_props.remove("stamp");
+    link_props.remove("task");
+    link_props.remove("whitelist");
+
     uint32_t stamp = from_json<uint32_t>(msg.value("stamp"));
     _slot_links->_data->push_back(
       LinkDescription::LinkDescription(
-        id_str,
+        id,
         stamp,
         hedge,
         link_color,
         client_whitelist,
-        client_blacklist
+        client_blacklist,
+        link_props.toVariantMap()
       )
     );
     _slot_links->setValid(true);
+    auto const& new_link = _slot_links->_data->back();
 
     QJsonObject req;
     req["task"] = "REQUEST";
     req["id"] = id;
     req["stamp"] = qint64(stamp);
+    req["data"] = link_props;
 
-    distributeMessage(_slot_links->_data->back(), req);
+    distributeMessage(new_link, req);
   }
 
   //----------------------------------------------------------------------------
@@ -1267,12 +1277,12 @@ namespace LinksRouting
     QString new_id = from_json<QString>(msg.value("new-id"), "");
     if( !new_id.isEmpty() )
     {
-      qDebug() << "Renaming link" << link->_id.c_str() << "==>" << new_id;
-      link->_id = to_string(new_id);
+      qDebug() << "Renaming link" << link->_id << "==>" << new_id;
+      link->_id = new_id;
 
       QJsonObject msg_fwd;
       msg_fwd["task"] = "UPDATE";
-      msg_fwd["id"] = link->_id.c_str();
+      msg_fwd["id"] = link->_id;
       msg_fwd["stamp"] = qint64(link->_stamp);
       msg_fwd["new-id"] = new_id;
 
@@ -1636,8 +1646,7 @@ namespace LinksRouting
       _slot_links->_data->end(),
       [&id](const LinkDescription::LinkDescription& desc)
       {
-        return QString::fromStdString(desc._id)
-                       .compare(id, Qt::CaseInsensitive) == 0;
+        return desc._id.compare(id, Qt::CaseInsensitive) == 0;
       }
     );
   }
@@ -2220,6 +2229,18 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  void IPCServer::distributeMessage( const QJsonObject& msg,
+                                     ClientRef sender ) const
+  {
+    QByteArray msg_data = QJsonDocument(msg).toJson(QJsonDocument::Compact);
+    for(auto client: _clients)
+    {
+      if( sender != client.second )
+        client.first->sendTextMessage(msg_data);
+    }
+  }
+
+  //----------------------------------------------------------------------------
   void IPCServer::dirtyLinks()
   {
     _dirty_flags |= LINKS_DIRTY | RENDER_DIRTY | MASK_DIRTY;
@@ -2283,7 +2304,7 @@ namespace LinksRouting
     for(auto const& link: *_slot_links->_data)
     {
       QJsonObject link_data;
-      link_data["id"] = QString::fromStdString(link._id);
+      link_data["id"] = link._id;
       link_data["color"] = to_json(link._color);
       link_data["whitelist"] = to_json(link._client_whitelist);
       link_data["blacklist"] = to_json(link._client_blacklist);

@@ -5,6 +5,12 @@
 #include <QJsonDocument>
 
 //------------------------------------------------------------------------------
+QString to_qstring(const QString& str)
+{
+  return str;
+}
+
+//------------------------------------------------------------------------------
 QJsonObject parseJson(const QByteArray& msg)
 {
   QJsonParseError error;
@@ -17,7 +23,7 @@ QJsonObject parseJson(const QByteArray& msg)
 }
 
 //------------------------------------------------------------------------------
-QJsonValue to_json(const QPoint& p)
+QJsonArray to_json(const QPoint& p)
 {
   QJsonArray a;
   a.append(p.x());
@@ -26,13 +32,13 @@ QJsonValue to_json(const QPoint& p)
 }
 
 //------------------------------------------------------------------------------
-QJsonValue to_json(const QSize& size)
+QJsonArray to_json(const QSize& size)
 {
   return to_json(QPoint(size.width(), size.height()));
 }
 
 //------------------------------------------------------------------------------
-QJsonValue to_json(const QRect& rect)
+QJsonArray to_json(const QRect& rect)
 {
   QJsonArray a;
   a.append(rect.left());
@@ -40,6 +46,12 @@ QJsonValue to_json(const QRect& rect)
   a.append(rect.width());
   a.append(rect.height());
   return a;
+}
+
+//------------------------------------------------------------------------------
+QJsonValue to_json(const QVariant& var)
+{
+  return QJsonValue::fromVariant(var);
 }
 
 //------------------------------------------------------------------------------

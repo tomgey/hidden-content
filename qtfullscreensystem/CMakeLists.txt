@@ -64,10 +64,13 @@ include_directories(
 
 add_executable(qtfullscreensystem ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES})
 use_components(qtfullscreensystem)
-qt5_use_modules(qtfullscreensystem Gui OpenGL Network)
 target_link_libraries( qtfullscreensystem
   ${OPENGL_gl_LIBRARY}
   ${ADDITIONAL_LIBS}
+  Qt5::Gui
+  Qt5::OpenGL
+  Qt5::Network
+  Qt5::X11Extras
 )
 
 runtime_files(qtfullscreensystem RUNTIME_FILES)

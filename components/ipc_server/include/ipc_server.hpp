@@ -187,6 +187,10 @@ namespace LinksRouting
                               const QJsonObject& msg,
                               const ClientList& clients ) const;
 
+      /** Send message to all clients except the sender */
+      void distributeMessage( const QJsonObject& msg,
+                              ClientRef sender ) const;
+
       void dirtyLinks();
       void dirtyRender();
 

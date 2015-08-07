@@ -15,8 +15,8 @@ set( SOURCE_FILES
 )
 
 set( USED_QT_MODULES
-  Network
-  Widgets
+  Qt5::Network
+  Qt5::Widgets
 )
 
 if(WIN32)
@@ -27,7 +27,7 @@ elseif(APPLE)
 else()
   set(SOURCE_FILES ${SOURCE_FILES} src/widgets/x11/qxtwindowsystem_x11.cpp)
 #                                   src/widgets/x11/qxtglobalshortcut_x11.cpp )
-  list(APPEND USED_QT_MODULES X11Extras)
+  list(APPEND USED_QT_MODULES Qt5::X11Extras)
 endif()
 
 # ...
@@ -43,5 +43,6 @@ ADD_LIBRARY(qxt STATIC
   ${SOURCE_FILES}
   ${HEADER_FILES}
 )
-
-qt5_use_modules(qxt ${USED_QT_MODULES})
+target_link_libraries(qxt
+  ${USED_QT_MODULES}
+)

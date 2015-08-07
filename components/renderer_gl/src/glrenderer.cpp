@@ -37,12 +37,12 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  void GlRenderer::publishSlots(SlotCollector& slots)
+  void GlRenderer::publishSlots(SlotCollector& slot_collector)
   {
-    _slot_links = slots.create<SlotType::Image>("/rendered-links");
+    _slot_links = slot_collector.create<SlotType::Image>("/rendered-links");
     _slot_links->_data->type = SlotType::Image::OpenGLTexture;
 
-    _slot_xray = slots.create<SlotType::Image>("/rendered-xray");
+    _slot_xray = slot_collector.create<SlotType::Image>("/rendered-xray");
     _slot_xray->_data->type = SlotType::Image::OpenGLTexture;
   }
 

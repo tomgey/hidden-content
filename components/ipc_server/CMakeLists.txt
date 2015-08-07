@@ -28,9 +28,14 @@ set(CL_FILES
 add_definitions(-DQXT_STATIC)
 
 add_library(ipc_server ${HEADER_FILES} ${SOURCE_FILES} ${CL_FILES})
-qt5_use_modules(ipc_server Script Widgets OpenGL Network WebSockets)
 target_link_libraries( ipc_server
   qxt
-  tools-qt
+  tools
+  Qt5::Script
+  Qt5::Widgets
+  Qt5::OpenGL
+  Qt5::Network
+  Qt5::WebSockets
+  Qt5::X11Extras
 )
 add_component_data(${COMPONENTINC_DIR} ipc_server)

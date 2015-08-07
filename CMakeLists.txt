@@ -2,7 +2,7 @@ project(LinksSystem)
 cmake_minimum_required(VERSION 2.8.8)
 
 set(PROJROOT ${CMAKE_CURRENT_SOURCE_DIR})
-set(LINKS_INCLUDE_DIR ${PROJROOT}/include)
+set(LINKS_INCLUDE_DIR ${PROJROOT}/include ${Qt5Widgets_INCLUDE_DIRS})
 set(COMPONENTS_DIR ${PROJROOT}/components)
 set(COMPONENTS_INC_DIR )
 set(COMPONENTS_LIBS )
@@ -20,11 +20,12 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 # Instruct CMake to run moc automatically when needed.
 set(CMAKE_AUTOMOC ON)
 
-# Widgets finds its own dependencies (QtGui and QtCore).
+find_package(Qt5Core REQUIRED)
 find_package(Qt5Widgets REQUIRED)
 find_package(Qt5Script REQUIRED)
 find_package(Qt5OpenGL REQUIRED)
 find_package(Qt5WebSockets REQUIRED)
+find_package(Qt5X11Extras REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Warning when using in-source build

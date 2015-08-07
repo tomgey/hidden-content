@@ -21,26 +21,21 @@ set(SOURCE_FILES
   AnimatedPopup.cxx
   fbo.cxx
   HierarchicTileMap.cxx
+  JSONParser.cxx
+  JSON.cxx
   linkdescription.cpp
   NodeRenderer.cxx
   PartitionHelper.cxx
+  qt_helper.cxx
   Rect.cxx
   routing.cxx
-)
-
-set(HEADER_FILES_QT
-)
-
-set(SOURCE_FILES_QT
-  JSONParser.cxx
-  JSON.cxx
-  qt_helper.cxx
 )
 
 add_subdirectory(glsl)
 
 add_definitions(-DNOMULTISAMPLING)
 add_library(tools ${HEADER_FILES} ${SOURCE_FILES})
-
-add_library(tools-qt ${HEADER_FILES_QT} ${SOURCE_FILES_QT})
-qt5_use_modules(tools-qt Script Gui)
+target_link_libraries(tools
+  Qt5::Script
+  Qt5::Gui
+)

@@ -15,4 +15,5 @@ set(SOURCE_FILES
 )
 
 add_library(dummyrouting ${HEADER_FILES} ${SOURCE_FILES})
+target_link_libraries(dummyrouting Qt5::Core)
 add_component_data(${COMPONENTINC_DIR} dummyrouting)
