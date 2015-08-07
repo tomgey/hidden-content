@@ -141,6 +141,10 @@ namespace LinksRouting
       std::bind(&IPCServer::onLinkAbort, this, _1, _2, _3);
     _msg_handlers["CMD"] =
       std::bind(&IPCServer::onClientCmd, this, _1, _2, _3);
+    _msg_handlers["CONCEPT-UPDATE"] =
+      std::bind(&IPCServer::onConceptUpdate, this, _1, _2);
+    _msg_handlers["CONCEPT-UPDATE-LINK"] =
+      std::bind(&IPCServer::onConceptUpdateLink, this, _1, _2);
     _msg_handlers["DUMP"] =
       std::bind(&IPCServer::dumpState, this, std::ref(std::cout));
     _msg_handlers["FOUND"] = // TODO remove and just use UPDATE?
@@ -991,6 +995,81 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-UPDATE',
+  //    'cmd': 'new',
+  //    'id': sel,
+  //    'src-url': url,
+  //    'src-icon': img_data
+  void IPCServer::onConceptUpdate(ClientRef client, QJsonObject const& msg)
+  {
+    QString const name = from_json<QString>(msg.value("id")).trimmed(),
+                  id = name.toLower(),
+                  cmd = from_json<QString>(msg.value("cmd"));
+
+    if( cmd == "new" )
+    {
+      if( _concept_nodes.contains(id) )
+      {
+        qWarning() << "Concept" << name << "already exists.";
+        return;
+      }
+
+      QJsonObject msg_ret(msg);
+      msg_ret.remove("task");
+      msg_ret.remove("cmd");
+      msg_ret["id"] = id;
+      msg_ret["name"] = name;
+
+      _concept_nodes.insert(id, msg_ret.toVariantMap());
+      qDebug() << _concept_nodes;
+
+      msg_ret["task"] = "CONCEPT-NEW";
+      distributeMessage(msg_ret, nullptr);
+
+      return;
+    }
+  }
+
+  //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-UPDATE-LINK',
+  //    'cmd': 'new',
+  //    'source': source.id,
+  //    'target': target.id
+  void IPCServer::onConceptUpdateLink(ClientRef client, QJsonObject const& msg)
+  {
+    QString const cmd = from_json<QString>(msg.value("cmd"));
+    QStringList node_ids = from_json<QStringList>(msg.value("nodes"));
+    if( node_ids.size() != 2 )
+    {
+      qWarning() << "Only edges with 2 nodes supported. Got:" << node_ids;
+      return;
+    }
+
+    node_ids.sort();
+    QPair<QString, QString> link_id{node_ids.at(0), node_ids.at(1)};
+
+    if( cmd == "new" )
+    {
+      if( _concept_links.contains(link_id) )
+      {
+        qWarning() << "Concept link" << link_id << "already exists.";
+        return;
+      }
+
+      _concept_links.insert(link_id, {});
+
+      QJsonObject msg_ret{
+        {"task", "CONCEPT-LINK-NEW"},
+        {"nodes", to_json(node_ids)}
+      };
+      qDebug() << msg_ret;
+
+      distributeMessage(msg_ret, nullptr);
+      return;
+    }
+  }
+
+  //----------------------------------------------------------------------------
   void IPCServer::onValueGet(ClientRef client, QJsonObject const& msg)
   {
     QString const id = from_json<QString>(msg.value("id"));
@@ -1052,6 +1131,11 @@ namespace LinksRouting
         checkStateData();
 
       return;
+    }
+    else if( id == "/concepts/all" )
+    {
+      msg_ret["nodes"] = to_json(_concept_nodes);
+      msg_ret["links"] = to_json(_concept_links);
     }
     else
     {

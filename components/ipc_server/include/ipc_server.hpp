@@ -37,6 +37,9 @@ namespace LinksRouting
 {
   struct ClientInfo;
 
+  typedef QMap<QString, Properties> ConceptNodes;
+  typedef QMap<QPair<QString, QString>, Properties> ConceptEdges;
+
   class IPCServer:
     public QObject,
     public Component,
@@ -137,6 +140,9 @@ namespace LinksRouting
                                    QString const& msg_raw );
       void onClientSemanticZoom(ClientRef, QJsonObject const& msg);
 
+      void onConceptUpdate(ClientRef, QJsonObject const& msg);
+      void onConceptUpdateLink(ClientRef, QJsonObject const& msg);
+
       void onValueGet(ClientRef, QJsonObject const& msg);
       void onValueSet(ClientRef, QJsonObject const& msg);
 
@@ -211,6 +217,9 @@ namespace LinksRouting
 
       MsgCallbackMap      _msg_handlers;
       std::vector<Color>  _colors; //!< Available link colors
+
+      ConceptNodes  _concept_nodes;
+      ConceptEdges  _concept_links;
 
       /* List of all open searches */
       slot_t<LinkDescription::LinkList>::type _slot_links;

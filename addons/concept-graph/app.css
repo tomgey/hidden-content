@@ -4,13 +4,45 @@ html, body {
   margin: 0;
 }
 
-body > p {
-  position: absolute;
-  float: left;
+main.mdl-layout__content {
+  display: flex;
 }
 
-body > svg {
-  float: left;
+#tool-area {
+  height: 100%;
+  overflow-y: auto;
+}
+
+#tool-area > * {
+  margin: 0.4em;
+  margin-right: 1.2em;
+}
+
+#tool-area > * + * {
+  margin-top: 0;
+}
+
+#content-area {
+  height: 100%;
+  flex-grow: 1;
+  position: relative;
+}
+
+#button-add-concept {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+}
+
+#tooltip-button-add-concept {
+  position: fixed;
+  left: auto !important;
+  top: auto !important;
+  right: 10px;
+  bottom: 60px;
+}
+
+#graph-drawing-area {
   width: 100%;
   height: 100%;
   background-color: #FFF;
@@ -22,15 +54,35 @@ body > svg {
   user-select: none;
 }
 
+#overlay {
+  visibility: hidden;
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  transition: background-color 0.5s;
+}
+
+#overlay > * {
+  margin: 100px auto;
+}
+
+#overlay .mdl-card__actions {
+  text-align: right;
+}
+
 svg:not(.active):not(.ctrl) {
   cursor: crosshair;
 }
 
 path.link {
   fill: none;
-  stroke: #000;
-  stroke-width: 4px;
+  stroke: #333;
+  stroke-width: 2px;
   cursor: default;
+/*  filter: drop-shadow(1px 2px 3px rgba(0, 0, 0, 0.8)); */
 }
 
 svg:not(.active):not(.ctrl) path.link {
@@ -49,12 +101,18 @@ path.link.hidden {
   stroke-width: 0;
 }
 
-circle.node {
-  stroke-width: 1.5px;
+.node {
   cursor: pointer;
+  fill: #eee;
+  filter: drop-shadow(1px 2px 3px rgba(0, 0, 0, 0.8));
 }
 
-circle.node.reflexive {
+.node.selected {
+  fill: rgb(255, 82, 82);
+  filter: drop-shadow(1px 2px 6px rgba(26, 8, 8, 0.9));
+}
+
+.node.reflexive {
   stroke: #000 !important;
   stroke-width: 2.5px;
 }

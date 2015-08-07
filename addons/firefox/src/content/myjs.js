@@ -302,19 +302,24 @@ function getXPathForElement(el, root)
   while( el && el !== root )
   {
     var sibling = el;
-	  var pos = 0;
+    var pos = 0;
 
     do
     {
-		  if(    sibling.nodeType === Element.ELEMENT_NODE
-          && sibling.nodeName === el.nodeName )
-			  pos += 1;
+      if(    /*sibling.nodeType === Element.ELEMENT_NODE
+          &&*/ sibling.nodeName === el.nodeName )
+        pos += 1;
 
-		  sibling = sibling.previousSibling;
-	  } while( sibling );
+      sibling = sibling.previousSibling;
+    } while( sibling );
 
-	  xpath = "/" + el.nodeName + "[" + pos + "]" + xpath;
-	  el = el.parentNode;
+    if( el.nodeType === Element.TEXT_NODE )
+      var nodeName = 'text()';
+    else
+      var nodeName = el.nodeName;
+
+    xpath = "/" + nodeName + "[" + pos + "]" + xpath;
+    el = el.parentNode;
   }
   if( el )
     xpath = "." + xpath;
@@ -699,47 +704,117 @@ function onContextMenu()
 
   gContextMenu.showItem("context-concepts", shouldShow);
   gContextMenu.showItem("context-sep-concepts", shouldShow);
+
+  var links_active = links_socket && links_socket.readyState == WebSocket.OPEN;
+  var label = $("context-concepts-label");
+
+  if( links_active )
+  {
+    label.label = "Concepts";
+    label.style.color = "inherit";
+  }
+  else
+  {
+    label.label = "Missing server for concepts!";
+    label.style.color = "#e66";
+  }
+
+  $("context-concepts-new-node").hidden = !links_active;
+  $("context-concepts-link-selection").hidden = !links_active;
 }
 
-function imgToBase64(url, cb_done)
+function imgToBase64(url, fallback_text, cb_done)
 {
   var img = new Image();
   img.src = url;
-  img.onload = function ()
+
+  var w = 16,
+      h = 16;
+  var canvas =
+    document.createElementNS("http://www.w3.org/1999/xhtml", "html:canvas");
+  canvas.width = w;
+  canvas.height = h;
+  var ctx = canvas.getContext("2d");
+  var cb_wrapper = function()
   {
-    var canvas =
-      document.createElementNS("http://www.w3.org/1999/xhtml", "html:canvas");
-    canvas.width = this.width;
-    canvas.height = this.height;
-
-    var ctx = canvas.getContext("2d");
-    ctx.drawImage(this, 0, 0);
-
     var data = canvas.toDataURL("image/png");
     cb_done( data /*.replace(/^data:image\/(png|jpg);base64,/, "")*/ );
+  };
+
+  img.onload = function ()
+  {
+    ctx.drawImage(this, 0, 0, w, h);
+    cb_wrapper();
+  };
+  img.onerror = function(e)
+  {
+    ctx.fillStyle = "#fee";
+    ctx.fillRect(0, 0, w, h);
+    ctx.font = "14px Sans-serif";
+    ctx.fontWeight = "bold";
+    ctx.fillStyle = "#333";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(fallback_text, w/2, h/2);
+
+    cb_wrapper();
   }
 }
 
 function onConceptNodeNew(el, event)
 {
-  var sel = content.getSelection().toString().trim();
+  var sel = content.getSelection();
+  var body = content.document.body;
+
+  var ranges = [];
+  for(var i = 0; i < sel.rangeCount; i++)
+  {
+    var range = sel.getRangeAt(i);
+    ranges.push({
+      'start-node': getXPathForElement(range.startContainer, body),
+      'start-offset': range.startOffset,
+      'end-node': getXPathForElement(range.endContainer, body),
+      'end-offset': range.endOffset
+    });
+  }
+
+  var name = sel.toString().replace(/\s{2,}/g, ' ')
+                           .replace(/[^a-zA-Z0-9\s]/g, '')
+                           .trim();
   var url = content.location.href;
 
-  imgToBase64(gBrowser.getIcon(), function(img_data)
-  {
-    send({
-      'task': 'CMD',
-      'cmd': 'create-concept',
-      'id': sel,
-      'src-url': url,
-      'src-icon': img_data
-    });
-  });
+  name = window.prompt("Enter name for new concept:", name);
+  if(typeof name != "string")
+    return;
+
+  name = name.trim();
+  if( sel.length < 1 )
+    return;
+
+  var base_domain = getBaseDomainFromHost(content.location.hostname);
+
+  imgToBase64(
+    gBrowser.getIcon(),
+    base_domain[0].toUpperCase(),
+    function(img_data)
+    {
+      send({
+        'task': 'CONCEPT-UPDATE',
+        'cmd': 'new',
+        'id': name,
+        'refs': [
+          { 'url': url,
+            'icon': img_data,
+            'selections': [ranges] }
+        ]
+      });
+    }
+  );
 }
 
 function onConceptEdgeNew(el, event)
 {
-  
+
 }
 
 /**
@@ -990,7 +1065,7 @@ function onDump()
 }
 
 //------------------------------------------------------------------------------
-function reportVisLinks(id, found)
+function reportVisLinks(id, found, refs)
 {
   if( !do_report || status != 'active' || !id.length )
     return;
@@ -1027,6 +1102,33 @@ function reportVisLinks(id, found)
       stamp: last_stamp,
       menu_item: item
     };
+  }
+
+  var body = content.document.body;
+  for(var url in refs)
+  {
+    if( content.location.href != url )
+      continue; // TODO handle hash
+
+    var selections = refs[url];
+    for(var i = 0; i < selections.length; i++)
+    {
+      var ranges = selections[i];
+      for(var j = 0; j < ranges.length; j++)
+      {
+        var range = ranges[j];
+        console.log("range", range, body);
+
+        var node_start = getElementForXPath(range['start-node'], body),
+            node_end = getElementForXPath(range['end-node'], body);
+
+        var range_obj = content.document.createRange();
+        range_obj.setStart(node_start, range['start-offset']);
+        range_obj.setEnd(node_end, range['end-offset']);
+
+        appendBBsFromRange(bbs, range_obj);
+      }
+    }
   }
 
   var msg = {
@@ -1300,7 +1402,7 @@ function register(match_title = false, src_id = 0)
           }
         }
 
-        setTimeout(reportVisLinks, 0, msg.id, true);
+        setTimeout(reportVisLinks, 0, msg.id, true, msg.data.refs);
       }
       else if( msg.task == 'UPDATE' )
       {
@@ -1409,21 +1511,23 @@ function register(match_title = false, src_id = 0)
           window.open(url, '_blank', flags);
         }
         else
-          alert("Unknown command: " + event.data);
+          console.log("Unknown command: " + event.data);
       }
       else if( msg.task == 'SYNC' )
         handleSyncMsg(msg);
+      else if( msg.task.startsWith('CONCEPT-') )
+        ; // Ignoring concept graph message
       else
-        alert("Unknown message: " + event.data);
+        console.log("Unknown message: " + event.data);
     }
-	}
-	catch (err)
-	{
-		console.log("Could not establish connection to visdaemon. " + err);
+  }
+  catch (err)
+  {
+    console.log("Could not establish connection to visdaemon. " + err);
     stop();
-		return false;
-	}
-	return true;
+    return false;
+  }
+  return true;
 }
 
 function handleTileRequest()
@@ -1526,7 +1630,7 @@ function searchAreaTitles(doc, id)
 {
 	// find are node which title contains id
 	var	areanodes =	doc.evaluate("//area[contains(@title,'"+id+"')]", doc, null, XPathResult.ANY_TYPE, null);
-	
+
 	// copy found nodes to results array
 	var	result = new Array();
 	try {
@@ -1543,16 +1647,16 @@ function searchAreaTitles(doc, id)
  	catch (e) {
    		alert( 'Error: Document tree modified during iteration ' + e );
  	}
- 	
+ 
  // create bounding box array
 	var	bbs	= new Array();
 	for(var	i=0; i<result.length; i++) {
-	
+
 		// find image associated with area element
 		var	r =	result[i];
 		var img = getMapAssociatedImage(r.parentNode);
 		if(img != null){
-			
+
 			// find bounding box by interpreting the area's coord attribute and the image outline
 			var bb = findAreaBoundingBox(doc, img, r.getAttribute('coords'));
 			//var	bb = findObjectBoundingBox(imgArray[0]);
@@ -1560,12 +1664,30 @@ function searchAreaTitles(doc, id)
 				bbs[bbs.length]	= bb;
 			}
 		}
-		
+
 	}
-	
+
 	//alert("area bounding boxes: " + bbs.length);
-	
+
 	return bbs;
+}
+
+//------------------------------------------------------------------------------
+function appendBBsFromRange(bbs, range)
+{
+  var rects = [range.getBoundingClientRect()];//range.getClientRects();
+  for(var i = 0; i < rects.length; ++i)
+  {
+    var bb = rects[i];
+    if( bb.width > 2 && bb.height > 2 )
+    {
+      var l = Math.round(offset[0] + scale * (bb.left - 1));
+      var r = Math.round(offset[0] + scale * (bb.right + 1));
+      var t = Math.round(offset[1] + scale * (bb.top - 1));
+      var b = Math.round(offset[1] + scale * (bb.bottom));
+      bbs[bbs.length] = [[l, t], [r, t], [r, b], [l, b]];
+    }
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -1590,48 +1712,35 @@ function searchDocument(doc, id)
   updateScale();
   var	bbs	= new Array();
 
-	var id_regex = id.replace(/[\s-._]+/g, "[\\s-._]+");
-	var	textnodes =	doc.evaluate("//body//*/text()", doc, null,	XPathResult.ANY_TYPE, null);
-	while(node = textnodes.iterateNext())
-	{
-		var	s =	node.nodeValue;
+  var id_regex = id.replace(/[\s-._]+/g, "[\\s-._]+");
+  var textnodes = doc.evaluate("//body//*/text()", doc, null,  XPathResult.ANY_TYPE, null);
+  while(node = textnodes.iterateNext())
+  {
+    var  s =  node.nodeValue;
 
     var reg = new RegExp(id_regex, "ig");
-		var m;
-		while( (m = reg.exec(s)) !== null )
-		{
-			var range = document.createRange();
-			range.setStart(node, m.index);
-			range.setEnd(node, m.index + m[0].length);
+    var m;
+    while( (m = reg.exec(s)) !== null )
+    {
+      var range = document.createRange();
+      range.setStart(node, m.index);
+      range.setEnd(node, m.index + m[0].length);
+      appendBBsFromRange(bbs, range);
+    }
+  }
 
-			var rects = range.getClientRects();
-			for(var i = 0; i < rects.length; ++i)
-			{
-				var bb = rects[i];
-				if( bb.width > 2 && bb.height > 2 )
-		    {
-		      var l = Math.round(offset[0] + scale * (bb.left - 1));
-		      var r = Math.round(offset[0] + scale * (bb.right + 1));
-		      var t = Math.round(offset[1] + scale * (bb.top - 1));
-		      var b = Math.round(offset[1] + scale * (bb.bottom));
-					bbs[bbs.length] = [[l, t], [r, t], [r, b], [l, b]];
-		    }
-			}
-		}
-	}
-	
-	// find area bounding boxes
-	var areaBBS = searchAreaTitles(doc, id);
-	bbs = bbs.concat(areaBBS);
-	
-	return bbs;
+  // find area bounding boxes
+  var areaBBS = searchAreaTitles(doc, id);
+  bbs = bbs.concat(areaBBS);
+
+  return bbs;
 }
 
 //------------------------------------------------------------------------------
 function findAreaBoundingBox(doc, img, areaCoords){
 
 	var coords = new Array();
-	
+
 	// parse the coords attribute, separated by comma
 	var sepIndex = areaCoords.indexOf(',');
 	var counter = 0;
@@ -1644,17 +1753,17 @@ function findAreaBoundingBox(doc, img, areaCoords){
 		sepIndex = areaCoords.indexOf(',');
 		counter = counter + 1;
 	}
-	
+
 	// last element
 	coords[coords.length] = parseInt(areaCoords);
-	
+
 	//alert(coords.length + " coords found - last: " + coords[coords.length-1]);
-	
+
 	var x = 0;
 	var y = 0;
 	var w = 0;
 	var h = 0;
-	
+
 	if(coords.length == 3){
 		// 3 coords elements: circle: x, y, radius
 		x = coords[0];
@@ -1688,23 +1797,23 @@ function findAreaBoundingBox(doc, img, areaCoords){
 		w = maxX - minX;
 		h = maxY - minY;
 	};};}; // funny syntax..
-	
+
 	if(w < 10) w = 10;
 	if(h < 10) h = 10;
-	
+
 	//alert("Area: " + x + ", " + y + ", " + w + ", " + h);
-	
+
 	// find the image's bounding box
 	ret = findBoundingBox(doc, img);
-	
+
 	// add x, y to image bounding box and set to area's width / height
 	ret.x += x;
 	ret.y += y;
 	ret.width = w;
 	ret.height = h;
-	
+
 	//alert("Area bounding box: " + ret.x + ", " + ret.y + "  [" + ret.width + " x " + ret.height + "]");
-	
+
 	return ret;
 }
 
