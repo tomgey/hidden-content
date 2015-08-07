@@ -10,13 +10,29 @@ var status_sync = '';
 
 function getPid()
 {
-  var lock_file = Components.classes["@mozilla.org/file/directory_service;1"]
-                            .getService( Components.interfaces.nsIProperties)
-                            .get("ProfD", Components.interfaces.nsIFile);
+  var lock_file = Cc["@mozilla.org/file/directory_service;1"]
+                    .getService(Ci.nsIProperties)
+                    .get("ProfD", Ci.nsIFile);
   lock_file.append("lock");
 
   // <profile-path>/lock is a symlink to 127.0.1.1:+<pid>
   return parseInt(lock_file.target.split('+')[1]);
+}
+
+function getBaseDomainFromHost(host)
+{
+  if( !host )
+    return "localhost";
+
+  var eTLDService = Cc["@mozilla.org/network/effective-tld-service;1"]
+                      .getService(Ci.nsIEffectiveTLDService);
+  return eTLDService.getBaseDomainFromHost(host);
+  // suffix: eTLDService.getPublicSuffixFromHost(host));
+}
+
+function $(id)
+{
+  return document.getElementById(id);
 }
 
 var client_id = "firefox:" + Date.now() + ":" + getPid();
@@ -35,9 +51,6 @@ var cfg = new Object();
 var tile_requests = null;
 var tile_timeout = false;
 var do_report = true;
-
-//var Cc = Components.classes;
-//var Ci = Components.interfaces;
 
 var prefs = Cc["@mozilla.org/fuel/application;1"]
               .getService(Ci.fuelIApplication)
@@ -116,13 +129,13 @@ function getPref(key)
  */
 function setStatus(stat)
 {
-  document.getElementById('vislink').setAttribute('class', stat);
+  $('vislink').setAttribute('class', stat);
   status = stat;
 }
 
 function setStatusSync(stat)
 {
-  var sync_icon = document.getElementById('vislink-sync');
+  var sync_icon = $('vislink-sync');
   if( !sync_icon )
   {
     console.warn("Sync icon not available.");
@@ -134,7 +147,7 @@ function setStatusSync(stat)
 
   var hidden = (stat == 'no-src');
   sync_icon.hidden = hidden;
-  document.getElementById('vislink-sync-src').hidden = hidden;
+  $('vislink-sync-src').hidden = hidden;
 }
 
 /** Send data via the global WebSocket
@@ -159,7 +172,6 @@ function send(data)
   {
 //    alert(e);
     console.log(e);
-    console.log(arguments.callee.caller.toString());
     links_socket = 0;
     stop();
 //    throw e;
@@ -216,10 +228,7 @@ function ctrlSend(data, force = false)
   {
     var msg = JSON.parse(event.data);
     if( msg.task == 'SYNC' )
-    {
-      if( status_sync == 'sync' )
-         handleSyncMsg(msg);
-    }
+      handleSyncMsg(msg);
     else
       alert(event.data);
   }
@@ -237,9 +246,8 @@ function removeAllChildren(el)
 function updateScale()
 {
   win = content.document.defaultView;
-  var domWindowUtils =
-    win.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
-       .getInterface(Components.interfaces.nsIDOMWindowUtils);
+  var domWindowUtils = win.QueryInterface(Ci.nsIInterfaceRequestor)
+                          .getInterface(Ci.nsIDOMWindowUtils);
   scale = domWindowUtils.screenPixelsPerCSSPixel;
 
   offset[0] = win.mozInnerScreenX * scale;
@@ -409,7 +417,7 @@ function onPageLoad(event)
 
       var color = data['color'];
       if( typeof(color) === 'string' )
-        document.getElementById('vislink-sync-src').style.color = color;
+        $('vislink-sync-src').style.color = color;
     }
 
     var msg = {
@@ -432,6 +440,7 @@ function onPageLoad(event)
   {
     doc._hcd_src_id = src_id;
     session_store.setTabValue(tab, "hcd/src-id", src_id);
+    setStatusSync('unknown');
   }
 
   content.addEventListener("keydown", onKeyDown, false);
@@ -616,7 +625,7 @@ function _getCurrentTabData(e)
   if( e )
     data.screenPos = [e.screenX, e.screenY];
 
-  var syncbox = document.getElementById('vislink-sync-src');
+  var syncbox = $('vislink-sync-src');
   if( syncbox )
     data.color = syncbox.style.color;
 
@@ -747,12 +756,12 @@ window.addEventListener("load", function window_load()
   container.addEventListener("TabSelect", onTabChange, false);
 
   // Drag tabs from address bar/identity icon
-  var ibox = document.getElementById("identity-box");
+  var ibox = $("identity-box");
 //  ibox.addEventListener('dragstart', onDragStart, false);
   document.addEventListener('click', onTabDblClick, true);
 
   // Global mousewheel handler (for semantic zoom/level of detail)
-  var main_window = document.getElementById("main-window");
+  var main_window = $("main-window");
   main_window.addEventListener("wheel", onGlobalWheel, true);
 
   // Drag tabs from tab bar
@@ -760,7 +769,7 @@ window.addEventListener("load", function window_load()
 //  gBrowser.tabContainer.addEventListener('click', onTabDblClick, true);
 
   // Dynamic context menu entries
-  var menu = document.getElementById("contentAreaContextMenu");
+  var menu = $("contentAreaContextMenu");
   menu.addEventListener("popupshowing", onContextMenu, false);
 });
 
@@ -864,12 +873,12 @@ function onTabSyncButton(ev)
     // Ignore clicks outside the button (eg. for dropdown menu)
     return;
 
-  setStatusSync(status_sync == 'sync' ? '' : 'sync');
+  setStatusSync(status_sync == 'no-sync' ? 'unknown' : 'no-sync');
 }
 
 function getSelectionId()
 {
-  var txt = document.getElementById("vislink-search-text");
+  var txt = $("vislink-search-text");
   var selid = txt != null ? txt.value.trim() : "";
   if( selid == "" )
   {
@@ -1105,7 +1114,8 @@ function handleSyncMsg(msg)
 {
   console.log(JSON.stringify(msg));
 
-  if( msg['tab-id'] != content.document._hcd_src_id )
+  if(    msg['tab-id'] != content.document._hcd_src_id
+      || status_sync == 'no-sync' )
     return;
 
   setStatusSync("sync");
@@ -1226,12 +1236,12 @@ function register(match_title = false, src_id = 0)
     return true;
   }
 
-  menu = document.getElementById("vislink_menu");
-  items_routing = document.getElementById("routing-selector");
+  menu = $("vislink_menu");
+  items_routing = $("routing-selector");
 
   // Get the box object for the link button to get window handler from the
   // window at the position of the box
-  var box = document.getElementById("vislink").boxObject;
+  var box = $("vislink").boxObject;
   var click_pos = [box.screenX + box.width / 2, box.screenY + box.height / 2];
 
   try
