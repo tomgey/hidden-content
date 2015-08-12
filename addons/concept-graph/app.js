@@ -2,6 +2,14 @@ var links_socket = null;
 var nodes = [],
     links = [];
 
+// Node Selection (store node ids)
+var selected_node_ids = new Set();
+var active_node_id = null;
+
+var request_queue = []; // Pending requests (if no node exists yet)
+var queue_timeout = null;
+var active_links = new Set();
+
 function $(id)
 {
   return document.getElementById(id);
@@ -54,11 +62,24 @@ function start(check = true)
       addNode(msg);
       restart();
     }
+    else if( msg.task == 'CONCEPT-DELETE' )
+    {
+      if( removeNodeById(msg.id) )
+        restart();
+    }
     else if( msg.task == 'CONCEPT-LINK-NEW' )
     {
       delete msg.task;
       addLink(msg);
       restart();
+    }
+    else if( msg.task == 'CONCEPT-UPDATE-SELECTION' )
+    {
+      selected_node_ids = new Set(msg.concepts);
+      active_node_id = msg.active;
+
+      updateDetailDialogs();
+      restart(false);
     }
     else if( msg.task == 'GET-FOUND' )
     {
@@ -78,6 +99,14 @@ function start(check = true)
       }
       else
         console.log("Got unknown data: " + event.data);
+    }
+    else if( msg.task == 'REQUEST' )
+    {
+      if( !handleRequest(msg) )
+      {
+        request_queue.push(msg);
+        console.log("Storing link request for later handling: " + event.data);
+      }
     }
     else
       console.log("Unknown message: " + event.data);
@@ -109,21 +138,88 @@ function send(data)
 
 function sendMsgRegister()
 {
+  var posX = mozInnerScreenX - screenX,
+      posY = mozInnerScreenY - screenY;
+  var bb = $('graph-drawing-area').getBoundingClientRect();
+
   send({
     'task': 'REGISTER',
     'type': "Graph",
-    //'pid': getPid(),
+    'pid': localStorage.getItem('pid'),
     'cmds': ['create-concept'],
     "client-id": 'testing',
     'geom': [
       window.screenX, window.screenY,
       window.outerWidth, window.outerHeight
+    ],
+    'viewport': [
+      posX + bb.x,
+      posY + bb.y,
+      bb.width,
+      bb.height
     ]
   });
   send({
     task: 'GET',
     id: '/concepts/all'
   });
+}
+
+function handleRequest(msg)
+{
+  var c = 'link://concept/';
+  if( !msg.id.startsWith(c) )
+  {
+    console.log("Ignoring link request: " + msg);
+    return true;
+  }
+
+  var node = getNodeById( msg.id.substring(c.length) );
+  if( !node )
+    return false; // Try again (eg. if new nodes arrive)
+
+  active_links.add(msg.id);
+
+//  var l = node.x - 10,
+//      t = node.y - 10,
+//      r = node.x + 10,
+//      b = node.y + 10;
+
+  var link_pos = {
+    x: node.x,
+    y: node.y + 30
+  };
+
+  var bbs = [
+    circlePoints(link_pos), //[[l, t], [r, t], [r, b], [l, b]],
+    {"ref": "viewport"}
+  ];
+
+  send({
+    'task': 'FOUND',
+    'title': document.title,
+    'id': msg.id,
+    'stamp': msg.stamp,
+    'regions': bbs
+  });
+
+  return true;
+}
+
+function circlePoints(pos)
+{
+  var r = 10;
+  var cnt = 10;
+
+  var points = new Array(cnt + 1);
+  var step = 2 * Math.PI / cnt;
+
+  for(var i = 0; i < cnt; i += 1)
+    points[i] = [ pos.x + r * Math.cos(i * step),
+                  pos.y + r * Math.sin(i * step) ];
+  points[cnt] = {rel: true};
+  
+  return points;
 }
 
 /**
@@ -139,27 +235,29 @@ function addNode(node)
 
   console.log("New concept: " + node.name, node);
 
-  if( node.x == undefined ) node.x = 100;
-  if( node.y == undefined ) node.y = 100;
-  if( node.reflexive == undefined ) node.reflexive = false;
+  if( node.x == undefined ) node.x = force.size()[0] / 2 + (Math.random() - 0.5) * 2;
+  if( node.y == undefined ) node.y = force.size()[1] / 2 + (Math.random() - 0.5) * 2;
 
   nodes.push(node);
+  
+  if( queue_timeout )
+    clearTimeout(queue_timeout);
+  queue_timeout = setTimeout(checkRequestQueue, 200);
+}
 
-  /*var img_node = {
-    id: msg.id + '-icon',
-    icon: msg['src-icon'],
-    reflexive: false,
-    x: 80,
-    y: 100
-  };
-  nodes.push(img_node);
+function checkRequestQueue()
+{
+  for(var i = request_queue.length - 1; i >= 0; --i)
+  {
+    if( handleRequest(request_queue[i]) )
+    {
+      request_queue.splice(i, 1);
+      console.log("done", request_queue);
+    }
+  }
 
-  links.push({
-    source: img_node,
-    target: node,
-    left: false,
-    right: true
-  });*/
+  queue_timeout = request_queue.size ? setTimeout(checkRequestQueue, 1111)
+                                     : null;
 }
 
 /**
@@ -228,6 +326,9 @@ function nodeIntersect(source, target)
 
 function getNodeById(id)
 {
+  if( !id || !id.length )
+    return null;
+
   for(var i = 0; i < nodes.length; ++i)
     if( nodes[i].id == id )
       return nodes[i];
@@ -235,17 +336,66 @@ function getNodeById(id)
   return null;
 }
 
+/**
+ * Remove node and all connected links
+ */
+function removeNodeById(id)
+{
+  if( !id || !id.length )
+    return false;
+
+  var node = null;
+  for(var i = 0; i < nodes.length; ++i)
+  {
+    if( nodes[i].id == id )
+    {
+      node = nodes[i];
+      nodes.splice(i, 1);
+      break;
+    }
+  }
+
+  if( !node )
+    return false;
+
+  // Remove matching links...
+  for(var i = links.length - 1; i >= 0; --i)
+  {
+    var link = links[i];
+    if( link.source.id == node.id || link.target.id == node.id )
+    {
+      send({
+        'task': 'CONCEPT-UPDATE-LINK',
+        'cmd': 'delete',
+        'nodes': [link.source.id, link.target.id]
+      });
+
+      links.splice(i, 1);
+    }
+  }
+
+  send({
+    'task': 'CONCEPT-UPDATE',
+    'cmd': 'delete',
+    'id': node.id
+  });
+  return true;
+}
+
 // init D3 force layout
 var force = d3.layout.force()
     .nodes(nodes)
     .links(links)
     .linkDistance(function(link){
-      return 50;/*Math.max(
-        150,
-        50 + (nodeSize(link.source)[0] + nodeSize(link.target)[0]) / 2
-      );*/
+      return Math.max(
+        200,
+        80 + (nodeSize(link.source)[0] + nodeSize(link.target)[0]) / 2
+      );
     })
-    .charge(-500)
+    .charge(function(node){
+      return -10 * Math.min(400, Math.pow(Math.max(nodeSize(node)[0], nodeSize(node)[1]), 2));
+    })
+    .friction(0.6)
     .on('tick', tick);
 
 // define arrow markers for graph links
@@ -277,12 +427,11 @@ var drag_line = svg.append('svg:path')
   .attr('d', 'M0,0L0,0');
 
 // handles to link and node element groups
-var path = svg.append('svg:g').selectAll('path'),
-    circle = svg.append('svg:g').selectAll('g');
+var link_paths = svg.append('svg:g').selectAll('path'),
+    node_groups = svg.append('svg:g').selectAll('g');
 
 // mouse event vars
-var selected_node = null,
-    selected_link = null,
+var selected_link = null,
     mousedown_link = null,
     mousedown_node = null,
     mouseup_node = null;
@@ -297,7 +446,7 @@ function resetMouseVars() {
 function tick()
 {
   // draw directed edges with proper padding from node centers
-  path.attr('d', function(d)
+  link_paths.attr('d', function(d)
   {
     var pos_src = nodeIntersect(d.source, d.target),
         pos_tgt = nodeIntersect(d.target, d.source);
@@ -319,35 +468,40 @@ function tick()
     return 'M' + sourceX + ',' + sourceY + 'L' + targetX + ',' + targetY;
   });
 
-  circle.attr('transform', function(d)
+  node_groups.attr('transform', function(d)
   {
     return 'translate(' + d.x + ',' + d.y + ')';
   });
+
+  if( force.alpha() < 0.02 )
+    force.stop();
+
+  updateLinksThrottled();
 }
 
-function resize() {
+// force layout finished updating
+function updateLinks()
+{
+  for(var link_id of active_links)
+    handleRequest({'id': link_id, 'stamp': 0});
+}
+var updateLinksThrottled = throttle(updateLinks, 500);
+
+function resize()
+{
   var width  = parseInt(svg.style('width'), 10),
       height = parseInt(svg.style('height'), 10);
   force.size([width, height]).resume();
 }
 
 // update graph (called when needed)
-function restart() {
-  // path (link) group
-  path = path.data(links);
-
-  // update existing links
-  path.classed('selected', function(d) { return d === selected_link; })
-    .style('marker-start', function(d) { return d.left ? 'url(#start-arrow)' : ''; })
-    .style('marker-end', function(d) { return d.right ? 'url(#end-arrow)' : ''; });
-
+function restart(update_layout = true)
+{
+  link_paths = link_paths.data(links);
 
   // add new links
-  path.enter().append('svg:path')
+  link_paths.enter().append('svg:path')
     .attr('class', 'link')
-    .classed('selected', function(d) { return d === selected_link; })
-    .style('marker-start', function(d) { return d.left ? 'url(#start-arrow)' : ''; })
-    .style('marker-end', function(d) { return d.right ? 'url(#end-arrow)' : ''; })
     .on('mousedown', function(d) {
       if(d3.event.ctrlKey) return;
 
@@ -355,36 +509,35 @@ function restart() {
       mousedown_link = d;
       if(mousedown_link === selected_link) selected_link = null;
       else selected_link = mousedown_link;
-      selected_node = null;
+      // TODO clear node selection?
 
       d3.select('.card-concept-details')
         .style('display', 'none');
 
-      restart();
+      restart(false);
     });
 
   // remove old links
-  path.exit().remove();
+  link_paths.exit().remove();
 
+  // update links
+  link_paths
+    .classed('selected', function(d) { return d === selected_link; })
+    .style('marker-start', function(d) { return d.left ? 'url(#start-arrow)' : ''; })
+    .style('marker-end', function(d) { return d.right ? 'url(#end-arrow)' : ''; });
 
   // circle (node) group
   // NB: the function arg is crucial here! nodes are known by id, not by index!
-  circle = circle.data(nodes, function(d) { return d.id; });
+  node_groups = node_groups.data(nodes, function(d) { return d.id; });
 
-  // update existing nodes (reflexive & selected visual states)
-  circle.selectAll('ellipse')
-        .classed('selected', function(d) { return d === selected_node; })
-        .classed('reflexive', function(d) { return d.reflexive; });
+  var nodes_enter =
+    node_groups.enter().append('svg:g')
+                       .attr('class', 'node');
+  node_groups.exit().remove();
 
-  // add new nodes
-  var g = circle.enter().append('svg:g');
-
-  g.filter(function(d){ return !d.icon; })
-   .append('svg:ellipse')
-    .attr('class', 'node')
+  nodes_enter.append('svg:ellipse')
     .attr('rx', function(d) { return nodeSize(d)[0]; })
     .attr('ry', function(d) { return nodeSize(d)[1]; })
-    .classed('reflexive', function(d) { return d.reflexive; })
     .on('mouseover', function(d) {
       if(!mousedown_node || d === mousedown_node) return;
       // enlarge target node
@@ -395,41 +548,17 @@ function restart() {
       // unenlarge target node
       d3.select(this).attr('transform', '');
     })
+    
+    // --------------------
+    // Node mousedown/click
     .on('mousedown', function(d) {
-      if(d3.event.ctrlKey) return;
-
-      var card = d3.select('.card-concept-details');
-
-      // select node
+      d3.event.stopPropagation();
       mousedown_node = d;
-      if(mousedown_node === selected_node)
-      {
-        selected_node = null;
-        card.style('display', 'none');
-      }
-      else
-      {
-        selected_node = mousedown_node;
 
-        card.style('display', '');
-        card.select('.mdl-card__title-text').text(selected_node.name);
-        card.select('.mdl-card__supporting-text').text(JSON.stringify(selected_node, null, 1));
-
-        var li = card.select('.mdl-card__supporting-text')
-                     .append('ul')
-                     .selectAll('li')
-                     .data(selected_node.refs || []);
-            li_enter = li.enter();
-
-        li_enter.append('img')
-                .attr('src', function(d){ return d.icon; });
-        li_enter.append('a')
-                .attr('href', function(d){ return d.url; })
-                .text(function(d){ return d.url; });
-
-        li.exit().remove();
-      }
+      updateNodeSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
       selected_link = null;
+      link_paths
+        .classed('selected', function(d) { return d === selected_link; });
 
       // reposition drag line
       drag_line
@@ -437,7 +566,7 @@ function restart() {
         .classed('hidden', false)
         .attr('d', 'M' + mousedown_node.x + ',' + mousedown_node.y + 'L' + mousedown_node.x + ',' + mousedown_node.y);
 
-      restart();
+      restart(false);
     })
     .on('mouseup', function(d) {
       if(!mousedown_node) return;
@@ -492,6 +621,30 @@ function restart() {
 //      restart();
     });
 
+  nodes_enter
+    .append('svg:text')
+    .attr('x', 0)
+    .attr('y', 4)
+    .attr('class', 'id')
+    .text(function(d) { return d.name; });
+
+  node_groups.classed('selected', function(d) { return selected_node_ids.has(d.id); });
+
+  /*
+  var li = card.select('.mdl-card__supporting-text')
+  .append('ul')
+  .selectAll('li')
+  .data(selected_node.refs || []);
+
+var li_enter = li.enter();
+li_enter.append('img')
+.attr('src', function(d){ return d.icon; });
+li_enter.append('a')
+.attr('href', function(d){ return d.url; })
+.text(function(d){ return d.url; });
+
+li.exit().remove();
+
   var icons = g.filter(function(d){ return d.icon; });
   icons.append('svg:circle')
     .attr('r', 11)
@@ -503,21 +656,14 @@ function restart() {
     .attr('width', 16)
     .attr('height', 16)
     .attr('xlink:href', function(d){ return d.icon; });
+*/
 
-  // show node IDs
-  g.filter(function(d){ return !d.icon; })
-   .append('svg:text')
-      .attr('x', 0)
-      .attr('y', 4)
-      .attr('class', 'id')
-      .text(function(d) { return d.name; });
-
-  // remove old nodes
-  circle.exit().remove();
-
-  // set the graph in motion
-  resize();
-  force.start();
+  if( update_layout )
+  {
+    // set the graph in motion
+    resize();
+    force.start();
+  }
 }
 
 function mousemove() {
@@ -527,7 +673,7 @@ function mousemove() {
   drag_line.attr('d', 'M' + mousedown_node.x + ',' + mousedown_node.y
                     + 'L' + d3.mouse(this)[0] + ',' + d3.mouse(this)[1]);
 
-  restart();
+  restart(false);
 }
 
 function mouseup() {
@@ -559,13 +705,30 @@ var lastKeyDown = -1;
 
 function keydown() {
 
-  if( d3.event.keyCode == 27 ) // Escape
+  switch( d3.event.keyCode )
   {
-    if( dlgActive )
-      dlgActive.hide();
-    else
-      d3.select('.mdl-layout__drawer')
-        .classed('is-visible', false);
+    case 27: // Escape
+      if( dlgActive )
+        dlgActive.hide();
+      else
+      {
+        var drawer = d3.select('.mdl-layout__drawer');
+        if( drawer.classed('is-visible') )
+          drawer.classed('is-visible', false);
+      }
+      break;
+    case 8:  // Backspace
+    case 46: // Delete
+      for(var node_id of selected_node_ids)
+        removeNodeById(node_id);
+      updateNodeSelection("set", null);
+
+      if( selected_link )
+        links.splice(links.indexOf(selected_link), 1);
+      selected_link = null;
+
+      restart();
+      break;
   }
   return;
 
@@ -576,7 +739,7 @@ function keydown() {
 
   // ctrl
   if(d3.event.keyCode === 17) {
-    circle.call(force.drag);
+    node_groups.call(force.drag);
     svg.classed('ctrl', true);
   }
 
@@ -594,33 +757,6 @@ function keydown() {
       selected_node = null;
       restart();
       break;
-    case 66: // B
-      if(selected_link) {
-        // set link direction to both left and right
-        selected_link.left = true;
-        selected_link.right = true;
-      }
-      restart();
-      break;
-    case 76: // L
-      if(selected_link) {
-        // set link direction to left only
-        selected_link.left = true;
-        selected_link.right = false;
-      }
-      restart();
-      break;
-    case 82: // R
-      if(selected_node) {
-        // toggle node reflexivity
-        selected_node.reflexive = !selected_node.reflexive;
-      } else if(selected_link) {
-        // set link direction to right only
-        selected_link.left = false;
-        selected_link.right = true;
-      }
-      restart();
-      break;
   }
 }
 
@@ -628,16 +764,16 @@ function keyup() {
   lastKeyDown = -1;
 
   // ctrl
-  if(d3.event.keyCode === 17) {
-    circle
+  if(d3.event.keyCode === 17)
+  {
+    node_groups
       .on('mousedown.drag', null)
       .on('touchstart.drag', null);
     svg.classed('ctrl', false);
   }
 }
 
-function linkSelectedNode() {
-  var n = selected_node;
+function sendInitiateForNode(n) {
   var refs = {};
   if( n.refs )
     for(var i = 0; i < n.refs.length; i++)
@@ -645,9 +781,84 @@ function linkSelectedNode() {
 
   send({
     'task': 'INITIATE',
-    'id': selected_node.name,
+    'id': 'link://concept/' + n.id,
     'refs': refs
   });
+}
+
+function updateNodeSelection(action, node_id)
+{
+  if( action == 'set' )
+  {
+    if(    selected_node_ids.size == 1 
+        && selected_node_ids.has(node_id) )
+      return; // Nothing would change...
+
+    selected_node_ids.clear();
+    if( node_id )
+      selected_node_ids.add(node_id);
+
+    active_node_id = node_id;
+  }
+  else if( action == 'toggle' )
+  {
+    if( selected_node_ids.has(node_id) )
+    {
+      selected_node_ids.delete(node_id);
+      if( active_node_id == node_id )
+        active_node_id = null;
+    }
+    else
+    {
+      selected_node_ids.add(node_id);
+      active_node_id = node_id;
+    }
+  }
+  else
+    console.warn('Unknown action: ' + action);
+
+  send({
+    'task': 'CONCEPT-UPDATE-SELECTION',
+    'concepts': [...selected_node_ids],
+    'active': active_node_id
+  });
+
+  updateDetailDialogs();
+}
+
+function updateDetailDialogs()
+{
+  var card = d3.select('.card-concept-details');
+  var active_node = getNodeById(active_node_id);
+
+  if( !active_node )
+  {
+    card.style('display', 'none');
+    return;
+  }
+
+  card.style('display', '');
+  card.select('.mdl-card__title-text').text(active_node.name);
+  card.select('.concept-raw-data').text(JSON.stringify(active_node, null, 1));
+
+  var li = card.select('ul.concept-references')
+               .selectAll('li')
+               .data(active_node.refs || []);
+
+  var li_enter = li.enter()
+                   .append('li');
+  li_enter.append('img')
+          .attr('src', function(d){ return d.icon; });
+  li_enter.append('a')
+          .attr('href', function(d){ return d.url; })
+          .text(function(d){ return d.url; });
+
+  li.exit().remove();
+
+  card.select('.trigger-link')
+      .on('click', function() {
+        sendInitiateForNode(active_node);
+      });
 }
 
 var dlgActive = null;
@@ -713,13 +924,28 @@ d3.select('#dlg-create-concept').on('submit', function() {
   }
 });
 
+d3.select('#check-debug-mode').on('click', function(){
+  localStorage.setItem('debug-mode', this.checked);
+  d3.select('html').classed('debug-mode', this.checked);
+});
+
 // app starts here
 svg
+  .on('mousedown', function(d) {
+    mousedown_node = null;
+    updateNodeSelection('set', null);
+    restart(false);
+  })
   .on('mousemove', mousemove)
   .on('mouseup', mouseup);
 d3.select(window)
   .on('keydown', keydown)
   .on('keyup', keyup)
-  .on('resize', resize);
-restart();
-start();
+  .on('resize', resize)
+  .on('load', function(){
+    restart();
+    start();
+
+    d3.select('html')
+      .classed('debug-mode', localStorage.getItem('debug-mode') == 'true');
+  });

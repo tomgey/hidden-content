@@ -130,6 +130,21 @@ QStringList from_json<QStringList>( const QJsonValue& val,
 
 //------------------------------------------------------------------------------
 template<>
+QSet<QString> from_json<QSet<QString>>( const QJsonValue& val,
+                                        const QSet<QString>& def )
+{
+  if( !val.isArray() )
+    return def;
+
+  QSet<QString> set;
+  for(auto entry: val.toArray())
+    set << entry.toString();
+
+  return set;
+}
+
+//------------------------------------------------------------------------------
+template<>
 QColor from_json<QColor>( const QJsonValue& val,
                           const QColor& def )
 {

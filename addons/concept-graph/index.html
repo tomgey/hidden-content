@@ -34,31 +34,13 @@
   <div class="mdl-layout__drawer">
     <span class="mdl-layout-title">Settings</span>
     <nav class="mdl-navigation">
-      <a class="mdl-navigation__link" href="">Link</a>
-      <a class="mdl-navigation__link" href="">Link</a>
-      <a class="mdl-navigation__link" href="">Link</a>
-      <a class="mdl-navigation__link" href="">Link</a>
+      <label class="mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect" for="check-debug-mode">
+        <input type="checkbox" id="check-debug-mode" class="mdl-checkbox__input" />
+        <span class="mdl-checkbox__label">Enable Debug Tools</span>
+      </label>
     </nav>
   </div>
   <main class="mdl-layout__content">
-    <div id="tool-area">
-      <!-- Selected concept properties -->
-      <div class="card-concept-details mdl-card mdl-shadow--4dp" style="display:none;">
-        <div class="mdl-card__media">
-          <div class="mdl-card__title">
-            <h4 class="mdl-card__title-text">Active Concept</h4>
-            <!--<img src="skytower.jpg" width="173" height="157" border="0"
-           alt="" style="padding:10px;">-->
-          </div>
-        </div>
-        <div class="mdl-card__supporting-text" style="white-space: pre-wrap;">
-        </div>
-        <a class="mdl-button mdl-button--colored mdl-js-button mdl-js-ripple-effect" onclick="linkSelectedNode()">
-        Link...
-        </a>
-      </div>
-    </div>
-
     <div id="content-area">
       <!-- New concept button -->
       <button id="button-add-concept"
@@ -76,6 +58,35 @@
 
       <!-- Graph area -->
       <svg id="graph-drawing-area"/>
+    </div>
+
+    <div id="tool-area">
+
+      <!-- Selected concept properties -->
+      <div class="card-concept-details mdl-card mdl-shadow--4dp" style="display:none;">
+        <div class="mdl-card__media">
+          <div class="mdl-card__title">
+            <h4 class="mdl-card__title-text">Active Concept</h4>
+            <!--<img src="skytower.jpg" width="173" height="157" border="0"
+           alt="" style="padding:10px;">-->
+          </div>
+        </div>
+        <div class="concept-details mdl-card__supporting-text">
+          <ul class="concept-references"></ul>
+        </div>
+        <div class="mdl-card__actions mdl-card--border">
+          <a class="trigger-link mdl-button mdl-button--colored mdl-js-button mdl-js-ripple-effect">
+            Link...
+          </a>
+        </div>
+        <div class="concept-raw-data
+                    mdl-card__supporting-text
+                    mdl-card__actions
+                    mdl-card--border">
+          Raw data
+        </div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -110,6 +121,7 @@
 
 <script src="http://d3js.org/d3.v3.min.js"></script>
 <script src="../firefox/src/content/httpPing.js"></script>
+<script src="../firefox/src/content/throttle.js"></script>
 <script src="app.js"></script>
 
 </html>

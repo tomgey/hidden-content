@@ -4,12 +4,14 @@ html, body {
   margin: 0;
 }
 
-main.mdl-layout__content {
-  display: flex;
+.mdl-navigation > label {
+  margin: 0.5em;
 }
 
 #tool-area {
+  float: left;
   height: 100%;
+  margin-right: -100%;
   overflow-y: auto;
 }
 
@@ -22,10 +24,19 @@ main.mdl-layout__content {
   margin-top: 0;
 }
 
+.concept-raw-data {
+  display: none;
+  white-space: pre-wrap;
+}
+
+html.debug-mode .concept-raw-data {
+  display: block;
+}
+
 #content-area {
+  float: right;
   height: 100%;
-  flex-grow: 1;
-  position: relative;
+  width: 100%;
 }
 
 #button-add-concept {
@@ -101,20 +112,15 @@ path.link.hidden {
   stroke-width: 0;
 }
 
-.node {
+.node ellipse {
   cursor: pointer;
   fill: #eee;
   filter: drop-shadow(1px 2px 3px rgba(0, 0, 0, 0.8));
 }
 
-.node.selected {
+.node.selected ellipse {
   fill: rgb(255, 82, 82);
   filter: drop-shadow(1px 2px 6px rgba(26, 8, 8, 0.9));
-}
-
-.node.reflexive {
-  stroke: #000 !important;
-  stroke-width: 2.5px;
 }
 
 text {

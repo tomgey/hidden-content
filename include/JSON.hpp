@@ -52,6 +52,7 @@ template<> uint32_t from_json<uint32_t>(const QJsonValue&, const uint32_t&);
 template<> uint64_t from_json<uint64_t>(const QJsonValue&, const uint64_t&);
 template<> QVariantList from_json<QVariantList>(const QJsonValue&, const QVariantList&);
 template<> QStringList from_json<QStringList>(const QJsonValue&, const QStringList&);
+template<> QSet<QString> from_json<QSet<QString>>(const QJsonValue&, const QSet<QString>&);
 template<> QColor from_json<QColor>(const QJsonValue&, const QColor&);
 template<> LinksRouting::Color from_json<LinksRouting::Color>(const QJsonValue&, const LinksRouting::Color&);
 template<> QPoint from_json<QPoint>(const QJsonValue&, const QPoint&);

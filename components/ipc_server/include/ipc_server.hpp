@@ -37,6 +37,7 @@ namespace LinksRouting
 {
   struct ClientInfo;
 
+  typedef QSet<QString> StringSet;
   typedef QMap<QString, Properties> ConceptNodes;
   typedef QMap<QPair<QString, QString>, Properties> ConceptEdges;
 
@@ -142,6 +143,7 @@ namespace LinksRouting
 
       void onConceptUpdate(ClientRef, QJsonObject const& msg);
       void onConceptUpdateLink(ClientRef, QJsonObject const& msg);
+      void onConceptUpdateSelection(ClientRef, QJsonObject const& msg);
 
       void onValueGet(ClientRef, QJsonObject const& msg);
       void onValueSet(ClientRef, QJsonObject const& msg);
@@ -220,6 +222,8 @@ namespace LinksRouting
 
       ConceptNodes  _concept_nodes;
       ConceptEdges  _concept_links;
+      StringSet     _selected_concepts;
+      QString       _active_concept;
 
       /* List of all open searches */
       slot_t<LinkDescription::LinkList>::type _slot_links;

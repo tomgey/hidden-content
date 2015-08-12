@@ -145,6 +145,8 @@ namespace LinksRouting
       std::bind(&IPCServer::onConceptUpdate, this, _1, _2);
     _msg_handlers["CONCEPT-UPDATE-LINK"] =
       std::bind(&IPCServer::onConceptUpdateLink, this, _1, _2);
+    _msg_handlers["CONCEPT-UPDATE-SELECTION"] =
+      std::bind(&IPCServer::onConceptUpdateSelection, this, _1, _2);
     _msg_handlers["DUMP"] =
       std::bind(&IPCServer::dumpState, this, std::ref(std::cout));
     _msg_handlers["FOUND"] = // TODO remove and just use UPDATE?
@@ -996,7 +998,7 @@ namespace LinksRouting
 
   //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-UPDATE',
-  //    'cmd': 'new',
+  //    'cmd': 'new' | 'delete',
   //    'id': sel,
   //    'src-url': url,
   //    'src-icon': img_data
@@ -1013,6 +1015,7 @@ namespace LinksRouting
         qWarning() << "Concept" << name << "already exists.";
         return;
       }
+      qDebug() << "add concept:" << id;
 
       QJsonObject msg_ret(msg);
       msg_ret.remove("task");
@@ -1021,20 +1024,36 @@ namespace LinksRouting
       msg_ret["name"] = name;
 
       _concept_nodes.insert(id, msg_ret.toVariantMap());
-      qDebug() << _concept_nodes;
 
       msg_ret["task"] = "CONCEPT-NEW";
       distributeMessage(msg_ret, nullptr);
 
       return;
     }
+    else if( cmd == "delete" )
+    {
+      auto it = _concept_nodes.find(id);
+      if( it == _concept_nodes.end() )
+      {
+        qWarning() << "Can not delete not existing concept" << name;
+        return;
+      }
+
+      qDebug() << "remove concept:" << id;
+      _concept_nodes.erase(it);
+
+      distributeMessage(QJsonObject({
+          {"task", "CONCEPT-DELETE"},
+          {"id", id}
+        }), nullptr
+      );
+    }
   }
 
   //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-UPDATE-LINK',
   //    'cmd': 'new',
-  //    'source': source.id,
-  //    'target': target.id
+  //    'nodes': [<node ids>]
   void IPCServer::onConceptUpdateLink(ClientRef client, QJsonObject const& msg)
   {
     QString const cmd = from_json<QString>(msg.value("cmd"));
@@ -1058,15 +1077,45 @@ namespace LinksRouting
 
       _concept_links.insert(link_id, {});
 
-      QJsonObject msg_ret{
-        {"task", "CONCEPT-LINK-NEW"},
-        {"nodes", to_json(node_ids)}
-      };
+      QJsonObject msg_ret;
       qDebug() << msg_ret;
 
-      distributeMessage(msg_ret, nullptr);
+      distributeMessage(QJsonObject({
+          {"task", "CONCEPT-LINK-NEW"},
+          {"nodes", to_json(node_ids)}
+        }), nullptr
+      );
       return;
     }
+    else if( cmd == "delete" )
+    {
+      auto it = _concept_links.find(link_id);
+      if( it == _concept_links.end() )
+      {
+        qWarning() << "Can not delete not existing link" << link_id;
+        return;
+      }
+
+      qDebug() << "remove link:" << link_id;
+      _concept_links.erase(it);
+
+      distributeMessage(QJsonObject({
+          {"task", "CONCEPT-LINK-DELETE"},
+          {"nodes", to_json(node_ids)}
+        }), nullptr
+      );
+    }
+  }
+
+  //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-UPDATE-SELECTION',
+  //    'concepts': [<list of concept ids>]
+  void IPCServer::onConceptUpdateSelection( ClientRef client,
+                                            QJsonObject const& msg )
+  {
+    _selected_concepts = from_json<StringSet>(msg.value("concepts"));
+    _active_concept = from_json<QString>(msg.value("active"));
+    distributeMessage(msg, client);
   }
 
   //----------------------------------------------------------------------------

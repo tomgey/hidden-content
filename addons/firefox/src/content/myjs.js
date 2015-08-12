@@ -7,6 +7,7 @@ var ctrl_socket = null;
 var ctrl_queue = null;
 var status = '';
 var status_sync = '';
+var selected_concepts = [];
 
 function getPid()
 {
@@ -512,7 +513,16 @@ function onLoad(e)
 {
   var doc = e.originalTarget;
   var view = doc.defaultView;
-
+  
+  try
+  {
+    view.localStorage.setItem('pid', getPid());
+  }
+  catch(e)
+  {
+    console.log("Not setting pid to local storage.", e);
+  }
+  
   // Ignore frame load events
   if( view && view.frameElement )
     return;
@@ -660,7 +670,7 @@ function _websocketDrag(e)
 
 function onDocumentClick(e)
 {
-  if( !e.ctrlKey )
+  if( stopped || !e.ctrlKey )
     return;
 
   e.preventDefault();
@@ -720,7 +730,8 @@ function onContextMenu()
   }
 
   $("context-concepts-new-node").hidden = !links_active;
-  $("context-concepts-link-selection").hidden = !links_active;
+  $("context-concepts-link-selection").hidden = !links_active
+                                             || !selected_concepts.length;
 }
 
 function imgToBase64(url, fallback_text, cb_done)
@@ -814,7 +825,11 @@ function onConceptNodeNew(el, event)
 
 function onConceptEdgeNew(el, event)
 {
-
+  send({
+    'task': 'CONCEPT-UPDATE-LINK',
+    'cmd': 'new',
+    'nodes': selected_concepts
+  });
 }
 
 /**
@@ -1072,17 +1087,22 @@ function reportVisLinks(id, found, refs)
 
   if( debug )
     var start = Date.now();
+  
+  var bbs = [];
 
-  if( !found && getPref("replace-route") )
-    abortAll();
-
-  var bbs = searchDocument(content.document, id);
-
-  if( debug )
+  if( !refs )
   {
-    for(var i = 1; i < 10; i += 1)
-      searchDocument(content.document, id);
-    alert("time = " + (Date.now() - start) / 10);
+    if( !found && getPref("replace-route") )
+      abortAll();
+
+    bbs = searchDocument(content.document, id);
+  
+    if( debug )
+    {
+      for(var i = 1; i < 10; i += 1)
+        searchDocument(content.document, id);
+      alert("time = " + (Date.now() - start) / 10);
+    }
   }
 
   last_id = id;
@@ -1516,7 +1536,10 @@ function register(match_title = false, src_id = 0)
       else if( msg.task == 'SYNC' )
         handleSyncMsg(msg);
       else if( msg.task.startsWith('CONCEPT-') )
-        ; // Ignoring concept graph message
+      {
+        if( msg.task == 'CONCEPT-UPDATE-SELECTION' )
+          selected_concepts = msg.concepts;
+      }
       else
         console.log("Unknown message: " + event.data);
     }
