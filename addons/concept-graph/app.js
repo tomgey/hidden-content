@@ -62,6 +62,11 @@ function start(check = true)
       addNode(msg);
       restart();
     }
+    else if( msg.task == 'CONCEPT-UPDATE' )
+    {
+      delete msg.task;
+      updateNode(msg);
+    }
     else if( msg.task == 'CONCEPT-DELETE' )
     {
       if( removeNodeById(msg.id) )
@@ -94,7 +99,11 @@ function start(check = true)
 
         for(var i = 0; i < msg.links.length; ++i)
           addLink(msg.links[i]);
+        
+        selected_node_ids = new Set(msg.selected);
+        active_node_id = msg.active;
 
+        updateDetailDialogs();
         restart();
       }
       else
@@ -240,9 +249,35 @@ function addNode(node)
 
   nodes.push(node);
   
+  if( nodes.length == 1 )
+    updateNodeSelection("set", node.id);
+
   if( queue_timeout )
     clearTimeout(queue_timeout);
   queue_timeout = setTimeout(checkRequestQueue, 200);
+}
+
+/**
+ * Update node information
+ */
+function updateNode(new_node)
+{
+  var node = getNodeById(new_node.id);
+  if( !node )
+  {
+    console.warn("Unknown node: " + new_node.id);
+    return;
+  }
+
+  console.log("Update node: " + node.name, new_node);
+  for(var prop in new_node)
+  {
+    console.log('set ' + prop + ' to ' + new_node[prop]);
+    node[prop] = new_node[prop];
+  }
+
+  updateDetailDialogs();
+  restart();
 }
 
 function checkRequestQueue()
@@ -357,6 +392,9 @@ function removeNodeById(id)
 
   if( !node )
     return false;
+
+  updateNodeSelection('unset', node.id);
+  updateDetailDialogs();
 
   // Remove matching links...
   for(var i = links.length - 1; i >= 0; --i)
@@ -536,8 +574,6 @@ function restart(update_layout = true)
   node_groups.exit().remove();
 
   nodes_enter.append('svg:ellipse')
-    .attr('rx', function(d) { return nodeSize(d)[0]; })
-    .attr('ry', function(d) { return nodeSize(d)[1]; })
     .on('mouseover', function(d) {
       if(!mousedown_node || d === mousedown_node) return;
       // enlarge target node
@@ -625,38 +661,15 @@ function restart(update_layout = true)
     .append('svg:text')
     .attr('x', 0)
     .attr('y', 4)
-    .attr('class', 'id')
+    .attr('class', 'id');
+
+  node_groups
+    .classed('selected', function(d) { return selected_node_ids.has(d.id); });
+  node_groups.select('ellipse')
+    .attr('rx', function(d) { return nodeSize(d)[0]; })
+    .attr('ry', function(d) { return nodeSize(d)[1]; });
+  node_groups.selectAll('text')
     .text(function(d) { return d.name; });
-
-  node_groups.classed('selected', function(d) { return selected_node_ids.has(d.id); });
-
-  /*
-  var li = card.select('.mdl-card__supporting-text')
-  .append('ul')
-  .selectAll('li')
-  .data(selected_node.refs || []);
-
-var li_enter = li.enter();
-li_enter.append('img')
-.attr('src', function(d){ return d.icon; });
-li_enter.append('a')
-.attr('href', function(d){ return d.url; })
-.text(function(d){ return d.url; });
-
-li.exit().remove();
-
-  var icons = g.filter(function(d){ return d.icon; });
-  icons.append('svg:circle')
-    .attr('r', 11)
-    .style('fill', '#eee')
-    .style('stroke', '#333');
-  icons.append('svg:image')
-    .attr('x', -8)
-    .attr('y', -8)
-    .attr('width', 16)
-    .attr('height', 16)
-    .attr('xlink:href', function(d){ return d.icon; });
-*/
 
   if( update_layout )
   {
@@ -704,7 +717,7 @@ function spliceLinksForNode(node) {
 var lastKeyDown = -1;
 
 function keydown() {
-
+  var drawer = d3.select('.mdl-layout__drawer');
   switch( d3.event.keyCode )
   {
     case 27: // Escape
@@ -712,16 +725,17 @@ function keydown() {
         dlgActive.hide();
       else
       {
-        var drawer = d3.select('.mdl-layout__drawer');
         if( drawer.classed('is-visible') )
           drawer.classed('is-visible', false);
       }
       break;
     case 8:  // Backspace
     case 46: // Delete
+      if( dlgActive || drawer.classed('is-visible') )
+        return;
+
       for(var node_id of selected_node_ids)
         removeNodeById(node_id);
-      updateNodeSelection("set", null);
 
       if( selected_link )
         links.splice(links.indexOf(selected_link), 1);
@@ -790,10 +804,6 @@ function updateNodeSelection(action, node_id)
 {
   if( action == 'set' )
   {
-    if(    selected_node_ids.size == 1 
-        && selected_node_ids.has(node_id) )
-      return; // Nothing would change...
-
     selected_node_ids.clear();
     if( node_id )
       selected_node_ids.add(node_id);
@@ -813,6 +823,12 @@ function updateNodeSelection(action, node_id)
       selected_node_ids.add(node_id);
       active_node_id = node_id;
     }
+  }
+  else if( action == 'unset' )
+  {
+    selected_node_ids.delete(node_id);
+    if( active_node_id == node_id )
+      active_node_id = null;
   }
   else
     console.warn('Unknown action: ' + action);
@@ -859,6 +875,24 @@ function updateDetailDialogs()
       .on('click', function() {
         sendInitiateForNode(active_node);
       });
+  card.select('.concept-edit')
+      .on('click', function() {
+        dlgConceptName.show(function(name){
+            send({
+              'task': 'CONCEPT-UPDATE',
+              'cmd': 'update',
+              'id': active_node_id,
+              'name': name
+            });
+          },
+          active_node.name
+        );
+      });
+  card.select('.concept-delete')
+     .on('click', function() {
+       removeNodeById(active_node_id);
+       restart();
+     });
 }
 
 var dlgActive = null;
@@ -880,48 +914,62 @@ var overlay = {
   }
 };
 
-var dlgNewConcept = {
-  show: function() {
+var dlgConceptName = {
+  show: function(cb, cur_val = '') {
+    dlgConceptName._cb = cb;
     overlay.show();
 
-    d3.select('#create-concept-input-name')
-      .property('value', '')
-      .node().focus();
+    var n = d3.select('#dlg-concept-name-input')
+              .property('value', cur_val)
+              .node();
+    n.focus();
+    if( n.setSelectionRange )
+      n.setSelectionRange(n.value.length, n.value.length);
 
-    dlgActive = dlgNewConcept;
+    d3.select('#dlg-concept-name-field')
+      .classed('is-dirty', cur_val && cur_val.length);
+
+    dlgActive = dlgConceptName;
   },
   hide: function() {
     overlay.hide();
 
-    d3.select('#create-concept-name')
+    d3.select('#dlg-concept-name-field')
       .classed('is-dirty is-invalid is-focused', false);
 
     dlgActive = null;
+    dlgConceptName._cb = null;
   }
 };
 
-d3.select('#dlg-create-concept').on('submit', function() {
+d3.select('#dlg-concept-name').on('submit', function() {
   d3.event.preventDefault();
-  var name = d3.select('#create-concept-input-name')
+  var name = d3.select('#dlg-concept-name-input')
                .property('value')
                .trim();
 
   if( !name.length )
   {
-    d3.select('#create-concept-name')
+    d3.select('#dlg-concept-name-field')
       .classed('is-invalid', true);
-    d3.select('#create-concept-input-name')
+    d3.select('#dlg-concept-name-input')
       .node().focus();
   }
   else
   {
-    dlgNewConcept.hide();
+    dlgConceptName._cb(name);
+    dlgConceptName.hide();
+  }
+});
+
+d3.select('#button-add-concept').on('click', function() {
+  dlgConceptName.show(function(name){
     send({
       'task': 'CONCEPT-UPDATE',
       'cmd': 'new',
       'id': name
     });
-  }
+  });
 });
 
 d3.select('#check-debug-mode').on('click', function(){
@@ -933,8 +981,12 @@ d3.select('#check-debug-mode').on('click', function(){
 svg
   .on('mousedown', function(d) {
     mousedown_node = null;
-    updateNodeSelection('set', null);
-    restart(false);
+
+    if( !d3.event.ctrlKey )
+    {
+      updateNodeSelection('set', null);
+      restart(false);
+    }
   })
   .on('mousemove', mousemove)
   .on('mouseup', mouseup);

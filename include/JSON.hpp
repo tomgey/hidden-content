@@ -44,6 +44,15 @@ QJsonArray to_json(const QMap<QPair<QString, QString>, V>& map)
   return vec;
 }
 
+template<class V>
+QJsonArray to_json(const QSet<V>& set)
+{
+  QJsonArray array;
+  for(auto const& v: set)
+    array << to_json(v);
+  return array;
+}
+
 template<class T> T from_json(const QJsonValue&, const T& def = T());
 template<> QString from_json<QString>(const QJsonValue&, const QString&);
 template<> quintptr from_json<quintptr>(const QJsonValue&, const quintptr&);
