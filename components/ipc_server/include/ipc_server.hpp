@@ -141,9 +141,26 @@ namespace LinksRouting
                                    QString const& msg_raw );
       void onClientSemanticZoom(ClientRef, QJsonObject const& msg);
 
+      /**
+       * Get an existing concept or add a new one.
+       *
+       * @param create      Create new concept if not exists
+       * @param error_desc  Description added to error message if something
+       *                    fails
+       *
+       * @return An iterator to the existing or newly created concept and a bool
+       *         indicating whether a new concept has been inserted.
+       */
+      QPair<ConceptNodes::iterator, bool>
+      getConcept( QJsonObject const& msg,
+                  bool create = false,
+                  QString const& error_desc = "" );
+
       void onConceptUpdate(ClientRef, QJsonObject const& msg);
-      void onConceptUpdateLink(ClientRef, QJsonObject const& msg);
-      void onConceptUpdateSelection(ClientRef, QJsonObject const& msg);
+      void onConceptUpdateRefs(ClientRef, QJsonObject const& msg);
+      void onConceptLinkUpdate(ClientRef, QJsonObject const& msg);
+      void onConceptLinkUpdateRefs(ClientRef, QJsonObject const& msg);
+      void onConceptSelectionUpdate(ClientRef, QJsonObject const& msg);
 
       void onValueGet(ClientRef, QJsonObject const& msg);
       void onValueSet(ClientRef, QJsonObject const& msg);

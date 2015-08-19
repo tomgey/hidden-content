@@ -143,10 +143,14 @@ namespace LinksRouting
       std::bind(&IPCServer::onClientCmd, this, _1, _2, _3);
     _msg_handlers["CONCEPT-UPDATE"] =
       std::bind(&IPCServer::onConceptUpdate, this, _1, _2);
-    _msg_handlers["CONCEPT-UPDATE-LINK"] =
-      std::bind(&IPCServer::onConceptUpdateLink, this, _1, _2);
-    _msg_handlers["CONCEPT-UPDATE-SELECTION"] =
-      std::bind(&IPCServer::onConceptUpdateSelection, this, _1, _2);
+    _msg_handlers["CONCEPT-UPDATE-REFS"] =
+      std::bind(&IPCServer::onConceptUpdateRefs, this, _1, _2);
+    _msg_handlers["CONCEPT-LINK-UPDATE"] =
+      std::bind(&IPCServer::onConceptLinkUpdate, this, _1, _2);
+    _msg_handlers["CONCEPT-LINK-UPDATE-REFS"] =
+      std::bind(&IPCServer::onConceptLinkUpdateRefs, this, _1, _2);
+    _msg_handlers["CONCEPT-SELECTION-UPDATE"] =
+      std::bind(&IPCServer::onConceptSelectionUpdate, this, _1, _2);
     _msg_handlers["DUMP"] =
       std::bind(&IPCServer::dumpState, this, std::ref(std::cout));
     _msg_handlers["FOUND"] = // TODO remove and just use UPDATE?
@@ -997,6 +1001,31 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  QPair<ConceptNodes::iterator, bool>
+  IPCServer::getConcept( QJsonObject const& msg,
+                         bool create,
+                         QString const& error_desc )
+  {
+    QString id = from_json<QString>(msg.value("id")).trimmed().toLower();
+    if( id.isEmpty() )
+    {
+      qWarning() << "Empty concept id" << error_desc << msg;
+      return {_concept_nodes.end(), false};
+    }
+
+    auto it = _concept_nodes.find(id);
+    if( it == _concept_nodes.end() )
+    {
+      if( create )
+        return {_concept_nodes.insert(id, {{"id", id}}), true};
+      else if( !error_desc.isEmpty() )
+        qWarning() << "Can not" << error_desc << "not existing concept" << msg;
+    }
+
+    return {it, false};
+  }
+
+  //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-UPDATE',
   //    'cmd': 'new' | 'update' | 'delete',
   //    'id': sel,
@@ -1005,15 +1034,20 @@ namespace LinksRouting
   //    'src-icon': img_data
   void IPCServer::onConceptUpdate(ClientRef client, QJsonObject const& msg)
   {
-    QString name = from_json<QString>(msg.value("id")).trimmed(),
-            id = name.toLower();
-    if( msg.contains("name") )
-      name = from_json<QString>(msg.value("name")).trimmed();
-
     QString const cmd = from_json<QString>(msg.value("cmd"));
     if( cmd == "new" )
     {
-      if( _concept_nodes.contains(id) )
+      auto insert_pair = getConcept(msg, true, "create concept");
+      if( insert_pair.first == _concept_nodes.end() )
+        return;
+
+      auto it = insert_pair.first;
+      QString const id = it->value("id").toString();
+      QString const name = msg.contains("name")
+                         ? from_json<QString>(msg.value("name")).trimmed()
+                         : from_json<QString>(msg.value("id")).trimmed();
+
+      if( !insert_pair.second )
       {
         qWarning() << "Concept" << name << "with id" << id << "already exists.";
         return;
@@ -1026,7 +1060,7 @@ namespace LinksRouting
       msg_ret["id"] = id;
       msg_ret["name"] = name;
 
-      _concept_nodes.insert(id, msg_ret.toVariantMap());
+      it.value() = msg_ret.toVariantMap();
 
       msg_ret["task"] = "CONCEPT-NEW";
       distributeMessage(msg_ret, nullptr);
@@ -1035,18 +1069,21 @@ namespace LinksRouting
     }
     else if( cmd == "update" )
     {
-      auto it = _concept_nodes.find(id);
-      if( it == _concept_nodes.end() )
-      {
-        qWarning() << "Can not update not existing concept" << id;
+      auto insert_pair = getConcept(msg, false, "update concept");
+      if( insert_pair.first == _concept_nodes.end() )
         return;
-      }
 
+      QString const name = from_json<QString>(msg.value("name")).trimmed();
       if( name.isEmpty() )
       {
         qWarning() << "Only update of name is supported...";
         return;
       }
+
+      auto it = insert_pair.first;
+      qDebug() << "Changing name of concept"
+               << it->value("name")
+               << "to" << name;
 
       (*it)["name"] = name;
 
@@ -1057,12 +1094,12 @@ namespace LinksRouting
     }
     else if( cmd == "delete" )
     {
-      auto it = _concept_nodes.find(id);
-      if( it == _concept_nodes.end() )
-      {
-        qWarning() << "Can not delete not existing concept" << id;
+      auto insert_pair = getConcept(msg, false, "delete concept");
+      if( insert_pair.first == _concept_nodes.end() )
         return;
-      }
+
+      auto it = insert_pair.first;
+      QString const id = it->value("id").toString();
 
       qDebug() << "remove concept:" << it->value("name") << "with id" << id;
       _concept_nodes.erase(it);
@@ -1075,11 +1112,71 @@ namespace LinksRouting
     }
   }
 
+
   //----------------------------------------------------------------------------
-  //    'task': 'CONCEPT-UPDATE-LINK',
+  //    'task': 'CONCEPT-UPDATE-REFS',
+  //    'cmd': 'add',
+  //    'id': <concept-id>,
+  //    'ref': {
+  //      'url': <url>,
+  //      'icon': <img_data>,
+  //      'ranges': [<range>, ...]
+  //    }
+  void IPCServer::onConceptUpdateRefs(ClientRef, QJsonObject const& msg)
+  {
+    auto insert_pair = getConcept(msg, false, "update references");
+    if( insert_pair.first == _concept_nodes.end() )
+      return;
+
+    QJsonObject new_ref = msg.value("ref").toObject();
+    QString url = from_json<QString>(new_ref.value("url"));
+    if( url.isEmpty() )
+    {
+      qWarning() << "Missing url for adding reference." << msg;
+      return;
+    }
+
+    auto refs = insert_pair.first->value("refs").toMap();
+    auto ref_it = refs.find(url);
+    if( ref_it == refs.end() )
+    {
+      qDebug() << "Adding new reference." << url;
+
+      refs[ url ] = QVariantMap({
+        {"icon", from_json<QString>(new_ref.value("icon"))},
+        {"ranges", new_ref.value("ranges").toArray().toVariantList()}
+      });
+    }
+    else
+    {
+      qDebug() << "Adding selection to existing reference." << url;
+
+      auto ref = ref_it.value().toMap();
+
+      if( new_ref.contains("icon") )
+        ref["icon"] = from_json<QString>(new_ref.value("icon"));
+
+      auto ranges = ref.value("ranges").toList();
+      for(auto range: new_ref.value("ranges").toArray())
+        ranges.append(range.toObject().toVariantMap());
+      ref["ranges"] = ranges;
+
+      ref_it.value() = ref;
+    }
+
+    (*insert_pair.first)["refs"] = refs;
+
+    QJsonObject msg_ret = QJsonObject::fromVariantMap(*insert_pair.first);
+    msg_ret["task"] = "CONCEPT-UPDATE";
+
+    distributeMessage(msg_ret, nullptr);
+  }
+
+  //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-LINK-UPDATE',
   //    'cmd': 'new',
   //    'nodes': [<node ids>]
-  void IPCServer::onConceptUpdateLink(ClientRef client, QJsonObject const& msg)
+  void IPCServer::onConceptLinkUpdate(ClientRef client, QJsonObject const& msg)
   {
     QString const cmd = from_json<QString>(msg.value("cmd"));
     QStringList node_ids = from_json<QStringList>(msg.value("nodes"));
@@ -1133,10 +1230,24 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  //    'task': 'CONCEPT-UPDATE-SELECTION',
+  //    'task': 'CONCEPT-UPDATE-REFS'
+  //    'cmd': 'add'
+  //    'nodes': [<node ids>]
+  //    'ref': {
+  //      'url': <url>,
+  //      'icon': <img_data>,
+  //      'ranges': [<range>, ...]
+  //    }
+  void IPCServer::onConceptLinkUpdateRefs(ClientRef, QJsonObject const& msg)
+  {
+
+  }
+
+  //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-SELECTION-UPDATE',
   //    'concepts': [<list of concept ids>],
   //    'active': <active concept id>
-  void IPCServer::onConceptUpdateSelection( ClientRef client,
+  void IPCServer::onConceptSelectionUpdate( ClientRef client,
                                             QJsonObject const& msg )
   {
     _selected_concepts = from_json<StringSet>(msg.value("concepts"));

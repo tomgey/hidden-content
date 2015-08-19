@@ -78,7 +78,7 @@ function start(check = true)
       addLink(msg);
       restart();
     }
-    else if( msg.task == 'CONCEPT-UPDATE-SELECTION' )
+    else if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
     {
       selected_node_ids = new Set(msg.concepts);
       active_node_id = msg.active;
@@ -99,7 +99,7 @@ function start(check = true)
 
         for(var i = 0; i < msg.links.length; ++i)
           addLink(msg.links[i]);
-        
+
         selected_node_ids = new Set(msg.selected);
         active_node_id = msg.active;
 
@@ -227,7 +227,7 @@ function circlePoints(pos)
     points[i] = [ pos.x + r * Math.cos(i * step),
                   pos.y + r * Math.sin(i * step) ];
   points[cnt] = {rel: true};
-  
+
   return points;
 }
 
@@ -248,7 +248,7 @@ function addNode(node)
   if( node.y == undefined ) node.y = force.size()[1] / 2 + (Math.random() - 0.5) * 2;
 
   nodes.push(node);
-  
+
   if( nodes.length == 1 )
     updateNodeSelection("set", node.id);
 
@@ -403,7 +403,7 @@ function removeNodeById(id)
     if( link.source.id == node.id || link.target.id == node.id )
     {
       send({
-        'task': 'CONCEPT-UPDATE-LINK',
+        'task': 'CONCEPT-LINK-UPDATE',
         'cmd': 'delete',
         'nodes': [link.source.id, link.target.id]
       });
@@ -584,7 +584,7 @@ function restart(update_layout = true)
       // unenlarge target node
       d3.select(this).attr('transform', '');
     })
-    
+
     // --------------------
     // Node mousedown/click
     .on('mousedown', function(d) {
@@ -642,7 +642,7 @@ function restart(update_layout = true)
       if( !link )
       {
         send({
-          'task': 'CONCEPT-UPDATE-LINK',
+          'task': 'CONCEPT-LINK-UPDATE',
           'cmd': 'new',
           'nodes': [source.id, target.id]
         });
@@ -658,7 +658,7 @@ function restart(update_layout = true)
     });
 
   nodes_enter
-    .append('svg:text')
+    .append('text')
     .attr('x', 0)
     .attr('y', 4)
     .attr('class', 'id');
@@ -670,6 +670,23 @@ function restart(update_layout = true)
     .attr('ry', function(d) { return nodeSize(d)[1]; });
   node_groups.selectAll('text')
     .text(function(d) { return d.name; });
+
+  var ref_icons =
+    node_groups.selectAll('image.ref')
+               .data(function(d) { return d.refs || []; });
+
+  ref_icons.enter()
+    .append('image')
+    .classed('ref', true)
+    .attr('width', 16)
+    .attr('height', 16);
+    //.attr('clip-path', 'url(#clipCircle)');
+  ref_icons.exit()
+    .remove();
+  ref_icons
+    .attr('xlink:href', function(d) { return d.icon; })
+    .attr('x', -8)
+    .attr('y', 24);
 
   if( update_layout )
   {
@@ -788,15 +805,10 @@ function keyup() {
 }
 
 function sendInitiateForNode(n) {
-  var refs = {};
-  if( n.refs )
-    for(var i = 0; i < n.refs.length; i++)
-      refs[ n.refs[i].url ] = n.refs[i].selections;
-
   send({
     'task': 'INITIATE',
     'id': 'link://concept/' + n.id,
-    'refs': refs
+    'refs': n.refs || {}
   });
 }
 
@@ -834,7 +846,7 @@ function updateNodeSelection(action, node_id)
     console.warn('Unknown action: ' + action);
 
   send({
-    'task': 'CONCEPT-UPDATE-SELECTION',
+    'task': 'CONCEPT-SELECTION-UPDATE',
     'concepts': [...selected_node_ids],
     'active': active_node_id
   });
@@ -857,9 +869,18 @@ function updateDetailDialogs()
   card.select('.mdl-card__title-text').text(active_node.name);
   card.select('.concept-raw-data').text(JSON.stringify(active_node, null, 1));
 
+  var refs = [];
+  for(var url in active_node.refs)
+  {
+    var ref = active_node.refs[url];
+    ref['url'] = url;
+    refs.push(ref);
+  }
+  console.log(active_node.refs, refs);
+
   var li = card.select('ul.concept-references')
                .selectAll('li')
-               .data(active_node.refs || []);
+               .data(refs);
 
   var li_enter = li.enter()
                    .append('li');

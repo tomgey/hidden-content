@@ -66,6 +66,11 @@
               tooltiptext="Create new concept node from selected text."
               onclick="onConceptNodeNew(this, event);"
               label="New Object" />
+    <menuitem id="context-concepts-add-ref"
+              class="menuitem-iconic"
+              tooltiptext="Add reference to selected text to selected objects."
+              onclick="onConceptAddRef(this, event);"
+              label="Add Reference" />
     <menuitem id="context-concepts-link-selection"
               class="menuitem-iconic"
               tooltiptext="Link selection to concept or relation."

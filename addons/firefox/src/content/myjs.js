@@ -513,7 +513,7 @@ function onLoad(e)
 {
   var doc = e.originalTarget;
   var view = doc.defaultView;
-  
+
   try
   {
     view.localStorage.setItem('pid', getPid());
@@ -522,7 +522,7 @@ function onLoad(e)
   {
     console.log("Not setting pid to local storage.", e);
   }
-  
+
   // Ignore frame load events
   if( view && view.frameElement )
     return;
@@ -730,8 +730,11 @@ function onContextMenu()
   }
 
   $("context-concepts-new-node").hidden = !links_active;
-  $("context-concepts-link-selection").hidden = !links_active
-                                             || !selected_concepts.length;
+
+  var selected_active =  links_active
+                      && selected_concepts.length;
+  $("context-concepts-link-selection").hidden = !selected_active;
+  $('context-concepts-add-ref').hidden = !selected_active;
 }
 
 function imgToBase64(url, fallback_text, cb_done)
@@ -772,9 +775,15 @@ function imgToBase64(url, fallback_text, cb_done)
   }
 }
 
-function onConceptNodeNew(el, event)
+/**
+ * Add reference to given list of ids for current selection.
+ */
+function addRefSelection(ids, sel)
 {
-  var sel = content.getSelection();
+  if(typeof ids == 'string')
+    var ids = [ids];
+
+  var sel = sel || content.getSelection();
   var body = content.document.body;
 
   var ranges = [];
@@ -789,44 +798,76 @@ function onConceptNodeNew(el, event)
     });
   }
 
-  var name = sel.toString().replace(/\s{2,}/g, ' ')
-                           .replace(/[^a-zA-Z0-9\s]/g, '')
-                           .trim();
-  var url = content.location.href;
-
-  name = window.prompt("Enter name for new concept:", name);
-  if(typeof name != "string")
-    return;
-
-  name = name.trim();
-  if( sel.length < 1 )
-    return;
-
   var base_domain = getBaseDomainFromHost(content.location.hostname);
+  var url = content.location.origin + content.location.pathname;
 
   imgToBase64(
     gBrowser.getIcon(),
     base_domain[0].toUpperCase(),
     function(img_data)
     {
-      send({
-        'task': 'CONCEPT-UPDATE',
-        'cmd': 'new',
-        'id': name,
-        'refs': [
-          { 'url': url,
-            'icon': img_data,
-            'selections': [ranges] }
-        ]
-      });
+      var ref = {
+        'url': url,
+        'icon': img_data,
+        'ranges': ranges
+      };
+
+      for(var i = 0; i < ids.length; i++)
+      {
+        var msg = {
+          'cmd': 'add',
+          'ref': ref
+        };
+        if(typeof ids[i] == "string")
+        {
+          msg['task'] = 'CONCEPT-UPDATE-REFS';
+          msg['id'] = ids[i];
+        }
+        else
+        {
+          msg['task'] = 'CONCEPT-LINK-UPDATE-REFS';
+          msg['nodes'] = ids[i];
+        }
+
+        send(msg);
+      }
     }
   );
+}
+
+function onConceptNodeNew(el, event)
+{
+  var sel = content.getSelection();
+  var name = sel.toString().replace(/\s{2,}/g, ' ')
+                           .replace(/[^a-zA-Z0-9\s]/g, '')
+                           .trim();
+
+  name = window.prompt("Enter name for new concept:", name);
+  if(typeof name != "string")
+    return;
+
+  name = name.trim();
+  if( name.length < 1 )
+    return;
+
+  send({
+    'task': 'CONCEPT-UPDATE',
+    'cmd': 'new',
+    'id': name
+  });
+
+  addRefSelection(name.toLowerCase(), sel);
+}
+
+function onConceptAddRef(el, event)
+{
+  addRefSelection(selected_concepts);
 }
 
 function onConceptEdgeNew(el, event)
 {
   send({
-    'task': 'CONCEPT-UPDATE-LINK',
+    'task': 'CONCEPT-LINK-UPDATE',
     'cmd': 'new',
     'nodes': selected_concepts
   });
@@ -1087,7 +1128,7 @@ function reportVisLinks(id, found, refs)
 
   if( debug )
     var start = Date.now();
-  
+
   var bbs = [];
 
   if( !refs )
@@ -1096,7 +1137,7 @@ function reportVisLinks(id, found, refs)
       abortAll();
 
     bbs = searchDocument(content.document, id);
-  
+
     if( debug )
     {
       for(var i = 1; i < 10; i += 1)
@@ -1127,27 +1168,21 @@ function reportVisLinks(id, found, refs)
   var body = content.document.body;
   for(var url in refs)
   {
-    if( content.location.href != url )
-      continue; // TODO handle hash
+    if( (content.location.origin + content.location.pathname) != url )
+      continue;
 
-    var selections = refs[url];
-    for(var i = 0; i < selections.length; i++)
+    var ranges = refs[url]['ranges'];
+    for(var i = 0; i < ranges.length; i++)
     {
-      var ranges = selections[i];
-      for(var j = 0; j < ranges.length; j++)
-      {
-        var range = ranges[j];
-        console.log("range", range, body);
+      var range = ranges[i];
+      var node_start = getElementForXPath(range['start-node'], body),
+          node_end = getElementForXPath(range['end-node'], body);
 
-        var node_start = getElementForXPath(range['start-node'], body),
-            node_end = getElementForXPath(range['end-node'], body);
+      var range_obj = content.document.createRange();
+      range_obj.setStart(node_start, range['start-offset']);
+      range_obj.setEnd(node_end, range['end-offset']);
 
-        var range_obj = content.document.createRange();
-        range_obj.setStart(node_start, range['start-offset']);
-        range_obj.setEnd(node_end, range['end-offset']);
-
-        appendBBsFromRange(bbs, range_obj);
-      }
+      appendBBsFromRange(bbs, range_obj);
     }
   }
 
@@ -1537,7 +1572,7 @@ function register(match_title = false, src_id = 0)
         handleSyncMsg(msg);
       else if( msg.task.startsWith('CONCEPT-') )
       {
-        if( msg.task == 'CONCEPT-UPDATE-SELECTION' )
+        if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
           selected_concepts = msg.concepts;
       }
       else
@@ -1670,7 +1705,7 @@ function searchAreaTitles(doc, id)
  	catch (e) {
    		alert( 'Error: Document tree modified during iteration ' + e );
  	}
- 
+
  // create bounding box array
 	var	bbs	= new Array();
 	for(var	i=0; i<result.length; i++) {
