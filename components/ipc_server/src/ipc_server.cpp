@@ -1120,7 +1120,7 @@ namespace LinksRouting
   //    'ref': {
   //      'url': <url>,
   //      'icon': <img_data>,
-  //      'ranges': [<range>, ...]
+  //      'selections': [[<range>, ...], ...]
   //    }
   void IPCServer::onConceptUpdateRefs(ClientRef, QJsonObject const& msg)
   {
@@ -1136,6 +1136,9 @@ namespace LinksRouting
       return;
     }
 
+    QVariantList new_selections =
+      new_ref.value("selections").toArray().toVariantList();
+
     auto refs = insert_pair.first->value("refs").toMap();
     auto ref_it = refs.find(url);
     if( ref_it == refs.end() )
@@ -1144,7 +1147,7 @@ namespace LinksRouting
 
       refs[ url ] = QVariantMap({
         {"icon", from_json<QString>(new_ref.value("icon"))},
-        {"ranges", new_ref.value("ranges").toArray().toVariantList()}
+        {"selections", new_selections}
       });
     }
     else
@@ -1156,11 +1159,7 @@ namespace LinksRouting
       if( new_ref.contains("icon") )
         ref["icon"] = from_json<QString>(new_ref.value("icon"));
 
-      auto ranges = ref.value("ranges").toList();
-      for(auto range: new_ref.value("ranges").toArray())
-        ranges.append(range.toObject().toVariantMap());
-      ref["ranges"] = ranges;
-
+      ref["selections"] = ref.value("selections").toList() + new_selections;
       ref_it.value() = ref;
     }
 
@@ -1236,7 +1235,7 @@ namespace LinksRouting
   //    'ref': {
   //      'url': <url>,
   //      'icon': <img_data>,
-  //      'ranges': [<range>, ...]
+  //      'selections': [[<range>, ...], ...]
   //    }
   void IPCServer::onConceptLinkUpdateRefs(ClientRef, QJsonObject const& msg)
   {

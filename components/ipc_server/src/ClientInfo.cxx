@@ -915,8 +915,6 @@ namespace LinksRouting
       else if( !_window_info.minimized )
         offset = getScrollRegionAbs().topLeft();
 
-      qDebug() << this << hedge.get() << "setOffset" << offset;
-
       hedge->set("client_wid", _window_info.id);
       hedge->set("screen-offset", offset);
 

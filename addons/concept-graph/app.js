@@ -117,6 +117,11 @@ function start(check = true)
         console.log("Storing link request for later handling: " + event.data);
       }
     }
+    else if( msg.task == 'ABORT' )
+    {
+      active_links.delete(msg.id);
+      console.log('ABORT', msg);
+    }
     else
       console.log("Unknown message: " + event.data);
   }
@@ -179,7 +184,7 @@ function handleRequest(msg)
   var c = 'link://concept/';
   if( !msg.id.startsWith(c) )
   {
-    console.log("Ignoring link request: " + msg);
+    console.log("Ignoring link request", msg);
     return true;
   }
 
@@ -249,9 +254,6 @@ function addNode(node)
 
   nodes.push(node);
 
-  if( nodes.length == 1 )
-    updateNodeSelection("set", node.id);
-
   if( queue_timeout )
     clearTimeout(queue_timeout);
   queue_timeout = setTimeout(checkRequestQueue, 200);
@@ -278,6 +280,9 @@ function updateNode(new_node)
 
   updateDetailDialogs();
   restart();
+
+  if( selected_node_ids.has(node.id) )
+    sendInitiateForNode(node);
 }
 
 function checkRequestQueue()
@@ -810,10 +815,13 @@ function sendInitiateForNode(n) {
     'id': 'link://concept/' + n.id,
     'refs': n.refs || {}
   });
+  active_links.add('link://concept/' + n.id);
 }
 
 function updateNodeSelection(action, node_id)
 {
+  var previous_selection = new Set(selected_node_ids);
+
   if( action == 'set' )
   {
     selected_node_ids.clear();
@@ -850,6 +858,22 @@ function updateNodeSelection(action, node_id)
     'concepts': [...selected_node_ids],
     'active': active_node_id
   });
+
+  // Automatically link selected nodes
+  for(var prev_id of previous_selection)
+    if( !selected_node_ids.has(prev_id) )
+    {
+      send({
+        'task': 'ABORT',
+        'id': 'link://concept/' + prev_id,
+        'stamp': 0,
+        'scope': 'all'
+      });
+      active_links.delete('link://concept/' + prev_id);
+    }
+  for(var cur_id of selected_node_ids)
+    if( !previous_selection.has(cur_id) )
+      sendInitiateForNode(getNodeById(cur_id));
 
   updateDetailDialogs();
 }
@@ -892,10 +916,6 @@ function updateDetailDialogs()
 
   li.exit().remove();
 
-  card.select('.trigger-link')
-      .on('click', function() {
-        sendInitiateForNode(active_node);
-      });
   card.select('.concept-edit')
       .on('click', function() {
         dlgConceptName.show(function(name){

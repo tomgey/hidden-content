@@ -809,7 +809,7 @@ function addRefSelection(ids, sel)
       var ref = {
         'url': url,
         'icon': img_data,
-        'ranges': ranges
+        'selections': [ranges]
       };
 
       for(var i = 0; i < ids.length; i++)
@@ -1129,6 +1129,8 @@ function reportVisLinks(id, found, refs)
   if( debug )
     var start = Date.now();
 
+  if( active_routes[id] && !refs )
+    var refs = active_routes[id].refs;
   var bbs = [];
 
   if( !refs )
@@ -1161,7 +1163,8 @@ function reportVisLinks(id, found, refs)
 
     active_routes[id] = {
       stamp: last_stamp,
-      menu_item: item
+      menu_item: item,
+      refs: refs
     };
   }
 
@@ -1171,18 +1174,50 @@ function reportVisLinks(id, found, refs)
     if( (content.location.origin + content.location.pathname) != url )
       continue;
 
-    var ranges = refs[url]['ranges'];
-    for(var i = 0; i < ranges.length; i++)
+    var selections = refs[url]['selections'];
+    for(var i = 0; i < selections.length; i++)
     {
-      var range = ranges[i];
-      var node_start = getElementForXPath(range['start-node'], body),
-          node_end = getElementForXPath(range['end-node'], body);
+      var sel_bbs = [];
+      var ranges = selections[i];
+      for(var j = 0; j < ranges.length; j++)
+      {
+        var range = ranges[j];
+        var node_start = getElementForXPath(range['start-node'], body),
+            node_end = getElementForXPath(range['end-node'], body);
+  
+        var range_obj = content.document.createRange();
+        range_obj.setStart(node_start, range['start-offset']);
+        range_obj.setEnd(node_end, range['end-offset']);
+  
+        appendBBsFromRange(sel_bbs, range_obj);
+      }
+      if( !sel_bbs.length )
+        continue;
 
-      var range_obj = content.document.createRange();
-      range_obj.setStart(node_start, range['start-offset']);
-      range_obj.setEnd(node_end, range['end-offset']);
-
-      appendBBsFromRange(bbs, range_obj);
+      // [[l, t], [r, t], [r, b], [l, b]];
+      var lt = sel_bbs[0][0],
+          rb = sel_bbs[0][2];
+      var l = lt[0],
+          r = rb[0],
+          t = lt[1],
+          b = rb[1];
+  
+      for(var j = 1; j < sel_bbs.length; j++)
+      {
+        var lt_j = sel_bbs[j][0],
+            rb_j = sel_bbs[j][2];
+        var l_j = lt_j[0],
+            r_j = rb_j[0],
+            t_j = lt_j[1],
+            b_j = rb_j[1];
+  
+        l = Math.min(l, l_j);
+        r = Math.max(r, r_j);
+        t = Math.min(t, t_j);
+        b = Math.max(b, b_j);
+      }
+  
+      bbs[bbs.length] = [[l, t], [r, t], [r, b], [l, b]];
     }
   }
 
@@ -1197,7 +1232,8 @@ function reportVisLinks(id, found, refs)
     msg['regions'] = bbs;
 
   send(msg);
-  onScroll();
+  if( !found )
+    onScroll();
   //alert("time = " + (Date.now() - start) / 10);
 // if( found )
 //    alert('send FOUND: '+selectionId);
@@ -1211,15 +1247,6 @@ function reportSelectRouting(routing)
     'id': '/routing',
     'val': routing
   });
-}
-
-//------------------------------------------------------------------------------
-function windowChanged()
-{
-  if( timeout )
-    clearTimeout(timeout);
-
-  timeout = setTimeout(reroute, 500);
 }
 
 //------------------------------------------------------------------------------
@@ -1297,20 +1324,12 @@ function handleSyncMsg(msg)
 }
 
 //------------------------------------------------------------------------------
-function reroute()
-{
-  // trigger reroute
-  for(var route_id in active_routes)
-    reportVisLinks(route_id);
-}
-
-//------------------------------------------------------------------------------
 function stop()
 {
-	stopped = true;
+  stopped = true;
 //	setStatus('');
 //	window.removeEventListener('unload', stopVisLinks, false);
-	window.removeEventListener("DOMAttrModified", attrModified, false);
+  window.removeEventListener("DOMAttrModified", attrModified, false);
   window.removeEventListener('resize', resize, false);
 
   if( links_socket )
@@ -1476,7 +1495,7 @@ function register(match_title = false, src_id = 0)
         console.log(JSON.stringify(active_routes));
 
         updateRouteItemData(route.menu_item, new_id, route.stamp);
-        sendRouteUpdate(new_id);
+        reportVisLinks(new_id);
       }
       else if( msg.task == 'ABORT' )
       {
@@ -1641,22 +1660,6 @@ function attrModified(e)
 }
 
 //------------------------------------------------------------------------------
-function sendRouteUpdate(route_id)
-{
-  var msg = {
-    'task': 'UPDATE',
-    'id': route_id,
-    'stamp': active_routes[route_id].stamp,
-  };
-
-  var bbs = searchDocument(content.document, route_id);
-  if( bbs.length > 0 )
-    msg['regions'] = bbs;
-
-  send(msg);
-}
-
-//------------------------------------------------------------------------------
 function resize()
 {
   var reg = getScrollRegion();
@@ -1667,7 +1670,7 @@ function resize()
   });
 
   for(var route_id in active_routes)
-    sendRouteUpdate(route_id);
+    reportVisLinks(route_id, true)
 }
 
 //------------------------------------------------------------------------------
