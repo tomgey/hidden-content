@@ -5,6 +5,8 @@
 #include "slotdata/image.hpp"
 #include "PartitionHelper.hxx"
 
+#include <QObject>
+
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -68,21 +70,18 @@ struct MapRect
   void foreachTile(const tile_callback_t& func) const;
 };
 
-class HierarchicTileMap
+class HierarchicTileMap:
+  public QObject
 {
+    Q_OBJECT
+
   public:
-
-    typedef std::function<void ( HierarchicTileMap&,
-                                 size_t x,
-                                 size_t y,
-                                 size_t zoom )> TileChangeCallback;
-
     HierarchicTileMap( unsigned int width,
                        unsigned int height,
                        unsigned int tile_width,
                        unsigned int tile_height );
-    
-    void addTileChangeCallback(TileChangeCallback cb);
+    virtual ~HierarchicTileMap();
+
 
     MapRect requestRect( const Rect& rect,
                          size_t zoom = -1 );
@@ -126,6 +125,11 @@ class HierarchicTileMap
     unsigned int margin_left,
                  margin_right;
 
+  signals:
+    void tileChanged( size_t x,
+                      size_t y,
+                      size_t zoom );
+
   private:
     unsigned int _width,
                  _height,
@@ -133,10 +137,8 @@ class HierarchicTileMap
                  _tile_height,
 
                  _change_id; //!< tracking map changes (eg. tile image updates)
-    
+
     std::vector<Layer> _layers;
-    std::vector<TileChangeCallback> _change_callbacks;
-    
     Layer& getLayer(size_t level);
 };
 

@@ -116,9 +116,8 @@ namespace qtfullscreensystem
       _last_tilemap = tile_map;
       _tile_map_change_id = -1;
 
-      tile_map->addTileChangeCallback(
-        std::bind<>(&QtPreviewWindow::onTileMapChange, this)
-      );
+      connect( tile_map.get(), &HierarchicTileMap::tileChanged,
+               this, &QtPreviewWindow::onTileChanged );
     }
     else if( tile_map && _tile_map_change_id != tile_map->getChangeId() )
     {
@@ -179,6 +178,12 @@ namespace qtfullscreensystem
   }
 
   //----------------------------------------------------------------------------
+  void QtPreviewWindow::onTileChanged(size_t x, size_t y, size_t zoom)
+  {
+    renderLater();
+  }
+
+  //----------------------------------------------------------------------------
   bool QtPreviewWindow::event(QEvent *event)
   {
     switch( event->type() )
@@ -188,7 +193,6 @@ namespace qtfullscreensystem
         renderNow();
         return true;
       case QEvent::Leave:
-        std::cout << "leave " << _do_drag << std::endl;
         if( _do_drag )
           return true;
 
@@ -258,13 +262,6 @@ namespace qtfullscreensystem
   }
 
   //----------------------------------------------------------------------------
-  void QtPreviewWindow::onTileMapChange()
-  {
-    std::cout << "tilemap changed" << std::endl;
-    renderLater();
-  }
-
-  //----------------------------------------------------------------------------
   PopupWindow::PopupWindow(Popup* popup):
     _popup(popup)
   {
@@ -279,8 +276,6 @@ namespace qtfullscreensystem
     if( !preview.isVisible() )
       return;
 
-    std::cout << "render preview:" << std::endl;
-    //auto tile_map = preview.tile_map.lock();
     auto tile_map = getTilemap();
     if( tile_map )
       tile_map->render( preview.src_region,
@@ -421,8 +416,6 @@ namespace qtfullscreensystem
       std::cout << "SeeThrough tile_map expired!" << std::endl;
       return;
     }
-
-    std::cout << "render tilemap: " << _see_through->source_region << std::endl;
 
     //      renderRect( preview.preview_region );
     tile_map->render( _see_through->source_region,

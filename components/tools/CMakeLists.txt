@@ -15,6 +15,7 @@ endif(WIN32)
 
 set(HEADER_FILES
   fbo.h
+  ${LINKS_INCLUDE_DIR}/HierarchicTileMap.hpp
 )
 
 set(SOURCE_FILES
@@ -30,11 +31,12 @@ set(SOURCE_FILES
   Rect.cxx
   routing.cxx
 )
+qt5_wrap_cpp(moc_sources ${LINKS_INCLUDE_DIR}/HierarchicTileMap.hpp)
 
 add_subdirectory(glsl)
 
 add_definitions(-DNOMULTISAMPLING)
-add_library(tools ${HEADER_FILES} ${SOURCE_FILES})
+add_library(tools ${HEADER_FILES} ${SOURCE_FILES} ${moc_sources})
 target_link_libraries(tools
   Qt5::Script
   Qt5::Gui

@@ -47,6 +47,8 @@ namespace qtfullscreensystem
       void renderLater();
       void renderNow();
 
+      void onTileChanged(size_t x, size_t y, size_t zoom);
+
     protected:
       QRect     _geometry;
       int       _margin;
@@ -84,8 +86,6 @@ namespace qtfullscreensystem
 
       void init();
       void updateGeometry();
-
-      void onTileMapChange();
   };
 
   class PopupWindow:

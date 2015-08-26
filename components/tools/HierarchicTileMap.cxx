@@ -8,6 +8,7 @@
 #include "HierarchicTileMap.hpp"
 
 #include <GL/gl.h>
+#include <QDebug>
 
 #include <algorithm>
 #include <cassert>
@@ -167,9 +168,9 @@ HierarchicTileMap::HierarchicTileMap( unsigned int width,
 }
 
 //------------------------------------------------------------------------------
-void HierarchicTileMap::addTileChangeCallback(TileChangeCallback cb)
+HierarchicTileMap::~HierarchicTileMap()
 {
-  _change_callbacks.push_back(cb);
+
 }
 
 //------------------------------------------------------------------------------
@@ -220,9 +221,7 @@ void HierarchicTileMap::setTileData( size_t x, size_t y, size_t zoom,
   tile.type = Tile::ImageRGBA8;
 
   ++_change_id;
-
-  for(auto cb: _change_callbacks)
-    cb(*this, x, y, zoom);
+  emit tileChanged(x, y, zoom);
 }
 
 //------------------------------------------------------------------------------

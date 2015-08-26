@@ -820,8 +820,6 @@ namespace LinksRouting
              || msg.contains("pid")
              || !title.isEmpty() )
     {
-
-
       if( msg.contains("pos") )
         wid = windows.windowIdAt( from_json<QPoint>(msg.value("pos")) );
       else
@@ -2756,14 +2754,8 @@ namespace LinksRouting
 
     bool sent = false;
     MapRect rect = tile_map->requestRect(src, zoom);
-    std::cout << rect.min_tile[0] << "|" << rect.min_tile[1]
-              << " -> "
-              << rect.max_tile[0] << "|" << rect.max_tile[1]
-              << std::endl;
-
     rect.foreachTile([&](Tile& tile, size_t x, size_t y)
     {
-      std::cout << " - tile " << x << "|" << y << std::endl;
       if( tile.type == Tile::NONE )
       {
         auto req = std::find_if
