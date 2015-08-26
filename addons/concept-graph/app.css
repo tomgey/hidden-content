@@ -24,6 +24,47 @@ html, body {
   margin-top: 0;
 }
 
+.card-concept-details .mdl-textfield {
+  padding: 0.2em;
+  width: auto;
+}
+
+.concept-references > ul {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.concept-references li {
+  vertical-align: middle;
+  display: flex;
+  min-height: 1.8em;
+  padding: 0.3em 0;
+  border-top: 1px solid #ccc;
+}
+
+.concept-references img {
+  width: 16px;
+  height: 16px;
+  margin: auto 0.5em auto;
+}
+
+.concept-references a {
+  flex: 1;
+  line-height: 1.1;
+  text-decoration: none;
+  margin-right: 24px;
+}
+
+.concept-references button {
+  visibility: hidden;
+}
+
+.concept-references li:hover button {
+  visibility: visible;
+}
+
 .concept-raw-data {
   display: none;
   white-space: pre-wrap;

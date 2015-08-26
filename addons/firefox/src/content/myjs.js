@@ -96,11 +96,12 @@ var myListener = {
     console.log("change uri: " + content.document._hcd_tab_id);
     var msg = {
       'task': 'SYNC',
-      'type': 'URI',
-      'uri': uri.spec,
+      'type': 'URL',
+      'url': uri.spec,
       'tab-id': session_store.getTabValue(tab, "hcd/tab-id")
     };
     ctrlSend(msg);
+    send(msg);
 
     last_uri = uri.spec;
     session_store.setTabValue(tab, "hcd/last-uri", last_uri);
@@ -800,6 +801,7 @@ function addRefSelection(ids, sel)
 
   var base_domain = getBaseDomainFromHost(content.location.hostname);
   var url = content.location.origin + content.location.pathname;
+  var title = content.document.title;
 
   imgToBase64(
     gBrowser.getIcon(),
@@ -807,6 +809,7 @@ function addRefSelection(ids, sel)
     function(img_data)
     {
       var ref = {
+        'title': title,
         'url': url,
         'icon': img_data,
         'selections': [ranges]
@@ -1317,9 +1320,9 @@ function handleSyncMsg(msg)
     else
       content.scrollTo(-msg.pos[0], -msg.pos[1]);
   }
-  else if( type == 'URI' )
+  else if( type == 'URL' )
   {
-    content.document.location.href = msg['uri'];
+    content.document.location.href = msg['url'];
   }
 }
 
@@ -1372,7 +1375,8 @@ function sendMsgRegister(match_title, src_id, click_pos)
     'geom': [
       window.screenX, window.screenY,
       window.outerWidth, window.outerHeight
-    ]
+    ],
+    'url': content.location.href
   };
 
   if( match_title )

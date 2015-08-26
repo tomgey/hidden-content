@@ -80,9 +80,7 @@ function start(check = true)
     }
     else if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
     {
-      selected_node_ids = new Set(msg.concepts);
-      active_node_id = msg.active;
-
+      updateNodeSelection('set', msg.concepts, msg.active, false);
       updateDetailDialogs();
       restart(false);
     }
@@ -100,9 +98,7 @@ function start(check = true)
         for(var i = 0; i < msg.links.length; ++i)
           addLink(msg.links[i]);
 
-        selected_node_ids = new Set(msg.selected);
-        active_node_id = msg.active;
-
+        updateNodeSelection('set', msg.selected, msg.active, false);
         updateDetailDialogs();
         restart();
       }
@@ -193,22 +189,25 @@ function handleRequest(msg)
     return false; // Try again (eg. if new nodes arrive)
 
   active_links.add(msg.id);
+  
+  var do_circle = localStorage.getItem('link-circle') == 'true';
+  var bbs = [];
+  node_groups
+    .filter(function(d){ return d.id == node.id; })
+    .selectAll('image.ref')
+    .each(function(d) {
+      bbs.push(do_circle
+        ? circlePoints({
+            x: node.x + d.x + 8,
+            y: node.y + d.y + 8
+          })
+        : [[ node.x + d.x + 8,
+             node.y + d.y + 16
+          ]]
+      );
+    });
 
-//  var l = node.x - 10,
-//      t = node.y - 10,
-//      r = node.x + 10,
-//      b = node.y + 10;
-
-  var link_pos = {
-    x: node.x,
-    y: node.y + 30
-  };
-
-  var bbs = [
-    circlePoints(link_pos), //[[l, t], [r, t], [r, b], [l, b]],
-    {"ref": "viewport"}
-  ];
-
+  bbs.push({"ref": "viewport"});
   send({
     'task': 'FOUND',
     'title': document.title,
@@ -677,8 +676,33 @@ function restart(update_layout = true)
     .text(function(d) { return d.name; });
 
   var ref_icons =
-    node_groups.selectAll('image.ref')
-               .data(function(d) { return d.refs || []; });
+    node_groups
+      .selectAll('image.ref')
+      .data(function(d)
+      {
+        if( !d.refs )
+          return [];
+
+        var refs = [];
+        for(var url in d.refs)
+          refs[ refs.length ] = {
+            url: url,
+            data: d.refs[url]
+          };
+
+        var num_cols = Math.min(4, refs.length);
+        var pad = 4, w = 16, h = 16;
+        var x = -num_cols / 2 * w - (num_cols - 1) / 2 * pad,
+            y = 24;
+
+        for(var i = 0; i < refs.length; ++i)
+        {
+          var col = i % num_cols;
+          refs[i]['x'] = x + (i % num_cols) * (w + pad);
+          refs[i]['y'] = y + Math.floor(i / num_cols) * (h + pad);
+        }
+        return refs;
+      });
 
   ref_icons.enter()
     .append('image')
@@ -689,9 +713,10 @@ function restart(update_layout = true)
   ref_icons.exit()
     .remove();
   ref_icons
-    .attr('xlink:href', function(d) { return d.icon; })
-    .attr('x', -8)
-    .attr('y', 24);
+    .attr('xlink:href', function(d) { return d.data.icon; })
+    .attr('title', function(d) { return d.url; })
+    .attr('x', function(d) { return d.x; })
+    .attr('y', function(d) { return d.y; });
 
   if( update_layout )
   {
@@ -739,6 +764,10 @@ function spliceLinksForNode(node) {
 var lastKeyDown = -1;
 
 function keydown() {
+  var tag = d3.event.target.tagName;
+  if( tag == 'TEXTAREA' || tag == 'INPUT' )
+    return;
+
   var drawer = d3.select('.mdl-layout__drawer');
   switch( d3.event.keyCode )
   {
@@ -809,7 +838,8 @@ function keyup() {
   }
 }
 
-function sendInitiateForNode(n) {
+function sendInitiateForNode(n)
+{
   send({
     'task': 'INITIATE',
     'id': 'link://concept/' + n.id,
@@ -818,17 +848,42 @@ function sendInitiateForNode(n) {
   active_links.add('link://concept/' + n.id);
 }
 
-function updateNodeSelection(action, node_id)
+function abortLink(id)
+{
+  send({
+    'task': 'ABORT',
+    'id': id,
+    'stamp': 0,
+    'scope': 'all'
+  });
+  active_links.delete(id);
+}
+
+function abortAllLinks()
+{
+  for(var id of active_links)
+    abortLink(id);
+}
+
+function updateNodeSelection(action, node_id, active_id, send_msg = true)
 {
   var previous_selection = new Set(selected_node_ids);
 
   if( action == 'set' )
   {
-    selected_node_ids.clear();
-    if( node_id )
-      selected_node_ids.add(node_id);
-
-    active_node_id = node_id;
+    if( typeof node_id == 'object' )
+    {
+      selected_node_ids = new Set(node_id);
+      active_node_id = active_id;
+    }
+    else
+    {
+      selected_node_ids.clear();
+      if( node_id )
+        selected_node_ids.add(node_id);
+  
+      active_node_id = node_id;
+    }
   }
   else if( action == 'toggle' )
   {
@@ -853,24 +908,20 @@ function updateNodeSelection(action, node_id)
   else
     console.warn('Unknown action: ' + action);
 
-  send({
-    'task': 'CONCEPT-SELECTION-UPDATE',
-    'concepts': [...selected_node_ids],
-    'active': active_node_id
-  });
+  console.log("sel", previous_selection, selected_node_ids, active_node_id);
+  
+  if( send_msg )
+    send({
+      'task': 'CONCEPT-SELECTION-UPDATE',
+      'concepts': [...selected_node_ids],
+      'active': active_node_id
+    });
 
   // Automatically link selected nodes
   for(var prev_id of previous_selection)
     if( !selected_node_ids.has(prev_id) )
-    {
-      send({
-        'task': 'ABORT',
-        'id': 'link://concept/' + prev_id,
-        'stamp': 0,
-        'scope': 'all'
-      });
-      active_links.delete('link://concept/' + prev_id);
-    }
+      abortLink('link://concept/' + prev_id);
+
   for(var cur_id of selected_node_ids)
     if( !previous_selection.has(cur_id) )
       sendInitiateForNode(getNodeById(cur_id));
@@ -900,21 +951,35 @@ function updateDetailDialogs()
     ref['url'] = url;
     refs.push(ref);
   }
-  console.log(active_node.refs, refs);
+  
+  card.select('.concept-references')
+      .style('display', refs.length ? 'block' : 'none');
 
-  var li = card.select('ul.concept-references')
-               .selectAll('li')
-               .data(refs);
+  var ul = card.select('.concept-references > ul');
+  ul.selectAll('li').remove();
+  var li = ul.selectAll('li')
+             .data(refs)
+             .enter()
+             .append('li');
 
-  var li_enter = li.enter()
-                   .append('li');
-  li_enter.append('img')
-          .attr('src', function(d){ return d.icon; });
-  li_enter.append('a')
-          .attr('href', function(d){ return d.url; })
-          .text(function(d){ return d.url; });
-
-  li.exit().remove();
+  li.append('img')
+    .attr('src', function(d){ return d.icon; });
+  li.append('a')
+    .attr('href', function(d){ return d.url; })
+    .text(function(d){ return d.title || d.url; });
+  li.append('button')
+    .attr('class', 'concept-ref-delete mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect')
+    .on('click', function(d){
+      send({
+        'task': 'CONCEPT-UPDATE-REFS',
+        'cmd': 'delete',
+        'url': d.url,
+        'id': active_node.id
+      });
+    })
+      .append('i')
+      .attr('class', 'material-icons')
+      .text('delete');
 
   card.select('.concept-edit')
       .on('click', function() {
@@ -1017,6 +1082,10 @@ d3.select('#check-debug-mode').on('click', function(){
   localStorage.setItem('debug-mode', this.checked);
   d3.select('html').classed('debug-mode', this.checked);
 });
+d3.select('#check-link-circle').on('click', function(){
+  localStorage.setItem('link-circle', this.checked);
+  updateLinks();
+});
 
 // app starts here
 svg
@@ -1041,4 +1110,7 @@ d3.select(window)
 
     d3.select('html')
       .classed('debug-mode', localStorage.getItem('debug-mode') == 'true');
+  })
+  .on('beforeunload', function(){
+    abortAllLinks();
   });

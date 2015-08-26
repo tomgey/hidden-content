@@ -1113,7 +1113,7 @@ namespace LinksRouting
 
   //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-UPDATE-REFS',
-  //    'cmd': 'add',
+  //    'cmd': 'add' | 'delete',
   //    'id': <concept-id>,
   //    'ref': {
   //      'url': <url>,
@@ -1127,38 +1127,57 @@ namespace LinksRouting
       return;
 
     QJsonObject new_ref = msg.value("ref").toObject();
-    QString url = from_json<QString>(new_ref.value("url"));
+    QString url = from_json<QString>(!new_ref.isEmpty() ? new_ref.value("url")
+                                                        : msg.value("url") );
     if( url.isEmpty() )
     {
-      qWarning() << "Missing url for adding reference." << msg;
+      qWarning() << "Missing url for updating reference." << msg;
       return;
     }
 
-    QVariantList new_selections =
-      new_ref.value("selections").toArray().toVariantList();
-
     auto refs = insert_pair.first->value("refs").toMap();
     auto ref_it = refs.find(url);
-    if( ref_it == refs.end() )
-    {
-      qDebug() << "Adding new reference." << url;
 
-      refs[ url ] = QVariantMap({
-        {"icon", from_json<QString>(new_ref.value("icon"))},
-        {"selections", new_selections}
-      });
+    QString const cmd = from_json<QString>(msg.value("cmd"));
+    if( cmd == "delete" )
+    {
+      if( ref_it == refs.end() )
+      {
+        qWarning() << "Can not remove not existing reference" << msg;
+        return;
+      }
+
+      qDebug() << "Removing reference." << url;
+      refs.erase(ref_it);
     }
     else
     {
-      qDebug() << "Adding selection to existing reference." << url;
+      QVariantList new_selections =
+        new_ref.value("selections").toArray().toVariantList();
+      if( ref_it == refs.end() )
+      {
+        qDebug() << "Adding new reference." << url;
 
-      auto ref = ref_it.value().toMap();
+        refs[ url ] = QVariantMap({
+          {"icon", from_json<QString>(new_ref.value("icon"))},
+          {"title", from_json<QString>(new_ref.value("title"))},
+          {"selections", new_selections}
+        });
+      }
+      else
+      {
+        qDebug() << "Adding selection to existing reference." << url;
 
-      if( new_ref.contains("icon") )
-        ref["icon"] = from_json<QString>(new_ref.value("icon"));
+        auto ref = ref_it.value().toMap();
 
-      ref["selections"] = ref.value("selections").toList() + new_selections;
-      ref_it.value() = ref;
+        if( new_ref.contains("icon") )
+          ref["icon"] = from_json<QString>(new_ref.value("icon"));
+        if( new_ref.contains("title") )
+          ref["title"] = from_json<QString>(new_ref.value("title"));
+
+        ref["selections"] = ref.value("selections").toList() + new_selections;
+        ref_it.value() = ref;
+      }
     }
 
     (*insert_pair.first)["refs"] = refs;
