@@ -38,6 +38,7 @@ function $(id)
 
 var client_id = "firefox:" + Date.now() + ":" + getPid();
 
+var last_url = null;
 var last_id = null;
 var last_stamp = null;
 var offset = [0,0];
@@ -89,19 +90,10 @@ var myListener = {
 
     var tab = gBrowser._getTabForContentWindow(progress.DOMWindow);
     var last_uri = session_store.getTabValue(tab, "hcd/last-uri");
-
     if( last_uri == uri.spec )
       return;
 
-    console.log("change uri: " + content.document._hcd_tab_id);
-    var msg = {
-      'task': 'SYNC',
-      'type': 'URL',
-      'url': uri.spec,
-      'tab-id': session_store.getTabValue(tab, "hcd/tab-id")
-    };
-    ctrlSend(msg);
-    send(msg);
+    onUrlChange(uri.spec, tab, 'location-change');
 
     last_uri = uri.spec;
     session_store.setTabValue(tab, "hcd/last-uri", last_uri);
@@ -343,13 +335,45 @@ function getElementForXPath(xpath, root)
 }
 
 /**
+ * URL change hook (page load, tab change, etc.)
+ */
+function onUrlChange(url, tab, reason)
+{
+  if( url == last_url )
+    return;
+  if( tab != gBrowser.selectedTab )
+    return console.log("Ignoring URL change for not active tab.");
+
+  console.log("change url", last_url, url, reason);
+  last_url = url;
+
+  var msg = {
+    'task': 'SYNC',
+    'type': 'URL',
+    'url': url,
+    'tab-id': session_store.getTabValue(tab, "hcd/tab-id"),
+    'reason': reason
+  };
+  ctrlSend(msg);
+  send(msg);
+}
+
+/**
  * Page/Tab load hook
  */
 function onPageLoad(event)
 {
   setStatusSync("no-src");
 
-  var doc = content.document;
+  if( event.target instanceof HTMLDocument )
+    var doc = event.target;
+  else if( event.target.nodeName === 'tab' )
+    var doc = gBrowser.getBrowserForTab(event.target)._contentWindow.document;
+  else
+  {
+    console.log("UNKNOWN", event.target);
+    var doc = content.document;
+  }
   var view = doc.defaultView;
   var location = view ? view.location : {};
   var html_data = doc.documentElement.dataset || {};
@@ -375,14 +399,15 @@ function onPageLoad(event)
     return;
   }
 
+  var tab = gBrowser._getTabForContentWindow(view);
+  onUrlChange(location.href, tab, event.type);
+
   suspend_autostart = false;
-  console.log("autoconnect", getPref("auto-connect"));
   if( !stopped )
-    setTimeout(resize, 300);
+    setTimeout(resize, 200);
   else if( getPref("auto-connect") )
     setTimeout(start, 0, true, src_id);
 
-  var tab = gBrowser.selectedTab;
   var src_id = doc._hcd_src_id;
 
   var hcd_str = "#hidden-content-data=";
@@ -430,7 +455,7 @@ function onPageLoad(event)
     var msg = {
       task: "REGISTER",
       pid: getPid(),
-      title: document.title
+      title: doc.title
     };
     if( pos instanceof Array )
       msg["pos"] = pos;
@@ -514,14 +539,23 @@ function onLoad(e)
 {
   var doc = e.originalTarget;
   var view = doc.defaultView;
+  var location = view ? view.location : {};
+  
+  if( location.href === 'about:newtab' )
+    return;
+
+  var pid = getPid();
+  var info_str = "(url=" + view.location.href
+               + ", pid=" + pid + ")";
 
   try
   {
-    view.localStorage.setItem('pid', getPid());
+    view.localStorage.setItem('pid', pid);
+    console.info( "Set pid to local storage " + info_str);
   }
   catch(e)
   {
-    console.log("Not setting pid to local storage.", e);
+    console.warn("Failed to set pid to local storage. " + info_str, e);
   }
 
   // Ignore frame load events
@@ -800,7 +834,8 @@ function addRefSelection(ids, sel)
   }
 
   var base_domain = getBaseDomainFromHost(content.location.hostname);
-  var url = content.location.origin + content.location.pathname;
+  var url = decodeURIComponent( content.location.origin
+                              + content.location.pathname );
   var title = content.document.title;
 
   imgToBase64(
@@ -1172,9 +1207,12 @@ function reportVisLinks(id, found, refs)
   }
 
   var body = content.document.body;
+  var content_url = decodeURIComponent( content.location.origin
+                                      + content.location.pathname );
+
   for(var url in refs)
   {
-    if( (content.location.origin + content.location.pathname) != url )
+    if( content_url != url )
       continue;
 
     var selections = refs[url]['selections'];
@@ -1433,7 +1471,7 @@ function register(match_title = false, src_id = 0)
     links_socket.binaryType = "arraybuffer";
     links_socket.onopen = function(event)
     {
-      console.log("opened -> sending REGISTER" + links_socket + window.links_socket);
+      console.log("opened -> sending REGISTER");
       setTimeout(sendMsgRegister, 10, match_title, src_id, click_pos);
     };
     links_socket.onclose = function(event)
@@ -1597,6 +1635,10 @@ function register(match_title = false, src_id = 0)
       {
         if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
           selected_concepts = msg.concepts;
+      }
+      else if( msg.task == 'OPENED-URLS-UPDATE' )
+      {
+        // ignore
       }
       else
         console.log("Unknown message: " + event.data);

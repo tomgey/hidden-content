@@ -212,15 +212,29 @@ namespace LinksRouting
                               const QJsonObject& msg,
                               const ClientList& clients ) const;
 
+      /** Send message to all given clients except the sender */
+      void distributeMessage( const QJsonObject& msg,
+                              const ClientList& clients,
+                              ClientRef sender = nullptr ) const;
+
       /** Send message to all clients except the sender */
       void distributeMessage( const QJsonObject& msg,
-                              ClientRef sender ) const;
+                              ClientRef sender = nullptr ) const;
 
       void dirtyLinks();
       void dirtyRender();
 
       /** Check state save data and send to client if complete */
       void checkStateData();
+
+      /** Increment counter for the given url */
+      void urlInc(const QUrl& url);
+
+      /** Decrement counter for the given url */
+      void urlDec(const QUrl& url);
+
+      /** Send changes in opened urls after the last call to sendUrlupdate() */
+      void sendUrlUpdate(ClientRef receiver = nullptr);
 
     private:
 
@@ -237,10 +251,17 @@ namespace LinksRouting
       MsgCallbackMap      _msg_handlers;
       std::vector<Color>  _colors; //!< Available link colors
 
+      QMap<QUrl, uint8_t> _opened_urls; //!< Urls of documents currently shown
+                                        //   shown inside a connected
+                                        //   application.
+      QMap<QUrl, int8_t>  _changed_urls;
+
       ConceptNodes  _concept_nodes;
       ConceptEdges  _concept_links;
       StringSet     _selected_concepts;
       QString       _active_concept;
+
+      slot_t<std::vector<Rect>>::type _slot_regions;
 
       /* List of all open searches */
       slot_t<LinkDescription::LinkList>::type _slot_links;

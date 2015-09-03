@@ -38,6 +38,7 @@ add_subdirectory(glsl)
 add_definitions(-DNOMULTISAMPLING)
 add_library(tools ${HEADER_FILES} ${SOURCE_FILES} ${moc_sources})
 target_link_libraries(tools
+  Qt5::Core
   Qt5::Script
   Qt5::Gui
 )

@@ -67,6 +67,7 @@ use_components(qtfullscreensystem)
 target_link_libraries( qtfullscreensystem
   ${OPENGL_gl_LIBRARY}
   ${ADDITIONAL_LIBS}
+  Qt5::Core
   Qt5::Gui
   Qt5::OpenGL
   Qt5::Network

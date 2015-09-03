@@ -762,7 +762,17 @@ namespace LinksRouting
     if( !socket )
       return;
 
-    _clients.erase(socket);
+    auto client = _clients.find(socket);
+    if( client == _clients.end() )
+    {
+      qDebug() << "Unknown client disconnected";
+      return;
+    }
+
+    urlDec( client->second->url() );
+    sendUrlUpdate();
+
+    _clients.erase(client);
     socket->deleteLater();
 
     LOG_INFO("Client disconnected");
@@ -879,6 +889,19 @@ namespace LinksRouting
     else
       client->setId( from_json<QString>(msg.value("client-id")) );
 
+    QUrl url = from_json<QUrl>(msg.value("url"));
+    if( !url.isValid() )
+    {
+      LOG_WARN("REGISTER: Missing or invalid 'url'.");
+      sendUrlUpdate(client);
+    }
+    else
+    {
+      client->setUrl(url);
+      urlInc(url);
+      sendUrlUpdate();
+    }
+
     // Viewport/Scroll region
 
     client->parseView(msg);
@@ -916,26 +939,44 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   void IPCServer::onClientSync(ClientRef client, QJsonObject const& msg)
   {
-    if(    from_json<QString>(msg.value("type")) != "SCROLL"
-        || from_json<QString>(msg.value("item"), "CONTENT") != "CONTENT" )
-      // TODO handle ELEMENT scroll?
-      return;
+    QString const type = from_json<QString>(msg.value("type"));
 
-    QMutexLocker lock_links(_mutex_slot_links);
+    if( type == "SCROLL" )
+    {
+      if( from_json<QString>(msg.value("item"), "CONTENT") != "CONTENT" )
+        // TODO handle ELEMENT scroll?
+        return;
 
-    client->setScrollPos( from_json<QPoint>(msg.value("pos")) );
-    client->update(_window_monitor.getWindows());
+      QMutexLocker lock_links(_mutex_slot_links);
 
-    // Forward scroll events to clients which support this (eg. for
-    // synchronized scrolling)
-//    for(auto const& socket: _clients)
-//    {
-//      if(    sender() != socket.first
-//          && socket.second->supportsCommand("scroll") )
-//        socket.first->sendTextMessage(data);
-//    }
+      client->setScrollPos( from_json<QPoint>(msg.value("pos")) );
+      client->update(_window_monitor.getWindows());
 
-    dirtyLinks();
+      // Forward scroll events to clients which support this (eg. for
+      // synchronized scrolling)
+  //    for(auto const& socket: _clients)
+  //    {
+  //      if(    sender() != socket.first
+  //          && socket.second->supportsCommand("scroll") )
+  //        socket.first->sendTextMessage(data);
+  //    }
+
+      dirtyLinks();
+    }
+    else if( type == "URL" )
+    {
+      QUrl old_url = client->url();
+      client->setUrl( from_json<QUrl>(msg.value("url")) );
+
+      if( old_url != client->url() )
+      {
+        urlDec(old_url);
+        urlInc(client->url());
+        sendUrlUpdate();
+      }
+    }
+    else
+      qWarning() << "Unknown SYNC message." << msg;
   }
 
   //----------------------------------------------------------------------------
@@ -1061,7 +1102,7 @@ namespace LinksRouting
       it.value() = msg_ret.toVariantMap();
 
       msg_ret["task"] = "CONCEPT-NEW";
-      distributeMessage(msg_ret, nullptr);
+      distributeMessage(msg_ret);
 
       return;
     }
@@ -1088,7 +1129,7 @@ namespace LinksRouting
       QJsonObject msg_ret = QJsonObject::fromVariantMap(*it);
       msg_ret["task"] = "CONCEPT-UPDATE";
 
-      distributeMessage(msg_ret, nullptr);
+      distributeMessage(msg_ret);
     }
     else if( cmd == "delete" )
     {
@@ -1103,13 +1144,11 @@ namespace LinksRouting
       _concept_nodes.erase(it);
 
       distributeMessage(QJsonObject({
-          {"task", "CONCEPT-DELETE"},
-          {"id", id}
-        }), nullptr
-      );
+        {"task", "CONCEPT-DELETE"},
+        {"id", id}
+      }));
     }
   }
-
 
   //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-UPDATE-REFS',
@@ -1127,16 +1166,17 @@ namespace LinksRouting
       return;
 
     QJsonObject new_ref = msg.value("ref").toObject();
-    QString url = from_json<QString>(!new_ref.isEmpty() ? new_ref.value("url")
-                                                        : msg.value("url") );
-    if( url.isEmpty() )
+    QUrl url = from_json<QUrl>( !new_ref.isEmpty() ? new_ref.value("url")
+                                                   : msg.value("url") );
+
+    if( !url.isValid() )
     {
-      qWarning() << "Missing url for updating reference." << msg;
+      qWarning() << "Missing or invalid url for updating reference." << msg;
       return;
     }
 
     auto refs = insert_pair.first->value("refs").toMap();
-    auto ref_it = refs.find(url);
+    auto ref_it = refs.find(url.toString());
 
     QString const cmd = from_json<QString>(msg.value("cmd"));
     if( cmd == "delete" )
@@ -1158,7 +1198,7 @@ namespace LinksRouting
       {
         qDebug() << "Adding new reference." << url;
 
-        refs[ url ] = QVariantMap({
+        refs[ url.toString() ] = QVariantMap({
           {"icon", from_json<QString>(new_ref.value("icon"))},
           {"title", from_json<QString>(new_ref.value("title"))},
           {"selections", new_selections}
@@ -1185,7 +1225,7 @@ namespace LinksRouting
     QJsonObject msg_ret = QJsonObject::fromVariantMap(*insert_pair.first);
     msg_ret["task"] = "CONCEPT-UPDATE";
 
-    distributeMessage(msg_ret, nullptr);
+    distributeMessage(msg_ret);
   }
 
   //----------------------------------------------------------------------------
@@ -1219,10 +1259,9 @@ namespace LinksRouting
       qDebug() << msg_ret;
 
       distributeMessage(QJsonObject({
-          {"task", "CONCEPT-LINK-NEW"},
-          {"nodes", to_json(node_ids)}
-        }), nullptr
-      );
+        {"task", "CONCEPT-LINK-NEW"},
+        {"nodes", to_json(node_ids)}
+      }));
       return;
     }
     else if( cmd == "delete" )
@@ -1238,10 +1277,9 @@ namespace LinksRouting
       _concept_links.erase(it);
 
       distributeMessage(QJsonObject({
-          {"task", "CONCEPT-LINK-DELETE"},
-          {"nodes", to_json(node_ids)}
-        }), nullptr
-      );
+        {"task", "CONCEPT-LINK-DELETE"},
+        {"nodes", to_json(node_ids)}
+      }));
     }
   }
 
@@ -2518,14 +2556,22 @@ namespace LinksRouting
 
   //----------------------------------------------------------------------------
   void IPCServer::distributeMessage( const QJsonObject& msg,
+                                     const ClientList& clients,
                                      ClientRef sender ) const
   {
     QByteArray msg_data = QJsonDocument(msg).toJson(QJsonDocument::Compact);
-    for(auto client: _clients)
+    for(auto client: clients)
     {
-      if( sender != client.second )
-        client.first->sendTextMessage(msg_data);
+      if( sender != client )
+        client->socket->sendTextMessage(msg_data);
     }
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::distributeMessage( const QJsonObject& msg,
+                                     ClientRef sender ) const
+  {
+    distributeMessage(msg, clientList<ClientList>(), sender);
   }
 
   //----------------------------------------------------------------------------
@@ -2603,6 +2649,47 @@ namespace LinksRouting
     socket->sendTextMessage(
       QJsonDocument(msg_state).toJson(QJsonDocument::Compact)
     );
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::urlInc(const QUrl& url)
+  {
+    _opened_urls[url] += 1;
+    _changed_urls[url] += 1;
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::urlDec(const QUrl& url)
+  {
+    auto it = _opened_urls.find(url);
+    if( it == _opened_urls.end() )
+    {
+      qWarning() << "Can not decrement counter for unknown url." << url;
+      return;
+    }
+
+    it.value() -= 1;
+    if( it.value() == 0 )
+      _opened_urls.erase(it);
+
+    _changed_urls[url] -= 1;
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::sendUrlUpdate(ClientRef receiver)
+  {
+    ClientList clients = receiver
+                       ? ClientList({receiver})
+                       : clientList<ClientList>();
+
+    distributeMessage(QJsonObject({
+      {"task", "OPENED-URLS-UPDATE"},
+      {"urls", to_json(_opened_urls)},
+      {"changes", receiver ? to_json(_opened_urls) : to_json(_changed_urls)}
+    }), clients);
+
+    if( !receiver )
+      _changed_urls.clear();
   }
 
   //----------------------------------------------------------------------------

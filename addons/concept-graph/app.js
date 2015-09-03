@@ -9,6 +9,7 @@ var active_node_id = null;
 var request_queue = []; // Pending requests (if no node exists yet)
 var queue_timeout = null;
 var active_links = new Set();
+var active_urls = new Set();
 
 function $(id)
 {
@@ -105,6 +106,19 @@ function start(check = true)
       else
         console.log("Got unknown data: " + event.data);
     }
+    else if( msg.task == 'OPENED-URLS-UPDATE' )
+    {
+      active_urls = new Map();
+      for(var url in msg.urls)
+        active_urls.set(url, msg.urls[url]);
+      console.log(active_urls);
+
+      updateDetailDialogs();
+      updateLinks();
+
+      svg.selectAll('g.ref')
+         .classed('ref-open', function(d) { return active_urls.has(d.url); });
+    }
     else if( msg.task == 'REQUEST' )
     {
       if( !handleRequest(msg) )
@@ -189,22 +203,23 @@ function handleRequest(msg)
     return false; // Try again (eg. if new nodes arrive)
 
   active_links.add(msg.id);
-  
+
   var do_circle = localStorage.getItem('link-circle') == 'true';
   var bbs = [];
   node_groups
     .filter(function(d){ return d.id == node.id; })
-    .selectAll('image.ref')
+    .selectAll('.ref image')
     .each(function(d) {
-      bbs.push(do_circle
-        ? circlePoints({
-            x: node.x + d.x + 8,
-            y: node.y + d.y + 8
-          })
-        : [[ node.x + d.x + 8,
-             node.y + d.y + 16
-          ]]
-      );
+      if( active_urls.has(d.url) )
+        bbs.push(do_circle
+          ? circlePoints({
+              x: node.x + d.x + 8,
+              y: node.y + d.y + 8
+            })
+          : [[ node.x + d.x + 8,
+               node.y + d.y + 16
+            ]]
+        );
     });
 
   bbs.push({"ref": "viewport"});
@@ -675,9 +690,12 @@ function restart(update_layout = true)
   node_groups.selectAll('text')
     .text(function(d) { return d.name; });
 
+  node_groups.selectAll('g.ref')
+    .remove();
+
   var ref_icons =
     node_groups
-      .selectAll('image.ref')
+      .selectAll('g.ref')
       .data(function(d)
       {
         if( !d.refs )
@@ -704,19 +722,30 @@ function restart(update_layout = true)
         return refs;
       });
 
-  ref_icons.enter()
+  var ref_enter =
+    ref_icons.enter()
+      .append('g')
+      .classed('ref', true)
+      .classed('ref-open', function(d) { return active_urls.has(d.url); });
+
+  ref_enter
     .append('image')
-    .classed('ref', true)
     .attr('width', 16)
     .attr('height', 16);
     //.attr('clip-path', 'url(#clipCircle)');
-  ref_icons.exit()
-    .remove();
-  ref_icons
+  ref_enter
+    .append('circle')
+    .classed('ref-highlight', true)
+    .attr('r', 10);
+
+  ref_enter.selectAll('image')
     .attr('xlink:href', function(d) { return d.data.icon; })
     .attr('title', function(d) { return d.url; })
     .attr('x', function(d) { return d.x; })
     .attr('y', function(d) { return d.y; });
+  ref_enter.selectAll('circle')
+    .attr('cx', function(d) { return d.x + 8; })
+    .attr('cy', function(d) { return d.y + 8; });
 
   if( update_layout )
   {
@@ -962,9 +991,14 @@ function updateDetailDialogs()
              .enter()
              .append('li');
 
-  li.append('img')
-    .attr('src', function(d){ return d.icon; });
+  li.classed('ref-open', function(d) { return active_urls.has(d.url); });
   li.append('a')
+    .attr('class', 'ref-img mdl-badge')
+    .attr('data-badge', function(d) { return active_urls.get(d.url); })
+    .append('img')
+      .attr('src', function(d){ return d.icon; });
+  li.append('a')
+    .attr('class', 'ref-url')
     .attr('href', function(d){ return d.url; })
     .text(function(d){ return d.title || d.url; });
   li.append('button')

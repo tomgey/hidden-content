@@ -77,6 +77,18 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  void ClientInfo::setUrl(const QUrl& url)
+  {
+    _url = url;
+  }
+
+  //----------------------------------------------------------------------------
+  const QUrl& ClientInfo::url() const
+  {
+    return _url;
+  }
+
+  //----------------------------------------------------------------------------
   void ClientInfo::setStateData(const QJsonObject& data)
   {
     _state_data = data;

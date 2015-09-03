@@ -62,6 +62,14 @@ QString from_json<QString>( const QJsonValue& val,
   return val.toString(def);
 }
 
+//----------------------------------------------------------------------------
+template<> QUrl from_json<QUrl>( const QJsonValue& val,
+                                 const QUrl& def )
+{
+  QUrl url(QUrl::fromPercentEncoding(val.toString().toLocal8Bit()));
+  return url.isValid() ? url : def;
+}
+
 //------------------------------------------------------------------------------
 template<>
 quintptr from_json<quintptr>( const QJsonValue& val,

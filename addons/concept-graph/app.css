@@ -44,17 +44,35 @@ html, body {
   border-top: 1px solid #ccc;
 }
 
-.concept-references img {
-  width: 16px;
-  height: 16px;
-  margin: auto 0.5em auto;
+.concept-references .ref-open {
+  background-color: #fee;
 }
 
-.concept-references a {
+.concept-references .ref-img,
+.concept-references .mdl-badge:not([data-badge]) {
+  width: 14px;
+  height: 14px;
+  margin: auto 0.9em auto 0.5em;
+}
+
+.concept-references .ref-img img {
+  margin-bottom: 13px;
+}
+
+.concept-references .mdl-badge[data-badge]::after {
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  font-weight: bold;
+  top: -10px;
+  right: -11px;
+}
+
+.concept-references .ref-url {
   flex: 1;
   line-height: 1.1;
   text-decoration: none;
-  margin-right: 24px;
+  margin: auto 24px auto 0;
 }
 
 .concept-references button {
@@ -162,6 +180,16 @@ path.link.hidden {
 .node.selected ellipse {
   fill: rgb(255, 82, 82);
   filter: drop-shadow(1px 2px 6px rgba(26, 8, 8, 0.9));
+}
+
+circle.ref-highlight {
+  stroke: none;
+  fill: none;
+}
+
+.ref-open circle.ref-highlight {
+  stroke: #ff5252;
+  stroke-dasharray: 3, 3;
 }
 
 text {

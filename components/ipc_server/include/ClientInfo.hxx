@@ -19,6 +19,7 @@
 
 #include <QJsonObject>
 #include <QSet>
+#include <QUrl>
 
 class QWebSocket;
 
@@ -59,6 +60,9 @@ namespace LinksRouting
 
     void setId(const QString& id);
     const QString& id() const;
+
+    void setUrl(const QUrl& url);
+    const QUrl& url() const;
 
     void setStateData(const QJsonObject& data);
     const QJsonObject& stateData() const;
@@ -199,6 +203,8 @@ namespace LinksRouting
 
       QString                       _id; //!< unique identifier (eg. used for
                                          //   save/restore)
+      QUrl                          _url; //!< URL of currently displayed
+                                          //   content/document
       QJsonObject                   _state_data; //!< data to save/restore state
       QSet<QString>                 _cmds; //!< Supported commands
 

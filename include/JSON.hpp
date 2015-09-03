@@ -10,6 +10,7 @@
 #include <QMap>
 #include <QRect>
 #include <QSize>
+#include <QUrl>
 #include <QVariant>
 
 QJsonObject parseJson(const QByteArray& msg);
@@ -25,6 +26,15 @@ QJsonObject to_json(const QMap<QString, V>& map)
   QJsonObject obj;
   for(auto it = map.begin(); it != map.end(); ++it)
     obj[it.key()] = to_json(it.value());
+  return obj;
+}
+
+template<class V>
+QJsonObject to_json(const QMap<QUrl, V>& map)
+{
+  QJsonObject obj;
+  for(auto it = map.begin(); it != map.end(); ++it)
+    obj[it.key().toString()] = to_json(it.value());
   return obj;
 }
 
@@ -55,6 +65,7 @@ QJsonArray to_json(const QSet<V>& set)
 
 template<class T> T from_json(const QJsonValue&, const T& def = T());
 template<> QString from_json<QString>(const QJsonValue&, const QString&);
+template<> QUrl from_json<QUrl>(const QJsonValue&, const QUrl&);
 template<> quintptr from_json<quintptr>(const QJsonValue&, const quintptr&);
 template<> int32_t from_json<int32_t>(const QJsonValue&, const int32_t&);
 template<> uint32_t from_json<uint32_t>(const QJsonValue&, const uint32_t&);
