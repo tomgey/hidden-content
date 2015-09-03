@@ -16,6 +16,24 @@ function $(id)
   return document.getElementById(id);
 }
 
+/**
+ * Get the document/graph region relative to the application window
+ *
+ */
+function getViewport()
+{
+  var posX = mozInnerScreenX - screenX,
+      posY = mozInnerScreenY - screenY;
+  var bb = $('graph-drawing-area').getBoundingClientRect();
+
+  return [
+    posX + bb.x,
+    posY + bb.y,
+    bb.width,
+    bb.height
+  ];
+}
+
 function start(check = true)
 {
   if( check )
@@ -162,10 +180,6 @@ function send(data)
 
 function sendMsgRegister()
 {
-  var posX = mozInnerScreenX - screenX,
-      posY = mozInnerScreenY - screenY;
-  var bb = $('graph-drawing-area').getBoundingClientRect();
-
   send({
     'task': 'REGISTER',
     'type': "Graph",
@@ -176,12 +190,7 @@ function sendMsgRegister()
       window.screenX, window.screenY,
       window.outerWidth, window.outerHeight
     ],
-    'viewport': [
-      posX + bb.x,
-      posY + bb.y,
-      bb.width,
-      bb.height
-    ]
+    'viewport': getViewport()
   });
   send({
     task: 'GET',
@@ -549,6 +558,11 @@ function resize()
   var width  = parseInt(svg.style('width'), 10),
       height = parseInt(svg.style('height'), 10);
   force.size([width, height]).resume();
+
+  send({
+    'task': 'RESIZE',
+    'viewport': getViewport()
+  });
 }
 
 // update graph (called when needed)
@@ -1144,6 +1158,13 @@ d3.select(window)
 
     d3.select('html')
       .classed('debug-mode', localStorage.getItem('debug-mode') == 'true');
+  })
+  .on('visibilitychange', function() {
+    if( document.hidden )
+      abortAllLinks();
+    else
+      for(var cur_id of selected_node_ids)
+        sendInitiateForNode(getNodeById(cur_id));
   })
   .on('beforeunload', function(){
     abortAllLinks();
