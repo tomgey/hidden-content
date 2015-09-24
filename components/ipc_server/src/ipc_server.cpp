@@ -1065,6 +1065,97 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  QPair<ConceptEdges::iterator, bool>
+  IPCServer::getConceptLink( QJsonObject const& msg,
+                             bool create,
+                             QString const& error_desc )
+  {
+    QStringList node_ids = from_json<QStringList>(msg.value("nodes"));
+    if( node_ids.size() != 2 )
+    {
+      qWarning() << error_desc
+                 << "Edge with != 2 nodes not supported. Got:" << node_ids;
+      return {_concept_links.end(), false};
+    }
+
+    node_ids.sort();
+    QPair<QString, QString> link_id{node_ids.at(0), node_ids.at(1)};
+
+    auto it = _concept_links.find(link_id);
+    if( it == _concept_links.end() )
+    {
+      if( create )
+        return {_concept_links.insert(link_id, {}), true};
+      else if( !error_desc.isEmpty() )
+        qWarning() << "Can not" << error_desc << "not existing edge" << msg;
+    }
+
+    return {it, false};
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::updateRefs( Properties& props,
+                              QJsonObject const& msg )
+  {
+    QJsonObject new_ref = msg.value("ref").toObject();
+    QUrl url = from_json<QUrl>( !new_ref.isEmpty() ? new_ref.value("url")
+                                                   : msg.value("url") );
+
+    if( !url.isValid() )
+    {
+      qWarning() << "Missing or invalid url for updating reference." << msg;
+      return;
+    }
+
+    auto refs = props.value("refs").toMap();
+    auto ref_it = refs.find(url.toString());
+
+    QString const cmd = from_json<QString>(msg.value("cmd"));
+    if( cmd == "delete" )
+    {
+      if( ref_it == refs.end() )
+      {
+        qWarning() << "Can not remove not existing reference" << msg;
+        return;
+      }
+
+      qDebug() << "Removing reference." << url;
+      refs.erase(ref_it);
+    }
+    else
+    {
+      QVariantList new_selections =
+        new_ref.value("selections").toArray().toVariantList();
+      if( ref_it == refs.end() )
+      {
+        qDebug() << "Adding new reference." << url;
+
+        refs[ url.toString() ] = QVariantMap({
+          {"icon", from_json<QString>(new_ref.value("icon"))},
+          {"title", from_json<QString>(new_ref.value("title"))},
+          {"selections", new_selections}
+        });
+      }
+      else
+      {
+        qDebug() << "Adding selection to existing reference." << url;
+
+        auto ref = ref_it.value().toMap();
+
+        if( new_ref.contains("icon") )
+          ref["icon"] = from_json<QString>(new_ref.value("icon"));
+        if( new_ref.contains("title") )
+          ref["title"] = from_json<QString>(new_ref.value("title"));
+
+        ref["selections"] = ref.value("selections").toList() + new_selections;
+        ref_it.value() = ref;
+      }
+    }
+
+    props["refs"] = refs;
+  }
+
+  //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-UPDATE',
   //    'cmd': 'new' | 'update' | 'delete',
   //    'id': sel,
@@ -1165,62 +1256,7 @@ namespace LinksRouting
     if( insert_pair.first == _concept_nodes.end() )
       return;
 
-    QJsonObject new_ref = msg.value("ref").toObject();
-    QUrl url = from_json<QUrl>( !new_ref.isEmpty() ? new_ref.value("url")
-                                                   : msg.value("url") );
-
-    if( !url.isValid() )
-    {
-      qWarning() << "Missing or invalid url for updating reference." << msg;
-      return;
-    }
-
-    auto refs = insert_pair.first->value("refs").toMap();
-    auto ref_it = refs.find(url.toString());
-
-    QString const cmd = from_json<QString>(msg.value("cmd"));
-    if( cmd == "delete" )
-    {
-      if( ref_it == refs.end() )
-      {
-        qWarning() << "Can not remove not existing reference" << msg;
-        return;
-      }
-
-      qDebug() << "Removing reference." << url;
-      refs.erase(ref_it);
-    }
-    else
-    {
-      QVariantList new_selections =
-        new_ref.value("selections").toArray().toVariantList();
-      if( ref_it == refs.end() )
-      {
-        qDebug() << "Adding new reference." << url;
-
-        refs[ url.toString() ] = QVariantMap({
-          {"icon", from_json<QString>(new_ref.value("icon"))},
-          {"title", from_json<QString>(new_ref.value("title"))},
-          {"selections", new_selections}
-        });
-      }
-      else
-      {
-        qDebug() << "Adding selection to existing reference." << url;
-
-        auto ref = ref_it.value().toMap();
-
-        if( new_ref.contains("icon") )
-          ref["icon"] = from_json<QString>(new_ref.value("icon"));
-        if( new_ref.contains("title") )
-          ref["title"] = from_json<QString>(new_ref.value("title"));
-
-        ref["selections"] = ref.value("selections").toList() + new_selections;
-        ref_it.value() = ref;
-      }
-    }
-
-    (*insert_pair.first)["refs"] = refs;
+    updateRefs(*insert_pair.first, msg);
 
     QJsonObject msg_ret = QJsonObject::fromVariantMap(*insert_pair.first);
     msg_ret["task"] = "CONCEPT-UPDATE";
@@ -1235,28 +1271,19 @@ namespace LinksRouting
   void IPCServer::onConceptLinkUpdate(ClientRef client, QJsonObject const& msg)
   {
     QString const cmd = from_json<QString>(msg.value("cmd"));
-    QStringList node_ids = from_json<QStringList>(msg.value("nodes"));
-    if( node_ids.size() != 2 )
-    {
-      qWarning() << "Only edges with 2 nodes supported. Got:" << node_ids;
-      return;
-    }
-
-    node_ids.sort();
-    QPair<QString, QString> link_id{node_ids.at(0), node_ids.at(1)};
-
     if( cmd == "new" )
     {
-      if( _concept_links.contains(link_id) )
+      auto insert_pair = getConceptLink(msg, true, "create concept link");
+      if( insert_pair.first == _concept_links.end() )
+        return;
+
+      auto node_ids = insert_pair.first.key();
+      if( !insert_pair.second )
       {
-        qWarning() << "Concept link" << link_id << "already exists.";
+        qWarning() << "Concept link" << node_ids << "already exists.";
         return;
       }
-
-      _concept_links.insert(link_id, {});
-
-      QJsonObject msg_ret;
-      qDebug() << msg_ret;
+      qDebug() << "add concept link:" << node_ids;
 
       distributeMessage(QJsonObject({
         {"task", "CONCEPT-LINK-NEW"},
@@ -1266,14 +1293,14 @@ namespace LinksRouting
     }
     else if( cmd == "delete" )
     {
-      auto it = _concept_links.find(link_id);
-      if( it == _concept_links.end() )
-      {
-        qWarning() << "Can not delete not existing link" << link_id;
+      auto insert_pair = getConceptLink(msg, false, "delete concept link");
+      if( insert_pair.first == _concept_links.end() )
         return;
-      }
 
-      qDebug() << "remove link:" << link_id;
+      auto it = insert_pair.first;
+      auto node_ids = it.key();
+
+      qDebug() << "remove concept link:" << node_ids;
       _concept_links.erase(it);
 
       distributeMessage(QJsonObject({
@@ -1284,8 +1311,8 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  //    'task': 'CONCEPT-UPDATE-REFS'
-  //    'cmd': 'add'
+  //    'task': 'CONCEPT-LINK-UPDATE-REFS'
+  //    'cmd': 'add' | 'delete'
   //    'nodes': [<node ids>]
   //    'ref': {
   //      'url': <url>,
@@ -1294,7 +1321,17 @@ namespace LinksRouting
   //    }
   void IPCServer::onConceptLinkUpdateRefs(ClientRef, QJsonObject const& msg)
   {
+    auto insert_pair = getConceptLink(msg, false, "update link references");
+    if( insert_pair.first == _concept_links.end() )
+      return;
 
+    updateRefs(*insert_pair.first, msg);
+    qDebug() << "link refs" << _concept_links;
+
+    QJsonObject msg_ret = QJsonObject::fromVariantMap(*insert_pair.first);
+    msg_ret["task"] = "CONCEPT-LINK-UPDATE";
+
+    distributeMessage(msg_ret);
   }
 
   //----------------------------------------------------------------------------

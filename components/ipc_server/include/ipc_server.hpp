@@ -156,6 +156,27 @@ namespace LinksRouting
                   bool create = false,
                   QString const& error_desc = "" );
 
+      /**
+       * Get an existing edge/concept link or add a new one.
+       *
+       * @param create      Create new edge if not exists
+       * @param error_desc  Description added to error message if something
+       *                    fails
+       *
+       * @return An iterator to the existing or newly created edge and a bool
+       *         indicating whether a new edge has been inserted.
+       */
+      QPair<ConceptEdges::iterator, bool>
+      getConceptLink( QJsonObject const& msg,
+                      bool create = false,
+                      QString const& error_desc = "" );
+
+      /**
+       * Update refs in the given properties (of a node or an edge)
+       */
+      void updateRefs( Properties& props,
+                       QJsonObject const& msg );
+
       void onConceptUpdate(ClientRef, QJsonObject const& msg);
       void onConceptUpdateRefs(ClientRef, QJsonObject const& msg);
       void onConceptLinkUpdate(ClientRef, QJsonObject const& msg);

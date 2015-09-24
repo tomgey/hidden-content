@@ -161,12 +161,12 @@ namespace LinksRouting
 
   //----------------------------------------------------------------------------
   bool NodeRenderer::renderRect( Rect const& rect,
-                                 size_t b,
+                                 int b,
                                  unsigned int tex,
                                  Color const& fill,
                                  Color const& border )
   {
-    if( b )
+    if( border.a > 0.05 )
     {
       glColor4fv(border);
       glBegin(fill.a < 0.5 ? GL_LINE_LOOP : GL_QUADS);
@@ -178,7 +178,7 @@ namespace LinksRouting
     }
 
     if( fill.a < 0.05 )
-      return b > 0;
+      return border.a > 0.05;
 
     if( tex )
     {

@@ -40,7 +40,7 @@ namespace LinksRouting
                         bool do_transform = true );
 
       bool renderRect( const Rect& rect,
-                       size_t margin = 2,
+                       int margin = 2,
                        unsigned int tex = 0,
                        const Color& fill = Color(1, 1, 1, 1),
                        const Color& border = Color(0.3, 0.3, 0.3, 0.8) );

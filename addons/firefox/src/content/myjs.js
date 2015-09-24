@@ -7,6 +7,7 @@ var ctrl_socket = null;
 var ctrl_queue = null;
 var status = '';
 var status_sync = '';
+var concepts = {};
 var selected_concepts = [];
 
 function getPid()
@@ -31,9 +32,48 @@ function getBaseDomainFromHost(host)
   // suffix: eTLDService.getPublicSuffixFromHost(host));
 }
 
+function getContentUrl(_location)
+{
+  var location = _location || content.location;
+  return decodeURIComponent(location.origin + location.pathname);
+}
+
 function $(id)
 {
   return document.getElementById(id);
+}
+
+/**
+ * Get an iframe for drawing on top of the given document.
+ *
+ * @param doc
+ */
+function getOrCreateDrawFrame(doc, clear)
+{
+
+  var draw_frame = doc.body.querySelector('iframe#hcd-draw-area');
+  if( !draw_frame )
+  {
+    draw_frame = doc.createElement("iframe");
+    draw_frame.id = 'hcd-draw-area';
+    draw_frame.style.position = 'absolute';
+    draw_frame.style.border = 'none';
+    draw_frame.style.top = 0;
+    draw_frame.style.left = 0;
+    draw_frame.style.pointerEvents = 'none';
+
+    doc.body.appendChild(draw_frame);
+  }
+  else if( clear )
+  {
+    console.log("clear frame");
+    removeAllChildren(draw_frame);
+  }
+
+  draw_frame.style.width = doc.body.scrollWidth + 'px';
+  draw_frame.style.height = doc.body.scrollHeight + 'px';
+
+  return draw_frame;
 }
 
 var client_id = "firefox:" + Date.now() + ":" + getPid();
@@ -41,7 +81,7 @@ var client_id = "firefox:" + Date.now() + ":" + getPid();
 var last_url = null;
 var last_id = null;
 var last_stamp = null;
-var offset = [0,0];
+var vp_origin = [0,0];
 var scale = 1;
 var win = null;
 var menu = null;
@@ -217,14 +257,18 @@ function ctrlSend(data, force = false)
     console.log(event);
     ctrl_socket = null;
   }
-  ctrl_socket.onerror = function(event) { alert(event); ctrl_socket = null; }
+  ctrl_socket.onerror = function(event)
+  {
+    console.warn("Control socket error", event);
+    ctrl_socket = null;
+  }
   ctrl_socket.onmessage = function(event)
   {
     var msg = JSON.parse(event.data);
     if( msg.task == 'SYNC' )
       handleSyncMsg(msg);
     else
-      alert(event.data);
+      console.warn("Unknown message", event.data);
   }
 }
 
@@ -244,8 +288,8 @@ function updateScale()
                           .getInterface(Ci.nsIDOMWindowUtils);
   scale = domWindowUtils.screenPixelsPerCSSPixel;
 
-  offset[0] = win.mozInnerScreenX * scale;
-  offset[1] = win.mozInnerScreenY * scale;
+  vp_origin[0] = win.mozInnerScreenX * scale;
+  vp_origin[1] = win.mozInnerScreenY * scale;
 }
 
 /**
@@ -363,6 +407,7 @@ function onUrlChange(url, tab, reason)
  */
 function onPageLoad(event)
 {
+  updateConcepts();
   setStatusSync("no-src");
 
   if( event.target instanceof HTMLDocument )
@@ -400,7 +445,7 @@ function onPageLoad(event)
   }
 
   var tab = gBrowser._getTabForContentWindow(view);
-  onUrlChange(location.href, tab, event.type);
+  onUrlChange(getContentUrl(location), tab, event.type);
 
   suspend_autostart = false;
   if( !stopped )
@@ -540,7 +585,7 @@ function onLoad(e)
   var doc = e.originalTarget;
   var view = doc.defaultView;
   var location = view ? view.location : {};
-  
+
   if( location.href === 'about:newtab' )
     return;
 
@@ -834,8 +879,7 @@ function addRefSelection(ids, sel)
   }
 
   var base_domain = getBaseDomainFromHost(content.location.hostname);
-  var url = decodeURIComponent( content.location.origin
-                              + content.location.pathname );
+  var url = getContentUrl();
   var title = content.document.title;
 
   imgToBase64(
@@ -909,6 +953,8 @@ function onConceptEdgeNew(el, event)
     'cmd': 'new',
     'nodes': selected_concepts
   });
+
+  addRefSelection([selected_concepts]);
 }
 
 /**
@@ -940,6 +986,13 @@ window.addEventListener("load", function window_load()
   // Dynamic context menu entries
   var menu = $("contentAreaContextMenu");
   menu.addEventListener("popupshowing", onContextMenu, false);
+
+  // List of concepts inside the document
+  var b = document.createElementNS("http://www.w3.org/1999/xhtml", "html:div");
+  b.id = "document-concepts";
+
+//<tabbrowser id="content"/>
+  $('content').appendChild(b);
 });
 
 /**
@@ -1159,6 +1212,12 @@ function onDump()
 }
 
 //------------------------------------------------------------------------------
+function onSaveState()
+{
+  send({'task': 'SAVE-STATE'});
+}
+
+//------------------------------------------------------------------------------
 function reportVisLinks(id, found, refs)
 {
   if( !do_report || status != 'active' || !id.length )
@@ -1206,9 +1265,7 @@ function reportVisLinks(id, found, refs)
     };
   }
 
-  var body = content.document.body;
-  var content_url = decodeURIComponent( content.location.origin
-                                      + content.location.pathname );
+  var content_url = getContentUrl();
 
   for(var url in refs)
   {
@@ -1216,50 +1273,8 @@ function reportVisLinks(id, found, refs)
       continue;
 
     var selections = refs[url]['selections'];
-    for(var i = 0; i < selections.length; i++)
-    {
-      var sel_bbs = [];
-      var ranges = selections[i];
-      for(var j = 0; j < ranges.length; j++)
-      {
-        var range = ranges[j];
-        var node_start = getElementForXPath(range['start-node'], body),
-            node_end = getElementForXPath(range['end-node'], body);
-  
-        var range_obj = content.document.createRange();
-        range_obj.setStart(node_start, range['start-offset']);
-        range_obj.setEnd(node_end, range['end-offset']);
-  
-        appendBBsFromRange(sel_bbs, range_obj);
-      }
-      if( !sel_bbs.length )
-        continue;
-
-      // [[l, t], [r, t], [r, b], [l, b]];
-      var lt = sel_bbs[0][0],
-          rb = sel_bbs[0][2];
-      var l = lt[0],
-          r = rb[0],
-          t = lt[1],
-          b = rb[1];
-  
-      for(var j = 1; j < sel_bbs.length; j++)
-      {
-        var lt_j = sel_bbs[j][0],
-            rb_j = sel_bbs[j][2];
-        var l_j = lt_j[0],
-            r_j = rb_j[0],
-            t_j = lt_j[1],
-            b_j = rb_j[1];
-  
-        l = Math.min(l, l_j);
-        r = Math.max(r, r_j);
-        t = Math.min(t, t_j);
-        b = Math.max(b, b_j);
-      }
-  
-      bbs[bbs.length] = [[l, t], [r, t], [r, b], [l, b]];
-    }
+    for(var sel of selections)
+      appendBBsFromSelection(bbs, sel, vp_origin);
   }
 
   var msg = {
@@ -1414,7 +1429,7 @@ function sendMsgRegister(match_title, src_id, click_pos)
       window.screenX, window.screenY,
       window.outerWidth, window.outerHeight
     ],
-    'url': content.location.href
+    'url': getContentUrl()
   };
 
   if( match_title )
@@ -1576,8 +1591,15 @@ function register(match_title = false, src_id = 0)
             items_routing.appendChild(item);
           }
         }
+        else if( msg.id == '/concepts/all' )
+        {
+          concepts = msg.nodes;
+          updateConcepts();
+        }
         else
+        {
           cfg[msg.id] = msg.val;
+        }
       }
       else if( msg.task == 'GET' )
       {
@@ -1635,6 +1657,19 @@ function register(match_title = false, src_id = 0)
       {
         if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
           selected_concepts = msg.concepts;
+        else if( msg.task == 'CONCEPT-NEW' || msg.task == 'CONCEPT-UPDATE' )
+        {
+          delete msg.task;
+          concepts[msg.id] = msg;
+
+          updateConcepts();
+        }
+        else if( msg.task == 'CONCEPT-DELETE' )
+        {
+          delete concepts[msg.id];
+          console.log("deleting", msg.id, concepts);
+          updateConcepts();
+        }
       }
       else if( msg.task == 'OPENED-URLS-UPDATE' )
       {
@@ -1779,8 +1814,10 @@ function searchAreaTitles(doc, id)
 	return bbs;
 }
 
-//------------------------------------------------------------------------------
-function appendBBsFromRange(bbs, range)
+/**
+ *
+ */
+function appendBBsFromRange(bbs, range, offset)
 {
   var rects = [range.getBoundingClientRect()];//range.getClientRects();
   for(var i = 0; i < rects.length; ++i)
@@ -1795,6 +1832,54 @@ function appendBBsFromRange(bbs, range)
       bbs[bbs.length] = [[l, t], [r, t], [r, b], [l, b]];
     }
   }
+}
+
+/**
+ *
+ * @param sel   Array of ranges
+ */
+function appendBBsFromSelection(bbs, sel, offset)
+{
+  var body = content.document.body;
+  var sel_bbs = [];
+  for(var range of sel)
+  {
+    var node_start = getElementForXPath(range['start-node'], body),
+        node_end = getElementForXPath(range['end-node'], body);
+
+    var range_obj = content.document.createRange();
+    range_obj.setStart(node_start, range['start-offset']);
+    range_obj.setEnd(node_end, range['end-offset']);
+
+    appendBBsFromRange(sel_bbs, range_obj, offset);
+  }
+  if( !sel_bbs.length )
+    return;
+
+  // [[l, t], [r, t], [r, b], [l, b]];
+  var lt = sel_bbs[0][0],
+      rb = sel_bbs[0][2];
+  var l = lt[0],
+      r = rb[0],
+      t = lt[1],
+      b = rb[1];
+
+  for(var bb of sel_bbs)
+  {
+    var lt_i = bb[0],
+        rb_i = bb[2];
+    var l_i = lt_i[0],
+        r_i = rb_i[0],
+        t_i = lt_i[1],
+        b_i = rb_i[1];
+
+    l = Math.min(l, l_i);
+    r = Math.max(r, r_i);
+    t = Math.min(t, t_i);
+    b = Math.max(b, b_i);
+  }
+
+  bbs[bbs.length] = [[l, t], [r, t], [r, b], [l, b]];
 }
 
 //------------------------------------------------------------------------------
@@ -1832,7 +1917,7 @@ function searchDocument(doc, id)
       var range = document.createRange();
       range.setStart(node, m.index);
       range.setEnd(node, m.index + m[0].length);
-      appendBBsFromRange(bbs, range);
+      appendBBsFromRange(bbs, range, vp_origin);
     }
   }
 
@@ -1962,12 +2047,66 @@ function findBoundingBox(doc, obj)
   w *= scale;
   h *= scale;
 
-  x += offset[0];
-  y += offset[1];
+  x += vp_origin[0];
+  y += vp_origin[1];
 
   return [ [x,     y],
            [x + w, y],
            [x + w, y + h],
            [x,     y + h]/*,
            {outside: outside}*/ ];
+}
+
+/**
+ * Update concept list/references/highlights/etc.
+ */
+function updateConcepts()
+{
+  console.log("Update concepts...");
+
+  var concept_area = $('document-concepts');
+  removeAllChildren(concept_area);
+
+  var draw_doc = getOrCreateDrawFrame(content.document, true).contentDocument;
+  var body = content.document.body;
+  var bb_body = body.getBoundingClientRect();
+
+  var top = 4;
+  for(var id in concepts)
+  {
+    var concept = concepts[id];
+
+    var ref = concept.refs ? concept.refs[ getContentUrl() ] : undefined;
+    if( !ref )
+      continue;
+
+    var a = document.createElementNS("http://www.w3.org/1999/xhtml", "html:a");
+    a.dataset.id = id;
+    a.innerHTML = concept.name;
+    a.title = "Link concept '" + concept.name + "'";
+    a.style.top = top + "px";
+    a.onclick = function(e)
+    {
+      alert("click " + this.dataset.id);
+    };
+
+    concept_area.appendChild(a);
+    top += a.offsetHeight + 5;
+
+    var bbs = [];
+    for(var sel of ref.selections)
+      appendBBsFromSelection(bbs, sel, [-bb_body.left, -bb_body.top]);
+
+    for(var bb of bbs)
+    {
+      var marker = draw_doc.createElement("div");
+      marker.style.border = '1px solid red';
+      marker.style.position = 'absolute';
+      marker.style.left = (bb[0][0] - 5) + 'px';
+      marker.style.top = bb[0][1] + 'px';
+      marker.style.height = (bb[3][1] - bb[0][1]) + 'px';
+
+      draw_doc.body.appendChild(marker);
+    }
+  }
 }
