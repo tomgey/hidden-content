@@ -1161,11 +1161,11 @@ svg
       restart(false);
     }
   })
-  .on('mousemove', mousemove)
-  .on('mouseup', mouseup);
+  .on('mousemove', mousemove);
 d3.select(window)
   .on('keydown', keydown)
   .on('keyup', keyup)
+  .on('mouseup', mouseup)
   .on('resize', resize)
   .on('load', function(){
     restart();
