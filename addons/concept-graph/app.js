@@ -287,8 +287,8 @@ function addNode(node)
 
   console.log("New concept: " + node.name, node);
 
-  if( node.x == undefined ) node.x = force.size()[0] / 2 + (Math.random() - 0.5) * 2;
-  if( node.y == undefined ) node.y = force.size()[1] / 2 + (Math.random() - 0.5) * 2;
+  if( node.x == undefined ) node.x = force.size()[0] / 2 + (Math.random() - 0.5) * 100;
+  if( node.y == undefined ) node.y = force.size()[1] / 2 + (Math.random() - 0.5) * 100;
 
   nodes.push(node);
 
@@ -526,6 +526,20 @@ function resetMouseVars() {
 // update force layout (called automatically each iteration)
 function tick()
 {
+  [w, h] = force.size();
+  node_groups.attr('transform', function(d)
+  {
+    // Keep nodes within visible region
+    [node_w, node_h] = nodeSize(d);
+    node_w += 5;
+    node_h += 10;
+
+    d.x = Math.max(node_w, Math.min(d.x, w - node_w));
+    d.y = Math.max(node_h, Math.min(d.y, h - node_h - 20));
+
+    return 'translate(' + d.x + ',' + d.y + ')';
+  });
+
   // draw directed edges with proper padding from node centers
   link_paths.attr('d', function(d)
   {
@@ -549,12 +563,7 @@ function tick()
     return 'M' + sourceX + ',' + sourceY + 'L' + targetX + ',' + targetY;
   });
 
-  node_groups.attr('transform', function(d)
-  {
-    return 'translate(' + d.x + ',' + d.y + ')';
-  });
-
-  if( force.alpha() < 0.02 )
+  if( force.alpha() < 0.02 || nodes.length == 0 )
     force.stop();
 
   updateLinksThrottled();
@@ -650,6 +659,8 @@ function restart(update_layout = true)
         .classed('hidden', false)
         .attr('d', 'M' + mousedown_node.x + ',' + mousedown_node.y + 'L' + mousedown_node.x + ',' + mousedown_node.y);
 
+      // Hide tool area while dragging (eg. new link)
+      $('tool-area').style.display = 'none';
       restart(false);
     })
     .on('mouseup', function(d) {
@@ -794,8 +805,10 @@ function mousemove() {
   restart(false);
 }
 
-function mouseup() {
-  if(mousedown_node) {
+function mouseup()
+{
+  if( mousedown_node )
+  {
     // hide drag line
     drag_line
       .classed('hidden', true)
@@ -807,6 +820,7 @@ function mouseup() {
 
   // clear mouse event vars
   resetMouseVars();
+  $('tool-area').style.display = 'inline';
 }
 
 function spliceLinksForNode(node) {
