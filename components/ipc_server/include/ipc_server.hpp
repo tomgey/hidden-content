@@ -114,6 +114,7 @@ namespace LinksRouting
       bool routingActive() const;
 
       void dumpState(std::ostream& strm = std::cout) const;
+      void saveState(const QString& file_name = "");
 
     private slots:
 
@@ -184,7 +185,10 @@ namespace LinksRouting
       void onConceptSelectionUpdate(ClientRef, QJsonObject const& msg);
 
       void onValueGet(ClientRef, QJsonObject const& msg);
+      void onValueGetFound(ClientRef, QJsonObject const& msg);
       void onValueSet(ClientRef, QJsonObject const& msg);
+
+      void onSaveState(ClientRef, QJsonObject const& msg);
 
       void onLinkInitiate(ClientRef, QJsonObject const& msg);
       void onLinkUpdate(ClientRef, QJsonObject const& msg);
@@ -194,8 +198,6 @@ namespace LinksRouting
       void regionsChanged(const WindowRegions& regions);
       ClientInfos::iterator findClientInfo(WId wid);
       ClientInfos::iterator findClientInfoById(QString const& cid);
-      QWebSocket* getSocketByWId(WId wid);
-      QWebSocket* getSocketForClient(ClientRef const& client);
 
       LinkDescription::LinkList::iterator findLink(const QString& id);
       bool requireLink( const QJsonObject& msg,
@@ -257,12 +259,14 @@ namespace LinksRouting
       /** Send changes in opened urls after the last call to sendUrlupdate() */
       void sendUrlUpdate(ClientRef receiver = nullptr);
 
+      /** Get concept graph as json object */
+      QJsonObject conceptGraphToJson() const;
+
     private:
 
       QWebSocketServer   *_server;
       QTcpServer         *_status_server;
       ClientInfos         _clients;
-      ClientWeakRef       _client_requested_save;
       WindowMonitor       _window_monitor;
 
       QMutex             *_mutex_slot_links;
@@ -271,6 +275,9 @@ namespace LinksRouting
 
       MsgCallbackMap      _msg_handlers;
       std::vector<Color>  _colors; //!< Available link colors
+
+      ClientWeakRef       _save_state_client;
+      QString             _save_state_file;
 
       QMap<QUrl, uint8_t> _opened_urls; //!< Urls of documents currently shown
                                         //   shown inside a connected

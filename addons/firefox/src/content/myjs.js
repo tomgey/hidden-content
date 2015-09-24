@@ -1441,6 +1441,11 @@ function sendMsgRegister(match_title, src_id, click_pos)
     msg['src-id'] = src_id;
   send(msg);
 
+  send({
+    task: 'GET',
+    id: '/concepts/all'
+  });
+
   var props = {
     'CPURouting:SegmentLength': 'Integer',
     'CPURouting:NumIterations': 'Integer',

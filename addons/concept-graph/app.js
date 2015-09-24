@@ -103,6 +103,21 @@ function start(check = true)
       updateDetailDialogs();
       restart(false);
     }
+    else if( msg.task == 'GET' )
+    {
+      if( msg.id == '/state/all' )
+      {
+        send({
+          'task': 'GET-FOUND',
+          'id': '/state/all',
+          'data': {
+            'type': 'concept-graph',
+          }
+        });
+      }
+      else
+        console.log("Got unknown data: " + event.data);
+    }
     else if( msg.task == 'GET-FOUND' )
     {
       if( msg.id == '/concepts/all' )
@@ -184,7 +199,7 @@ function sendMsgRegister()
     'task': 'REGISTER',
     'type': "Graph",
     'pid': localStorage.getItem('pid'),
-    'cmds': ['create-concept'],
+    'cmds': ['create-concept', 'save-state'],
     "client-id": 'testing',
     'geom': [
       window.screenX, window.screenY,

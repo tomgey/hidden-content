@@ -13,6 +13,7 @@
 #include "JSON.hpp"
 #include "common/PreviewWindow.hpp"
 
+#include <QHostInfo>
 #include <QMutex>
 #include <QWebSocket>
 
@@ -24,6 +25,8 @@
 
 namespace LinksRouting
 {
+  const QString SAVE_FILE_EXT = "concept-local.json";
+
   QJsonArray to_json(ClientWeakList const& clients)
   {
     QJsonArray json;
@@ -42,6 +45,16 @@ namespace LinksRouting
     QJsonArray json;
     for(auto const& s: list)
       json.push_back(QString::fromStdString(s));
+
+    return json;
+  }
+
+  template<class T1, class T2>
+  QJsonArray to_json(QPair<T1, T2> const& p)
+  {
+    QJsonArray json;
+    json.push_back(to_json(p.first));
+    json.push_back(to_json(p.second));
 
     return json;
   }
@@ -157,12 +170,16 @@ namespace LinksRouting
       std::bind(&IPCServer::onLinkUpdate, this, _1, _2);
     _msg_handlers["GET"] =
       std::bind(&IPCServer::onValueGet, this, _1, _2);
+    _msg_handlers["GET-FOUND"] =
+      std::bind(&IPCServer::onValueGetFound, this, _1, _2);
     _msg_handlers["INITIATE"] =
       std::bind(&IPCServer::onLinkInitiate, this, _1, _2);
     _msg_handlers["REGISTER"] =
       std::bind(&IPCServer::onClientRegister, this, _1, _2);
     _msg_handlers["RESIZE"] =
       std::bind(&IPCServer::onClientResize, this, _1, _2);
+    _msg_handlers["SAVE-STATE"] =
+      std::bind(&IPCServer::onSaveState, this, _1, _2);
     _msg_handlers["SEMANTIC-ZOOM"] =
       std::bind(&IPCServer::onClientSemanticZoom, this, _1, _2);
     _msg_handlers["SET"] =
@@ -551,7 +568,7 @@ namespace LinksRouting
     xray.source_region = source_region;
     xray.node = node;
     xray.tile_map = tile_map;
-    xray.client_socket = getSocketByWId(client_info.getWindowInfo().id);
+    xray.client_socket = client_info.socket;
 
     auto& previews = _slot_xray->_data->popups;
     return previews.insert(previews.end(), xray);
@@ -634,6 +651,29 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  void IPCServer::saveState(const QString& file)
+  {
+    _save_state_file = file;
+
+    if( _save_state_file.isEmpty() )
+    {
+      QString dir = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
+      if( dir.isEmpty() )
+        qWarning() << "Could not get writable location for saving state.";
+
+      _save_state_file = dir + "/"
+                        + QHostInfo::localHostName()
+                        + "-"
+                        + QString::number(QDateTime::currentMSecsSinceEpoch())
+                        + "." + SAVE_FILE_EXT;
+
+    }
+
+    qDebug() << "Going to save state to" << _save_state_file;
+    onValueGet({}, {{"id", "/state/all"}});
+  }
+
+  //----------------------------------------------------------------------------
   void IPCServer::onClientConnection()
   {
     QWebSocket* client = _server->nextPendingConnection();
@@ -674,14 +714,6 @@ namespace LinksRouting
         else
           msg_handler->second(client_info, msg, data);
       }
-
-//      if( task == "GET-FOUND" )
-//      {
-//        QJsonObject json = parseJson(data.toLocal8Bit());
-//        client_info->setStateData(json.value("data").toObject());
-//
-//        return checkStateData();
-//      }
     }
     catch(std::runtime_error& ex)
     {
@@ -1377,7 +1409,7 @@ namespace LinksRouting
     else if( id == "/state/all" ) // get state of all connected applications
                                   // and active links
     {
-      _client_requested_save = client;
+      _save_state_client = client;
 
       QJsonObject msg;
       msg["task"] = "GET";
@@ -1411,10 +1443,9 @@ namespace LinksRouting
     }
     else if( id == "/concepts/all" )
     {
-      msg_ret["nodes"] = to_json(_concept_nodes);
-      msg_ret["links"] = to_json(_concept_links);
-      msg_ret["selected"] = to_json(_selected_concepts);
-      msg_ret["active"] = _active_concept;
+      QJsonObject concept_graph = conceptGraphToJson();
+      for(auto it = concept_graph.begin(); it != concept_graph.end(); ++it)
+        msg_ret[it.key()] = it.value();
     }
     else
     {
@@ -1437,6 +1468,20 @@ namespace LinksRouting
     client->socket->sendTextMessage(
       QJsonDocument(msg_ret).toJson(QJsonDocument::Compact)
     );
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onValueGetFound(ClientRef client, QJsonObject const& msg)
+  {
+    QString const id = from_json<QString>(msg.value("id"));
+    if( id != "/state/all" )
+    {
+      qWarning() << "Unknown value for GET-FOUND" << msg;
+      return;
+    }
+
+    client->setStateData(msg.value("data").toObject());
+    checkStateData();
   }
 
   //----------------------------------------------------------------------------
@@ -1470,6 +1515,12 @@ namespace LinksRouting
     }
 
     dirtyLinks();
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onSaveState(ClientRef, QJsonObject const&)
+  {
+    saveState();
   }
 
   //----------------------------------------------------------------------------
@@ -1961,43 +2012,6 @@ namespace LinksRouting
         return it.second->id() == id;
       }
     );
-  }
-
-  //----------------------------------------------------------------------------
-  QWebSocket* IPCServer::getSocketByWId(WId wid)
-  {
-    auto client = findClientInfo(wid);
-    (
-      _clients.begin(),
-      _clients.end(),
-      [wid](const ClientInfos::value_type& c)
-      {
-        return c.second->getWindowInfo().id == wid;
-      }
-    );
-
-    if( client == _clients.end() )
-      return 0;
-
-    return client->first;
-  }
-
-  //----------------------------------------------------------------------------
-  QWebSocket* IPCServer::getSocketForClient(ClientRef const& client_ref)
-  {
-    auto client = std::find_if(
-      _clients.begin(),
-      _clients.end(),
-      [&client_ref](const ClientInfos::value_type& c)
-      {
-        return c.second == client_ref;
-      }
-    );
-
-    if( client == _clients.end() )
-      return nullptr;
-
-    return client->first;
   }
 
   //----------------------------------------------------------------------------
@@ -2638,23 +2652,21 @@ namespace LinksRouting
 
     qDebug() << "state complete";
 
-    auto save_client = _client_requested_save.lock();
-    if( !save_client )
+    QWebSocket* socket = nullptr;
+    auto save_client = _save_state_client.lock();
+
+    if( save_client )
     {
-      qWarning() << "Missing client which requested state.";
-      return;
+      socket = save_client->socket;
+      if( !socket )
+        qWarning() << "Failed to get socket for client";
     }
 
-    QWebSocket* socket = getSocketByWId(save_client->getWindowInfo().id);
-    if( !socket )
+    if( !socket && _save_state_file.isEmpty() )
     {
-      qWarning() << "Failed to get socket for client";
+      qWarning() << "Missing client or filename to save state.";
       return;
     }
-
-    QJsonObject msg_state;
-    msg_state["task"] = "GET-FOUND";
-    msg_state["id"] = "/state/all";
 
     QJsonArray client_data;
     for(auto const& client: _clients)
@@ -2668,6 +2680,8 @@ namespace LinksRouting
       client_state["region"] = to_json(client.second->getWindowInfo().region);
       client_data.append(client_state);
     }
+
+    QJsonObject msg_state;
     msg_state["clients"] = client_data;
     msg_state["screen"] = to_json(desktopRect().bottomRight().toQSize());
 
@@ -2682,6 +2696,39 @@ namespace LinksRouting
       links.push_back(link_data);
     }
     msg_state["links"] = links;
+    msg_state["concepts"] = conceptGraphToJson();
+
+    if( !_save_state_file.isEmpty() )
+    {
+      QFileInfo file_info(_save_state_file);
+      QDir file_dir = file_info.absoluteDir();
+      if( !file_dir.exists() )
+      {
+        if( !QDir("/").mkpath(file_dir.absolutePath()) )
+        {
+          qWarning() << "Creating directory" << file_dir.absolutePath() << "failed...";
+          return;
+        }
+      }
+
+      QFile state_file(_save_state_file);
+      if( !state_file.open(QIODevice::Truncate | QIODevice::WriteOnly | QIODevice::Text) )
+      {
+        qWarning() << "Failed to open file" << _save_state_file;
+        return;
+      }
+
+      state_file.write(QJsonDocument(msg_state).toJson());
+      qDebug() << "Saved state to" << _save_state_file;
+
+      _save_state_file.clear();
+    }
+
+    if( !socket )
+      return;
+
+    msg_state["task"] = "GET-FOUND";
+    msg_state["id"] = "/state/all";
 
     socket->sendTextMessage(
       QJsonDocument(msg_state).toJson(QJsonDocument::Compact)
@@ -2727,6 +2774,18 @@ namespace LinksRouting
 
     if( !receiver )
       _changed_urls.clear();
+  }
+
+  //----------------------------------------------------------------------------
+  QJsonObject IPCServer::conceptGraphToJson() const
+  {
+    QJsonObject graph;
+    graph["nodes"] = to_json(_concept_nodes);
+    graph["links"] = to_json(_concept_links);
+    graph["selected"] = to_json(_selected_concepts);
+    graph["active"] = _active_concept;
+
+    return graph;
   }
 
   //----------------------------------------------------------------------------
@@ -2888,10 +2947,9 @@ namespace LinksRouting
       return false;
     }
 
-    QWebSocket* socket = _ipc_server->getSocketForClient(client);
-    if( !socket )
+    if( !client->socket )
     {
-      LOG_WARN("Failed to get socket!");
+      LOG_WARN("Client has no socket!");
       return false;
     }
 
@@ -2921,7 +2979,7 @@ namespace LinksRouting
           return;
 
         TileRequest tile_req = {
-          static_cast<QWebSocket*>(socket),
+          client->socket,
           tile_map,
           zoom,
           x, y,
