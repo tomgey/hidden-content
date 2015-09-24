@@ -66,7 +66,7 @@
               class="menuitem-iconic"
               tooltiptext="Create new concept node from selected text."
               onclick="onConceptNodeNew(this, event);"
-              label="New Object" />
+              label="New Concept" />
     <menuitem id="context-concepts-add-ref"
               class="menuitem-iconic"
               tooltiptext="Add reference to selected text to selected objects."
@@ -74,9 +74,9 @@
               label="Add Reference" />
     <menuitem id="context-concepts-link-selection"
               class="menuitem-iconic"
-              tooltiptext="Link selection to concept or relation."
+              tooltiptext="Link selectetd concepts with a reference to the selected text."
               onclick="onConceptEdgeNew(this, event);"
-              label="Link Selection"/>
+              label="Link Concepts"/>
   </menugroup>
   <menuseparator id="context-sep-concepts" insertafter="context-concepts"/>
 </menupopup>

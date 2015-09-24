@@ -809,6 +809,7 @@ function onContextMenu()
     label.style.color = "#e66";
   }
 
+  label.hidden = links_active;
   $("context-concepts-new-node").hidden = !links_active;
 
   var selected_active =  links_active
