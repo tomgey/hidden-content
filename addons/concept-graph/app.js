@@ -144,7 +144,6 @@ function start(check = true)
       active_urls = new Map();
       for(var url in msg.urls)
         active_urls.set(url, msg.urls[url]);
-      console.log(active_urls);
 
       updateDetailDialogs();
       updateLinks();
@@ -502,11 +501,6 @@ svg.append('svg:defs').append('svg:marker')
     .attr('d', 'M10,-5L0,0L10,5')
     .attr('fill', '#000');
 
-// line displayed when dragging new nodes
-var drag_line = svg.append('svg:path')
-  .attr('class', 'link dragline hidden')
-  .attr('d', 'M0,0L0,0');
-
 // handles to link and node element groups
 var link_paths = svg.append('svg:g').selectAll('path'),
     node_groups = svg.append('svg:g').selectAll('g');
@@ -630,46 +624,67 @@ function restart(update_layout = true)
                        .attr('class', 'node');
   node_groups.exit().remove();
 
-  nodes_enter.append('svg:ellipse')
-    .on('mouseover', function(d) {
-      if(!mousedown_node || d === mousedown_node) return;
-      // enlarge target node
-      d3.select(this).attr('transform', 'scale(1.1)');
-    })
-    .on('mouseout', function(d) {
-      if(!mousedown_node || d === mousedown_node) return;
-      // unenlarge target node
-      d3.select(this).attr('transform', '');
-    })
+  var drag = d3.behavior.drag()
+    .on("dragstart", function() {
 
+    })
+    .on("drag", function() {
+      for(var id of selected_node_ids)
+      {
+        var node = getNodeById(id);
+        node.px = (node.x += d3.event.dx);
+        node.py = (node.y += d3.event.dy);
+        node.fixed = true;
+      }
+      force.resume();
+    });
+
+  node_groups.call(drag);
+
+  nodes_enter.append('svg:ellipse')
     // --------------------
     // Node mousedown/click
-    .on('mousedown', function(d) {
-      d3.event.stopPropagation();
+    .on('mousedown', function(d)
+    {
       mousedown_node = d;
 
+      if( selected_node_ids.has(d.id) )
+      {
+        d3.select(this).classed('new-selection', false);
+
+        // Do not change selection on mousedown, as it could be the start of a
+        // drag/move gesture.
+        return;
+      }
+
       updateNodeSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
-      selected_link = null;
-      link_paths
-        .classed('selected', function(d) { return d === selected_link; });
+      d3.select(this).classed('new-selection', true);
 
-      // reposition drag line
-      drag_line
-        .style('marker-end', 'url(#end-arrow)')
-        .classed('hidden', false)
-        .attr('d', 'M' + mousedown_node.x + ',' + mousedown_node.y + 'L' + mousedown_node.x + ',' + mousedown_node.y);
+      restart(false);
 
-      // Hide tool area while dragging (eg. new link)
-      $('tool-area').style.display = 'none';
+//      selected_link = null;
+//      link_paths
+//        .classed('selected', function(d) { return d === selected_link; });
+//
+//      // Hide tool area while dragging (eg. new link)
+//      $('tool-area').style.display = 'none';
+//      restart(false);
+    })
+    .on('click', function(d)
+    {
+      if( d3.event.defaultPrevented )
+        return;
+
+      if( d3.select(this).classed('new-selection') )
+        return;
+
+      updateNodeSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
       restart(false);
     })
-    .on('mouseup', function(d) {
-      if(!mousedown_node) return;
-
-      // needed by FF
-      drag_line
-        .classed('hidden', true)
-        .style('marker-end', '');
+    .on('mouseup', function(d)
+    {
+      if( !mousedown_node )
+        return;
 
       // check for drag-to-self
       mouseup_node = d;
@@ -795,30 +810,13 @@ function restart(update_layout = true)
   }
 }
 
-function mousemove() {
-  if(!mousedown_node) return;
+function mousemove()
+{
 
-  // update drag line
-  drag_line.attr('d', 'M' + mousedown_node.x + ',' + mousedown_node.y
-                    + 'L' + d3.mouse(this)[0] + ',' + d3.mouse(this)[1]);
-
-  restart(false);
 }
 
 function mouseup()
 {
-  if( mousedown_node )
-  {
-    // hide drag line
-    drag_line
-      .classed('hidden', true)
-      .style('marker-end', '');
-  }
-
-  // because :active only works in WebKit?
-  svg.classed('active', false);
-
-  // clear mouse event vars
   resetMouseVars();
   $('tool-area').style.display = 'inline';
 }
@@ -874,12 +872,6 @@ function keydown() {
   if(lastKeyDown !== -1) return;
   lastKeyDown = d3.event.keyCode;
 
-  // ctrl
-  if(d3.event.keyCode === 17) {
-    node_groups.call(force.drag);
-    svg.classed('ctrl', true);
-  }
-
   if(!selected_node && !selected_link) return;
   switch(d3.event.keyCode) {
     case 8: // backspace
@@ -899,15 +891,6 @@ function keydown() {
 
 function keyup() {
   lastKeyDown = -1;
-
-  // ctrl
-  if(d3.event.keyCode === 17)
-  {
-    node_groups
-      .on('mousedown.drag', null)
-      .on('touchstart.drag', null);
-    svg.classed('ctrl', false);
-  }
 }
 
 function sendInitiateForNode(n)
@@ -953,7 +936,7 @@ function updateNodeSelection(action, node_id, active_id, send_msg = true)
       selected_node_ids.clear();
       if( node_id )
         selected_node_ids.add(node_id);
-  
+
       active_node_id = node_id;
     }
   }
@@ -980,8 +963,6 @@ function updateNodeSelection(action, node_id, active_id, send_msg = true)
   else
     console.warn('Unknown action: ' + action);
 
-  console.log("sel", previous_selection, selected_node_ids, active_node_id);
-  
   if( send_msg )
     send({
       'task': 'CONCEPT-SELECTION-UPDATE',
@@ -1023,7 +1004,7 @@ function updateDetailDialogs()
     ref['url'] = url;
     refs.push(ref);
   }
-  
+
   card.select('.concept-references')
       .style('display', refs.length ? 'block' : 'none');
 
@@ -1168,6 +1149,9 @@ d3.select('#check-link-circle').on('click', function(){
 svg
   .on('mousedown', function(d) {
     mousedown_node = null;
+
+    if( d3.event.target.tagName != 'svg' )
+      return;
 
     if( !d3.event.ctrlKey )
     {

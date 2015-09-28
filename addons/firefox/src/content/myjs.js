@@ -759,8 +759,8 @@ function onDocumentClick(e)
 
 function onTabDblClick(e)
 {
-  if( e.ctrlKey )
-    return _websocketDrag(e);
+//  if( e.ctrlKey )
+//    return _websocketDrag(e);
 }
 
 function onGlobalWheel(e)
@@ -965,7 +965,7 @@ window.addEventListener("load", function window_load()
 {
   gBrowser.addEventListener("load", onLoad, true);
   gBrowser.addEventListener("beforeunload", onUnload, true);
-  gBrowser.addEventListener("mousedown", onDocumentClick, true);
+  //gBrowser.addEventListener("mousedown", onDocumentClick, true);
   gBrowser.addEventListener("click", onTabDblClick, true);
 
   var container = gBrowser.tabContainer;
