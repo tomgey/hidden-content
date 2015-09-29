@@ -624,22 +624,24 @@ function restart(update_layout = true)
                        .attr('class', 'node');
   node_groups.exit().remove();
 
-  var drag = d3.behavior.drag()
-    .on("dragstart", function() {
-
-    })
-    .on("drag", function() {
-      for(var id of selected_node_ids)
+  node_groups
+    .call(d3.behavior.drag()
+      .on("dragstart", function()
       {
-        var node = getNodeById(id);
-        node.px = (node.x += d3.event.dx);
-        node.py = (node.y += d3.event.dy);
-        node.fixed = true;
-      }
-      force.resume();
-    });
 
-  node_groups.call(drag);
+      })
+      .on("drag", function()
+      {
+        for(var id of selected_node_ids)
+        {
+          var node = getNodeById(id);
+          node.px = (node.x += d3.event.dx);
+          node.py = (node.y += d3.event.dy);
+          node.fixed = true;
+        }
+        force.resume();
+      })
+    );
 
   nodes_enter.append('svg:ellipse')
     // --------------------
@@ -781,7 +783,11 @@ function restart(update_layout = true)
     ref_icons.enter()
       .append('g')
       .classed('ref', true)
-      .classed('ref-open', function(d) { return active_urls.has(d.url); });
+      .classed('ref-open', function(d) { return active_urls.has(d.url); })
+      .on('mousedown', function()
+      {
+        d3.event.stopPropagation();
+      });
 
   ref_enter
     .append('image')
