@@ -981,9 +981,12 @@ function updateNodeSelection(action, node_id, active_id, send_msg = true)
     if( !selected_node_ids.has(prev_id) )
       abortLink('link://concept/' + prev_id);
 
-  for(var cur_id of selected_node_ids)
-    if( !previous_selection.has(cur_id) )
-      sendInitiateForNode(getNodeById(cur_id));
+  if( localStorage.getItem('auto-link') == 'true' )
+  {
+    for(var cur_id of selected_node_ids)
+      if( !previous_selection.has(cur_id) )
+        sendInitiateForNode(getNodeById(cur_id));
+  }
 
   updateDetailDialogs();
 }
@@ -1142,15 +1145,6 @@ d3.select('#button-add-concept').on('click', function() {
   });
 });
 
-d3.select('#check-debug-mode').on('click', function(){
-  localStorage.setItem('debug-mode', this.checked);
-  d3.select('html').classed('debug-mode', this.checked);
-});
-d3.select('#check-link-circle').on('click', function(){
-  localStorage.setItem('link-circle', this.checked);
-  updateLinks();
-});
-
 // app starts here
 svg
   .on('mousedown', function(d) {
@@ -1166,6 +1160,31 @@ svg
     }
   })
   .on('mousemove', mousemove);
+
+// -----------------------------
+// Settings (in the side drawer)
+
+var settings_menu_entries = [
+  { id: 'debug-mode',
+    label: 'Enable Debug Tools',
+    change: function(val)
+    {
+      d3.select('html').classed('debug-mode', val);
+    }
+  },
+  { id: 'link-circle',
+    label: 'Link with Circle',
+    change: function()
+    {
+      updateLinks();
+    }
+  },
+  { id: 'auto-link',
+    label: 'Auto-link selected Concepts',
+    change: function() {}
+  }
+];
+
 d3.select(window)
   .on('keydown', keydown)
   .on('keyup', keyup)
@@ -1175,8 +1194,36 @@ d3.select(window)
     restart();
     start();
 
-    d3.select('html')
-      .classed('debug-mode', localStorage.getItem('debug-mode') == 'true');
+    var label =
+      d3.select('.mdl-layout__drawer')
+        .selectAll('label')
+        .data(settings_menu_entries)
+        .enter()
+        .append('label')
+          .attr('class', 'mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect')
+          .attr('for', function(d){ return 'setting-check-' + d.id; });
+    label.append('input')
+           .attr('type', 'checkbox')
+           .attr('id', function(d){ return 'setting-check-' + d.id; })
+           .attr('class', 'mdl-checkbox__input')
+           .property('checked', function(d)
+           {
+             console.log("set checked", d.id, localStorage.getItem(d.id));
+             return localStorage.getItem(d.id) == 'true' ? true : null;
+           })
+           .on('click', function(d)
+           {
+             localStorage.setItem(d.id, this.checked);
+             d.change(this.checked);
+           });
+    label.append('span')
+           .attr('class', 'mdl-checkbox__label')
+           .text(function(d){ return d.label; });
+    componentHandler.upgradeDom(); // TODO just update single elements?
+
+    // Restore state
+    for(var setting of settings_menu_entries)
+      setting.change(localStorage.getItem(setting.id) == 'true');
   })
   .on('visibilitychange', function() {
     if( document.hidden )
