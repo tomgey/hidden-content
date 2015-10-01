@@ -33,7 +33,7 @@
   </header>
   <div class="mdl-layout__drawer">
     <span class="mdl-layout-title">Settings</span>
-    <nav class="mdl-navigation">
+    <nav class="mdl-navigation" id="drawer-settings">
     </nav>
   </div>
   <main class="mdl-layout__content">
@@ -55,10 +55,13 @@
       <svg id="graph-drawing-area"/>
     </div>
 
-    <div id="tool-area">
+    <div id="tool-area" class="mdl-navigation">
+
+      <!-- context sensitive actions -->
+      <ul class="action-list" id="context-toolbox"></ul>
 
       <!-- Selected concept properties -->
-      <div class="card-concept-details mdl-card mdl-shadow--4dp" style="display:none;">
+      <div class="card-concept-details mdl-card mdl-shadow--4dp" style="visibility:hidden;">
         <div class="mdl-card__media">
           <div class="mdl-card__title" style="margin-right: 80px">
             <h4 class="mdl-card__title-text">Active Concept</h4>
@@ -85,9 +88,6 @@
         <div class="mdl-card__menu">
           <button class="concept-edit mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect">
             <i class="material-icons">edit</i>
-          </button>
-          <button class="concept-delete mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect">
-            <i class="material-icons">delete</i>
           </button>
         </div>
       </div>

@@ -95,12 +95,12 @@ function start(check = true)
     {
       delete msg.task;
       addLink(msg);
+      updateDetailDialogs();
       restart();
     }
     else if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
     {
       updateNodeSelection('set', msg.concepts, msg.active, false);
-      updateDetailDialogs();
       restart(false);
     }
     else if( msg.task == 'GET' )
@@ -133,7 +133,6 @@ function start(check = true)
           addLink(msg.links[i]);
 
         updateNodeSelection('set', msg.selected, msg.active, false);
-        updateDetailDialogs();
         restart();
       }
       else
@@ -358,8 +357,8 @@ function addLink(link)
 
   link.source = first;
   link.target = second;
-  console.log("add link", link);
 
+  console.log("add link", link);
   links.push(link);
 }
 
@@ -436,22 +435,21 @@ function removeNodeById(id)
     return false;
 
   updateNodeSelection('unset', node.id);
-  updateDetailDialogs();
 
   // Remove matching links...
   for(var i = links.length - 1; i >= 0; --i)
   {
     var link = links[i];
-    if( link.source.id == node.id || link.target.id == node.id )
-    {
-      send({
-        'task': 'CONCEPT-LINK-UPDATE',
-        'cmd': 'delete',
-        'nodes': [link.source.id, link.target.id]
-      });
+    if( link.nodes.indexOf(node.id) < 0 )
+      continue;
 
-      links.splice(i, 1);
-    }
+    send({
+      'task': 'CONCEPT-LINK-UPDATE',
+      'cmd': 'delete',
+      'nodes': link.nodes
+    });
+
+    links.splice(i, 1);
   }
 
   send({
@@ -460,6 +458,19 @@ function removeNodeById(id)
     'id': node.id
   });
   return true;
+}
+
+/**
+ * Get the link connecting the given list of two nodes
+ */
+function getLinkForNodes(nodes)
+{
+  var node_set = new Set(nodes);
+  return links.filter(function(l)
+  {
+    return nodes.has(l.nodes[0])
+        && nodes.has(l.nodes[1]);
+  })[0];
 }
 
 // init D3 force layout
@@ -601,7 +612,7 @@ function restart(update_layout = true)
       // TODO clear node selection?
 
       d3.select('.card-concept-details')
-        .style('display', 'none');
+        .style('visibility', 'hidden');
 
       restart(false);
     });
@@ -682,55 +693,6 @@ function restart(update_layout = true)
 
       updateNodeSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
       restart(false);
-    })
-    .on('mouseup', function(d)
-    {
-      if( !mousedown_node )
-        return;
-
-      // check for drag-to-self
-      mouseup_node = d;
-      if(mouseup_node === mousedown_node) { resetMouseVars(); return; }
-
-      // unenlarge target node
-      d3.select(this).attr('transform', '');
-
-      // add link to graph (update if exists)
-      // NB: links are strictly source < target; arrows separately specified by booleans
-      var source, target, direction;
-      if(mousedown_node.id < mouseup_node.id) {
-        source = mousedown_node;
-        target = mouseup_node;
-        direction = 'right';
-      } else {
-        source = mouseup_node;
-        target = mousedown_node;
-        direction = 'left';
-      }
-
-      var link;
-      link = links.filter(function(l)
-      {
-        return (l.source === source && l.target === target)
-            || (l.source === target && l.target === source);
-      })[0];
-
-      if( !link )
-      {
-        send({
-          'task': 'CONCEPT-LINK-UPDATE',
-          'cmd': 'new',
-          'nodes': [source.id, target.id]
-        });
-
-//        link = {source: source, target: target, left: false, right: false};
-//        links.push(link);
-      }
-
-      // select new link
-//      selected_link = link;
-//      selected_node = null;
-//      restart();
     });
 
   nodes_enter
@@ -827,76 +789,52 @@ function mouseup()
   $('tool-area').style.display = 'inline';
 }
 
-function spliceLinksForNode(node) {
-  var toSplice = links.filter(function(l) {
-    return (l.source === node || l.target === node);
-  });
-  toSplice.map(function(l) {
-    links.splice(links.indexOf(l), 1);
-  });
-}
-
-// only respond once per keydown
-var lastKeyDown = -1;
-
-function keydown() {
-  var tag = d3.event.target.tagName;
+/**
+ * Keydown handler
+ */
+function keydown()
+{
+  var e = d3.event,
+      tag = e.target.tagName;
   if( tag == 'TEXTAREA' || tag == 'INPUT' )
     return;
 
   var drawer = d3.select('.mdl-layout__drawer');
-  switch( d3.event.keyCode )
+  if( dlgActive || drawer.classed('is-visible') )
   {
-    case 27: // Escape
+    if( e.code == 'Escape' )
+    {
       if( dlgActive )
         dlgActive.hide();
       else
-      {
-        if( drawer.classed('is-visible') )
-          drawer.classed('is-visible', false);
-      }
-      break;
-    case 8:  // Backspace
-    case 46: // Delete
-      if( dlgActive || drawer.classed('is-visible') )
-        return;
+        drawer.classed('is-visible', false);
+    }
 
-      for(var node_id of selected_node_ids)
-        removeNodeById(node_id);
-
-      if( selected_link )
-        links.splice(links.indexOf(selected_link), 1);
-      selected_link = null;
-
-      restart();
-      break;
+    return;
   }
-  return;
 
-  d3.event.preventDefault();
+  var cur_combo = '';
+  if( e.shiftKey && e.key != 'Shift' )
+    cur_combo += 'Shift+';
+  if( e.ctrlKey && e.key != 'Control' )
+    cur_combo += 'Control+';
+  if( e.altKey && e.key != 'Alt' )
+    cur_combo += 'Alt+';
 
-  if(lastKeyDown !== -1) return;
-  lastKeyDown = d3.event.keyCode;
+  var key = e.key in [' '] ? key.code : e.key;
+  if( key.length == 1 )
+    key = key.toUpperCase();
+  cur_combo += key;
 
-  if(!selected_node && !selected_link) return;
-  switch(d3.event.keyCode) {
-    case 8: // backspace
-    case 46: // delete
-      if(selected_node) {
-        nodes.splice(nodes.indexOf(selected_node), 1);
-        spliceLinksForNode(selected_node);
-      } else if(selected_link) {
-        links.splice(links.indexOf(selected_link), 1);
-      }
-      selected_link = null;
-      selected_node = null;
-      restart();
-      break;
+  for(var a of user_actions)
+  {
+    if(   a.shortcuts.indexOf(cur_combo) < 0
+       || (typeof(a.isEnabled) == 'function' && !a.isEnabled()) )
+      continue;
+
+    a.action();
+    e.preventDefault();
   }
-}
-
-function keyup() {
-  lastKeyDown = -1;
 }
 
 function sendInitiateForNode(n)
@@ -993,16 +931,45 @@ function updateNodeSelection(action, node_id, active_id, send_msg = true)
 
 function updateDetailDialogs()
 {
+  // -----------------------
+  // Dynamic action menu box
+
+  var action_box = d3.select('#context-toolbox');
+  action_box.selectAll('li')
+            .remove();
+
+  for(var a of user_actions)
+  {
+    if( typeof(a.isEnabled) == 'function' && !a.isEnabled() )
+      continue;
+
+    var li = action_box.append('li');
+    if( a.icon )
+      li.append('span')
+        .attr('class', 'material-icons')
+        .text(a.icon);
+    li.append('span')
+      .attr('class', 'action-title')
+      .text(a.label);
+    li.append('span')
+      .attr('class', 'action-shortcut')
+      .text(a.shortcuts[0]);
+    li.on('click', a.action);
+  }
+
+  // --------------------
+  // Selection properties
+
   var card = d3.select('.card-concept-details');
   var active_node = getNodeById(active_node_id);
 
   if( !active_node )
   {
-    card.style('display', 'none');
+    card.style('visibility', 'hidden');
     return;
   }
 
-  card.style('display', '');
+  card.style('visibility', 'visible');
   card.select('.mdl-card__title-text').text(active_node.name);
   card.select('.concept-raw-data').text(JSON.stringify(active_node, null, 1));
 
@@ -1061,11 +1028,6 @@ function updateDetailDialogs()
           active_node.name
         );
       });
-  card.select('.concept-delete')
-     .on('click', function() {
-       removeNodeById(active_node_id);
-       restart();
-     });
 }
 
 var dlgActive = null;
@@ -1112,6 +1074,10 @@ var dlgConceptName = {
 
     dlgActive = null;
     dlgConceptName._cb = null;
+
+    d3.select('#dlg-concept-name-input')
+      .node()
+      .blur();
   }
 };
 
@@ -1135,7 +1101,8 @@ d3.select('#dlg-concept-name').on('submit', function() {
   }
 });
 
-d3.select('#button-add-concept').on('click', function() {
+function addConceptWithDialog()
+{
   dlgConceptName.show(function(name){
     send({
       'task': 'CONCEPT-UPDATE',
@@ -1143,7 +1110,8 @@ d3.select('#button-add-concept').on('click', function() {
       'id': name
     });
   });
-});
+}
+d3.select('#button-add-concept').on('click', addConceptWithDialog);
 
 // app starts here
 svg
@@ -1161,33 +1129,8 @@ svg
   })
   .on('mousemove', mousemove);
 
-// -----------------------------
-// Settings (in the side drawer)
-
-var settings_menu_entries = [
-  { id: 'debug-mode',
-    label: 'Enable Debug Tools',
-    change: function(val)
-    {
-      d3.select('html').classed('debug-mode', val);
-    }
-  },
-  { id: 'link-circle',
-    label: 'Link with Circle',
-    change: function()
-    {
-      updateLinks();
-    }
-  },
-  { id: 'auto-link',
-    label: 'Auto-link selected Concepts',
-    change: function() {}
-  }
-];
-
 d3.select(window)
   .on('keydown', keydown)
-  .on('keyup', keyup)
   .on('mouseup', mouseup)
   .on('resize', resize)
   .on('load', function(){
@@ -1195,7 +1138,7 @@ d3.select(window)
     start();
 
     var label =
-      d3.select('.mdl-layout__drawer')
+      d3.select('#drawer-settings')
         .selectAll('label')
         .data(settings_menu_entries)
         .enter()
@@ -1235,3 +1178,96 @@ d3.select(window)
   .on('beforeunload', function(){
     abortAllLinks();
   });
+
+//------------------------------
+// Settings (in the side drawer)
+
+var settings_menu_entries = [
+  { id: 'link-circle',
+   label: 'Link with Circle',
+   change: function()
+   {
+     updateLinks();
+   }
+  },
+  { id: 'auto-link',
+   label: 'Auto-link selected Concepts',
+   change: function() {}
+  },
+  { id: 'debug-mode',
+    label: 'Enable Debug Tools',
+    change: function(val)
+    {
+      d3.select('html').classed('debug-mode', val);
+    }
+  },
+  { id: 'expert-mode',
+    label: 'Enable Expert Modus',
+    change: function(val)
+    {
+      updateDetailDialogs();
+    }
+  },
+];
+
+//------------------------------------
+// Action menu entries (and shortcuts)
+
+var user_actions = [
+  { label: 'Add Concept',
+    icon: 'add',
+    shortcuts: ['Shift+A'],
+    action: addConceptWithDialog
+  },
+  { label: 'Delete Selected Concept(s)',
+    icon: 'delete',
+    shortcuts: ['Delete', 'Backspace'],
+    //isMenuVisible: function() { return this.isEnabled(); },
+    isEnabled: function() { return selected_node_ids.size > 0; },
+    action: function()
+    {
+      for(var node_id of selected_node_ids)
+        removeNodeById(node_id);
+
+      if( selected_link )
+        links.splice(links.indexOf(selected_link), 1);
+      selected_link = null;
+
+      restart();
+    }
+  },
+  { label: 'Relate Selected Concepts',
+    shortcuts: ['E'],
+    //isMenuVisible: function() { return this.isEnabled(); },
+    isEnabled: function()
+    {
+      return  selected_node_ids.size == 2
+           && !getLinkForNodes(selected_node_ids);
+    },
+    action: function()
+    {
+      send({
+        'task': 'CONCEPT-LINK-UPDATE',
+        'cmd': 'new',
+        'nodes': [...selected_node_ids]
+      });
+    }
+  },
+  { label: 'Remove \'fixed\' attribute',
+    shortcuts: ['F'],
+    isEnabled: function()
+    {
+      return selected_node_ids.size > 0
+          && localStorage.getItem('expert-mode') == 'true';
+    },
+    action: function()
+    {
+      for(var id of selected_node_ids)
+      {
+        var node = getNodeById(id);
+        node.fixed = false;
+      }
+      force.resume();
+    }
+  }
+];
