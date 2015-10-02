@@ -11,6 +11,8 @@ var queue_timeout = null;
 var active_links = new Set();
 var active_urls = new Set();
 
+var drag_start_pos = null;
+
 function $(id)
 {
   return document.getElementById(id);
@@ -101,7 +103,6 @@ function start(check = true)
     else if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
     {
       updateNodeSelection('set', msg.concepts, msg.active, false);
-      restart(false);
     }
     else if( msg.task == 'GET' )
     {
@@ -132,7 +133,7 @@ function start(check = true)
         for(var i = 0; i < msg.links.length; ++i)
           addLink(msg.links[i]);
 
-        updateNodeSelection('set', msg.selected, msg.active, false);
+        updateNodeSelection('set', msg.selected, msg.active, false, false);
         restart();
       }
       else
@@ -434,7 +435,7 @@ function removeNodeById(id)
   if( !node )
     return false;
 
-  updateNodeSelection('unset', node.id);
+  updateNodeSelection('unset', node.id, null, true, false);
 
   // Remove matching links...
   for(var i = links.length - 1; i >= 0; --i)
@@ -516,17 +517,13 @@ svg.append('svg:defs').append('svg:marker')
 var link_paths = svg.append('svg:g').selectAll('path'),
     node_groups = svg.append('svg:g').selectAll('g');
 
+var drag_rect =
+  svg.append('svg:rect')
+       .attr('class', 'drag-rect');
+
 // mouse event vars
 var selected_link = null,
-    mousedown_link = null,
-    mousedown_node = null,
-    mouseup_node = null;
-
-function resetMouseVars() {
-  mousedown_node = null;
-  mouseup_node = null;
-  mousedown_link = null;
-}
+    mousedown_link = null;
 
 // update force layout (called automatically each iteration)
 function tick()
@@ -659,8 +656,6 @@ function restart(update_layout = true)
     // Node mousedown/click
     .on('mousedown', function(d)
     {
-      mousedown_node = d;
-
       if( selected_node_ids.has(d.id) )
       {
         d3.select(this).classed('new-selection', false);
@@ -672,16 +667,6 @@ function restart(update_layout = true)
 
       updateNodeSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
       d3.select(this).classed('new-selection', true);
-
-      restart(false);
-
-//      selected_link = null;
-//      link_paths
-//        .classed('selected', function(d) { return d === selected_link; });
-//
-//      // Hide tool area while dragging (eg. new link)
-//      $('tool-area').style.display = 'none';
-//      restart(false);
     })
     .on('click', function(d)
     {
@@ -692,7 +677,6 @@ function restart(update_layout = true)
         return;
 
       updateNodeSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
-      restart(false);
     });
 
   nodes_enter
@@ -778,17 +762,6 @@ function restart(update_layout = true)
   }
 }
 
-function mousemove()
-{
-
-}
-
-function mouseup()
-{
-  resetMouseVars();
-  $('tool-area').style.display = 'inline';
-}
-
 /**
  * Keydown handler
  */
@@ -864,7 +837,11 @@ function abortAllLinks()
     abortLink(id);
 }
 
-function updateNodeSelection(action, node_id, active_id, send_msg = true)
+function updateNodeSelection( action,
+                              node_id,
+                              active_id,
+                              send_msg = true,
+                              restart_on_change = true )
 {
   var previous_selection = new Set(selected_node_ids);
 
@@ -907,6 +884,30 @@ function updateNodeSelection(action, node_id, active_id, send_msg = true)
   else
     console.warn('Unknown action: ' + action);
 
+  var changed = false;
+
+  // Automatically link selected nodes
+  for(var prev_id of previous_selection)
+    if( !selected_node_ids.has(prev_id) )
+    {
+      abortLink('link://concept/' + prev_id);
+      changed = true;
+    }
+
+  var autolink = localStorage.getItem('auto-link') == 'true';
+
+  for(var cur_id of selected_node_ids)
+    if( !previous_selection.has(cur_id) )
+    {
+      if( autolink )
+        sendInitiateForNode(getNodeById(cur_id));
+
+      changed = true;
+    }
+
+  if( !changed )
+    return false;
+
   if( send_msg )
     send({
       'task': 'CONCEPT-SELECTION-UPDATE',
@@ -914,19 +915,12 @@ function updateNodeSelection(action, node_id, active_id, send_msg = true)
       'active': active_node_id
     });
 
-  // Automatically link selected nodes
-  for(var prev_id of previous_selection)
-    if( !selected_node_ids.has(prev_id) )
-      abortLink('link://concept/' + prev_id);
-
-  if( localStorage.getItem('auto-link') == 'true' )
-  {
-    for(var cur_id of selected_node_ids)
-      if( !previous_selection.has(cur_id) )
-        sendInitiateForNode(getNodeById(cur_id));
-  }
-
   updateDetailDialogs();
+
+  if( restart_on_change )
+    restart(false);
+
+  return true;
 }
 
 function updateDetailDialogs()
@@ -1115,25 +1109,73 @@ d3.select('#button-add-concept').on('click', addConceptWithDialog);
 
 // app starts here
 svg
-  .on('mousedown', function(d) {
-    mousedown_node = null;
-
-    if( d3.event.target.tagName != 'svg' )
+  .on('mousedown', function(d)
+  {
+    if(    d3.event.target.tagName != 'svg'
+        || d3.event.ctrlKey )
       return;
 
-    if( !d3.event.ctrlKey )
-    {
-      updateNodeSelection('set', null);
-      restart(false);
-    }
-  })
-  .on('mousemove', mousemove);
+    updateNodeSelection('set', null);
+
+    drag_start_pos = d3.mouse(this);
+    drag_rect.attr('x', drag_start_pos[0])
+             .attr('y', drag_start_pos[1])
+             .attr('width', 0)
+             .attr('height', 0);
+  });
 
 d3.select(window)
   .on('keydown', keydown)
-  .on('mouseup', mouseup)
   .on('resize', resize)
-  .on('load', function(){
+
+  // ----------------------
+  // Global mouse move/drag
+  .on('mousemove', function()
+  {
+    if( !drag_start_pos )
+      return;
+
+    var cur_pos = d3.mouse(svg.node()),
+        x1 = Math.min(drag_start_pos[0], cur_pos[0]),
+        y1 = Math.min(drag_start_pos[1], cur_pos[1]),
+        x2 = Math.max(drag_start_pos[0], cur_pos[0]),
+        y2 = Math.max(drag_start_pos[1], cur_pos[1]);
+
+    drag_rect.attr('x', x1)
+             .attr('y', y1)
+             .attr('width', x2 - x1)
+             .attr('height', y2 - y1);
+
+    var selected_nodes = new Set();
+    for(var node of nodes)
+    {
+      if(    x1 <= node.x && node.x <= x2
+          && y1 <= node.y && node.y <= y2 )
+        selected_nodes.add(node.id);
+    }
+
+    updateNodeSelection(
+      'set',
+      selected_nodes,
+      selected_nodes.values().next().value
+    );
+  })
+
+  // ----------------------
+  // Drag end detection
+  .on('mouseup', function()
+  {
+    if( !drag_start_pos )
+      return;
+
+    drag_start_pos = null;
+    drag_rect.attr('width', 0);
+  })
+
+  // -------------------
+  // Page load hook
+  .on('load', function()
+  {
     restart();
     start();
 

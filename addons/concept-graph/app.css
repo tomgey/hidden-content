@@ -38,7 +38,7 @@ main.mdl-layout__content {
   padding: 0;
   list-style: none;
   width: 100%;
-  min-width: 150px;
+  min-width: 300px;
 }
 
 .action-list > li {
@@ -59,6 +59,10 @@ main.mdl-layout__content {
   margin: 0.5em 0.6em 0.5em 0;
 }
 
+.action-list span:last-child {
+  margin-right: 1.2em;
+}
+
 .action-list span.material-icons {
   width: 16px;
   height: 16px;
@@ -76,6 +80,10 @@ span.action-title {
 
 span.action-shortcut {
   color: #999;
+}
+
+.card-concept-details {
+  position: relative;
 }
 
 .card-concept-details .mdl-textfield {
@@ -197,8 +205,10 @@ html.debug-mode .concept-raw-data {
   text-align: right;
 }
 
-svg:not(.active):not(.ctrl) {
-  cursor: crosshair;
+/* SVG */
+.drag-rect {
+  fill: rgba(240, 120, 70, 0.35);
+  stroke: #f07746;
 }
 
 path.link {
@@ -209,16 +219,8 @@ path.link {
 /*  filter: drop-shadow(1px 2px 3px rgba(0, 0, 0, 0.8)); */
 }
 
-svg:not(.active):not(.ctrl) path.link {
-  cursor: pointer;
-}
-
 path.link.selected {
   stroke-dasharray: 10,2;
-}
-
-path.link.dragline {
-  pointer-events: none;
 }
 
 path.link.hidden {
