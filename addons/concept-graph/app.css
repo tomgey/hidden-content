@@ -195,6 +195,7 @@ html.debug-mode .concept-raw-data {
   height: 100%;
   z-index: 1000;
   transition: background-color 0.5s;
+  text-align: center;
 }
 
 #overlay > * {
@@ -203,6 +204,19 @@ html.debug-mode .concept-raw-data {
 
 #overlay .mdl-card__actions {
   text-align: right;
+}
+
+.notification-message {
+  display: inline;
+  font-size: 12px;
+  padding: 6px 10px;
+  background-color: #f9edbe;
+  border: 1px solid #f0c36d;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+#overlay > .notification-message {
+  margin-top: 0;
 }
 
 /* SVG */

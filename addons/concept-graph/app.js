@@ -36,26 +36,43 @@ function getViewport()
   ];
 }
 
+function startWithCountdownMessage(timeout)
+{
+  if( timeout >= 1000 )
+  {
+    NotificationMessage.show(
+      "<b>Not connected</b> Retry in " + Math.round(timeout / 1000) + "s...",
+      false
+    );
+
+    setTimeout(startWithCountdownMessage, 1000, timeout - 1000);
+  }
+  else
+  {
+    NotificationMessage.show("Check if server is alive...", false);
+    setTimeout(start, timeout, true);
+  }
+}
+
 function start(check = true)
 {
   if( check )
   {
-    console.log("Check if server is alive...");
+    NotificationMessage.show("Check if server is alive...", false);
     httpPing(
       'http://localhost:4486/',
       function() {
-        console.log("Server alive => connect");
+        NotificationMessage.show("Connecting...");
         setTimeout(start, 0, false);
       },
       function() {
-        console.log("Server not alive => wait and retry...");
-        setTimeout(start, 3442, true);
+        startWithCountdownMessage(5442);
       }
     );
     return;
   }
   else
-    console.log("Going to connect to server...");
+    NotificationMessage.show("Connecting...");
 
   console.log("Creating new WebSocket.");
   links_socket = new WebSocket('ws://localhost:4487', 'VLP');
@@ -63,15 +80,17 @@ function start(check = true)
   links_socket.onopen = function(event)
   {
     console.log("opened -> sending REGISTER" + links_socket + window.links_socket);
+    NotificationMessage.hide();
     setTimeout(sendMsgRegister, 10);
   };
   links_socket.onclose = function(event)
   {
-    console.log("closed" + event);
+    NotificationMessage.show("<b>Connection closed</b>");
     setTimeout(start, 2850, true);
   };
   links_socket.onerror = function(event)
   {
+    NotificationMessage.show("<b>Connection error!</b>");
     console.log("error" + event);
   };
   links_socket.onmessage = function(event)
@@ -1074,6 +1093,21 @@ var dlgConceptName = {
       .blur();
   }
 };
+
+var NotificationMessage = {
+  show: function(msg, do_log = true) {
+    d3.select('.notification-message')
+      .style('visibility', 'visible')
+      .html(msg);
+
+    if( do_log )
+      console.log('Notification', msg);
+  },
+  hide: function() {
+    d3.select('.notification-message')
+      .style('visibility', 'hidden');
+  }
+}
 
 d3.select('#dlg-concept-name').on('submit', function() {
   d3.event.preventDefault();
