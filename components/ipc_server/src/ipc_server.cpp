@@ -1235,21 +1235,41 @@ namespace LinksRouting
       if( insert_pair.first == _concept_nodes.end() )
         return;
 
-      QString const name = from_json<QString>(msg.value("name")).trimmed();
-      if( name.isEmpty() )
+      const QStringList ignore_props{
+        "id",
+        "task",
+        "cmd"
+      };
+      auto& props = *insert_pair.first;
+
+      bool changed = false;
+      for(auto it = msg.begin(); it != msg.end(); ++it)
       {
-        qWarning() << "Only update of name is supported...";
-        return;
+        if( ignore_props.contains(it.key()) )
+          continue;
+
+        QString const val = from_json<QString>(it.value()).trimmed(),
+                      old_val = props.value(it.key()).toString();
+
+        if( val == old_val )
+        {
+          qDebug() << "Ignoring unchanged value of" << it.key();
+          continue;
+        }
+
+        changed = true;
+        props[it.key()] = val;
+
+        qDebug() << "Changing property" << it.key() << "of concept"
+                 << props.value("name")
+                 << "from" << old_val
+                 << "to" << val;
       }
 
-      auto it = insert_pair.first;
-      qDebug() << "Changing name of concept"
-               << it->value("name")
-               << "to" << name;
+      if( !changed )
+        return;
 
-      (*it)["name"] = name;
-
-      QJsonObject msg_ret = QJsonObject::fromVariantMap(*it);
+      QJsonObject msg_ret = QJsonObject::fromVariantMap(props);
       msg_ret["task"] = "CONCEPT-UPDATE";
 
       distributeMessage(msg_ret);

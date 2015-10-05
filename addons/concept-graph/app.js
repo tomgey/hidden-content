@@ -862,7 +862,8 @@ function updateNodeSelection( action,
                               send_msg = true,
                               restart_on_change = true )
 {
-  var previous_selection = new Set(selected_node_ids);
+  var previous_selection = new Set(selected_node_ids),
+      previous_active = active_node_id;
 
   if( action == 'set' )
   {
@@ -924,7 +925,8 @@ function updateNodeSelection( action,
       changed = true;
     }
 
-  if( !changed )
+  if(    previous_active == active_node_id
+      && !changed )
     return false;
 
   if( send_msg )
@@ -933,6 +935,18 @@ function updateNodeSelection( action,
       'concepts': [...selected_node_ids],
       'active': active_node_id
     });
+
+  if( previous_active )
+  {
+    var user_data = d3.select('.card-concept-details .concept-user-data')
+                      .property('value');
+    send({
+      'task': 'CONCEPT-UPDATE',
+      'cmd': 'update',
+      'id': previous_active,
+      'user-data': user_data
+    });
+  }
 
   updateDetailDialogs();
 
@@ -984,6 +998,8 @@ function updateDetailDialogs()
 
   card.style('visibility', 'visible');
   card.select('.mdl-card__title-text').text(active_node.name);
+  card.select('.concept-user-data').property( 'value',
+                                              active_node['user-data'] || '' );
   card.select('.concept-raw-data').text(JSON.stringify(active_node, null, 1));
 
   var refs = [];
@@ -1101,7 +1117,7 @@ var NotificationMessage = {
       .html(msg);
 
     if( do_log )
-      console.log('Notification', msg);
+      console.log('Notification:', msg);
   },
   hide: function() {
     d3.select('.notification-message')

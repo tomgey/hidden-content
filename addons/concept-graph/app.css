@@ -21,6 +21,7 @@ main.mdl-layout__content {
   border-right: 1px solid #aaa;
   box-shadow: 0 0 4px #888;
   flex-direction: column;
+  max-width: 350px;
 }
 
 #tool-area > .mdl-card {
@@ -89,6 +90,10 @@ span.action-shortcut {
 .card-concept-details .mdl-textfield {
   padding: 0.2em;
   width: auto;
+}
+
+.concept-user-data {
+  width: calc(100% - 0.6em);
 }
 
 .concept-references > ul {
