@@ -1072,7 +1072,7 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  QPair<ConceptNodes::iterator, bool>
+  QPair<PropertyObjectMap::iterator, bool>
   IPCServer::getConcept( QJsonObject const& msg,
                          bool create,
                          QString const& error_desc )
@@ -1097,12 +1097,15 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  QPair<ConceptEdges::iterator, bool>
+  QPair<PropertyObjectMap::iterator, bool>
   IPCServer::getConceptLink( QJsonObject const& msg,
                              bool create,
                              QString const& error_desc )
   {
     QStringList node_ids = from_json<QStringList>(msg.value("nodes"));
+    if( node_ids.isEmpty() )
+      node_ids = from_json<QString>(msg.value("id")).split(':');
+
     if( node_ids.size() != 2 )
     {
       qWarning() << error_desc
@@ -1111,7 +1114,7 @@ namespace LinksRouting
     }
 
     node_ids.sort();
-    QPair<QString, QString> link_id{node_ids.at(0), node_ids.at(1)};
+    QString link_id = node_ids.join(':');
 
     auto it = _concept_links.find(link_id);
     if( it == _concept_links.end() )
@@ -1291,6 +1294,8 @@ namespace LinksRouting
         {"id", id}
       }));
     }
+    else
+      qWarning() << "Unknown cmd" << msg;
   }
 
   //----------------------------------------------------------------------------
@@ -1320,6 +1325,8 @@ namespace LinksRouting
   //    'task': 'CONCEPT-LINK-UPDATE',
   //    'cmd': 'new',
   //    'nodes': [<node ids>]
+  //    'id': <node id>:<node id> (optional instead of 'nodes', sorted
+  //                               alphabetically ascending)
   void IPCServer::onConceptLinkUpdate(ClientRef client, QJsonObject const& msg)
   {
     QString const cmd = from_json<QString>(msg.value("cmd"));
@@ -1339,9 +1346,56 @@ namespace LinksRouting
 
       distributeMessage(QJsonObject({
         {"task", "CONCEPT-LINK-NEW"},
-        {"nodes", to_json(node_ids)}
+        {"nodes", to_json(node_ids.split(':'))}
       }));
       return;
+    }
+    else if( cmd == "update" )
+    {
+      auto insert_pair = getConceptLink(msg, false, "update concept link");
+      if( insert_pair.first == _concept_links.end() )
+        return;
+
+      const QStringList ignore_props{
+        "id",
+        "nodes",
+        "task",
+        "cmd"
+      };
+      auto& props = *insert_pair.first;
+
+      bool changed = false;
+      for(auto it = msg.begin(); it != msg.end(); ++it)
+      {
+        if( ignore_props.contains(it.key()) )
+          continue;
+
+        QString const val = from_json<QString>(it.value()).trimmed(),
+                      old_val = props.value(it.key()).toString();
+
+        if( val == old_val )
+        {
+          qDebug() << "Ignoring unchanged value of" << it.key();
+          continue;
+        }
+
+        changed = true;
+        props[it.key()] = val;
+
+        qDebug() << "Changing property" << it.key() << "of concept link"
+                 << insert_pair.first.key()
+                 << "from" << old_val
+                 << "to" << val;
+      }
+
+      if( !changed )
+        return;
+
+      QJsonObject msg_ret = QJsonObject::fromVariantMap(props);
+      msg_ret["task"] = "CONCEPT-LINK-UPDATE";
+      msg_ret["nodes"] = to_json(insert_pair.first.key().split(':'));
+
+      distributeMessage(msg_ret);
     }
     else if( cmd == "delete" )
     {
@@ -1357,7 +1411,7 @@ namespace LinksRouting
 
       distributeMessage(QJsonObject({
         {"task", "CONCEPT-LINK-DELETE"},
-        {"nodes", to_json(node_ids)}
+        {"nodes", to_json(node_ids.split(':'))}
       }));
     }
   }
@@ -1382,19 +1436,29 @@ namespace LinksRouting
 
     QJsonObject msg_ret = QJsonObject::fromVariantMap(*insert_pair.first);
     msg_ret["task"] = "CONCEPT-LINK-UPDATE";
+    msg_ret["nodes"] = to_json(insert_pair.first.key().split(':'));
 
     distributeMessage(msg_ret);
   }
 
   //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-SELECTION-UPDATE',
-  //    'concepts': [<list of concept ids>],
-  //    'active': <active concept id>
+  //    'nodes': [<list of concept ids>],
+  //    'links': [[<list of concept ids>], [<list of concept ids>], ...]
   void IPCServer::onConceptSelectionUpdate( ClientRef client,
                                             QJsonObject const& msg )
   {
-    _selected_concepts = from_json<StringSet>(msg.value("concepts"));
-    _active_concept = from_json<QString>(msg.value("active"));
+    _selected_nodes = from_json<StringSet>(msg.value("nodes"));
+
+    _selected_links.clear();
+    QJsonArray links = msg.value("links").toArray();
+    for(auto link: links)
+    {
+      QStringList node_ids = from_json<QStringList>(link);
+      node_ids.sort();
+      _selected_links.insert(node_ids.join(':'));
+    }
+
     distributeMessage(msg, client);
   }
 
@@ -2802,8 +2866,8 @@ namespace LinksRouting
     QJsonObject graph;
     graph["nodes"] = to_json(_concept_nodes);
     graph["links"] = to_json(_concept_links);
-    graph["selected"] = to_json(_selected_concepts);
-    graph["active"] = _active_concept;
+    graph["selectedNodes"] = to_json(_selected_nodes);
+    graph["selectedLinks"] = to_json(_selected_links);
 
     return graph;
   }

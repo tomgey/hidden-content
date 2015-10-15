@@ -21,7 +21,7 @@ main.mdl-layout__content {
   border-right: 1px solid #aaa;
   box-shadow: 0 0 4px #888;
   flex-direction: column;
-  max-width: 350px;
+  width: 350px;
 }
 
 #tool-area > .mdl-card {
@@ -87,23 +87,48 @@ span.action-shortcut {
   position: relative;
 }
 
+.card-concept-details .concept-image {
+  max-width: calc(100% - 1em);
+  max-height: 256px;
+  margin: 0.5em;
+}
+
 .card-concept-details .mdl-textfield {
   padding: 0.2em;
   width: auto;
 }
 
-.concept-user-data {
+.card-relation-details .mdl-card__title-text {
+  width: 100%;
+  display: flex;
+}
+
+.card-relation-details .mdl-card__title-text > i {
+  flex: 1;
+  text-align: center;
+  padding-top: 0.35em;
+}
+
+.relation-label {
+  display: flex;
+}
+
+.relation-label input {
+  flex: 1;
+}
+
+.user-data {
   width: calc(100% - 0.6em);
 }
 
-.concept-references > ul {
+.references > ul {
   width: 100%;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.concept-references li {
+.references li {
   vertical-align: middle;
   display: flex;
   min-height: 1.8em;
@@ -111,22 +136,22 @@ span.action-shortcut {
   border-top: 1px solid #ccc;
 }
 
-.concept-references .ref-open {
+.references .ref-open {
   background-color: #fee;
 }
 
-.concept-references .ref-img,
-.concept-references .mdl-badge:not([data-badge]) {
+.references .ref-img,
+.references .mdl-badge:not([data-badge]) {
   width: 14px;
   height: 14px;
   margin: auto 0.9em auto 0.5em;
 }
 
-.concept-references .ref-img img {
+.references .ref-img img {
   margin-bottom: 13px;
 }
 
-.concept-references .mdl-badge[data-badge]::after {
+.references .mdl-badge[data-badge]::after {
   width: 14px;
   height: 14px;
   font-size: 12px;
@@ -135,27 +160,27 @@ span.action-shortcut {
   right: -11px;
 }
 
-.concept-references .ref-url {
+.references .ref-url {
   flex: 1;
   line-height: 1.1;
   text-decoration: none;
   margin: auto 24px auto 0;
 }
 
-.concept-references button {
+.references button {
   visibility: hidden;
 }
 
-.concept-references li:hover button {
+.references li:hover button {
   visibility: visible;
 }
 
-.concept-raw-data {
+.raw-data {
   display: none;
   white-space: pre-wrap;
 }
 
-html.debug-mode .concept-raw-data {
+html.debug-mode .raw-data {
   display: block;
 }
 
@@ -230,26 +255,46 @@ html.debug-mode .concept-raw-data {
   stroke: #f07746;
 }
 
-path.link {
+.link > path:not(.click-proxy) {
+  pointer-events: none;
+}
+
+.link > path.click-proxy {
+  stroke: rgba(255,255,255,0.5);
+  stroke-width: 16px;
+  cursor: pointer;
+}
+
+.link > path.click-proxy:hover {
+  filter: drop-shadow(1px 2px 3px rgba(100, 50, 50, 0.8));
+}
+
+.link > path {
   fill: none;
   stroke: #333;
   stroke-width: 2px;
-  cursor: default;
-/*  filter: drop-shadow(1px 2px 3px rgba(0, 0, 0, 0.8)); */
 }
 
-path.link.selected {
+.link.selected > path {
   stroke-dasharray: 10,2;
 }
 
-path.link.hidden {
+.link.hidden > path {
   stroke-width: 0;
+}
+
+.link > rect {
+  fill: #fff;
 }
 
 .node ellipse {
   cursor: pointer;
   fill: #eee;
   filter: drop-shadow(1px 2px 3px rgba(0, 0, 0, 0.8));
+}
+
+.node ellipse:hover {
+  filter: drop-shadow(1px 2px 12px rgba(100, 50, 50, 0.8)) !important;
 }
 
 .node.selected ellipse {

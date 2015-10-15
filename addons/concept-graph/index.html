@@ -20,15 +20,23 @@
     <div class="mdl-layout__header-row">
       <!-- Title -->
       <span class="mdl-layout-title">Concept Graph</span>
-      <!-- Add spacer, to align navigation to the right -->
+
       <div class="mdl-layout-spacer"></div>
-      <!-- Navigation. We hide it in small screens. -->
-      <nav class="mdl-navigation mdl-layout--large-screen-only">
-        <!--a class="mdl-navigation__link" href="">Link</a>
-        <a class="mdl-navigation__link" href="">Link</a>
-        <a class="mdl-navigation__link" href="">Link</a>
-        <a class="mdl-navigation__link" href="">Link</a-->
-      </nav>
+
+      <!-- Search box -->
+      <div class="mdl-textfield mdl-js-textfield mdl-textfield--expandable
+                  mdl-textfield--floating-label mdl-textfield--align-right">
+        <label class="mdl-button mdl-js-button mdl-button--icon"
+               for="input-filter">
+          <i class="material-icons">search</i>
+        </label>
+        <div class="mdl-textfield__expandable-holder">
+          <input class="mdl-textfield__input"
+                 type="text"
+                 name="filter"
+                 id="input-filter" />
+        </div>
+      </div>
     </div>
   </header>
   <div class="mdl-layout__drawer">
@@ -60,21 +68,33 @@
       <!-- context sensitive actions -->
       <ul class="action-list" id="context-toolbox"></ul>
 
+      <div class="card-selection-info" style="display:none;">
+        <div class="concepts">
+          <h4>Selected Concepts</h4>
+          <ul></ul>
+        </div>
+        <div class="relations">
+          <h4>Selected Relations</h4>
+          <ul></ul>
+        </div>
+      </div>
+
       <!-- Selected concept properties -->
-      <div class="card-concept-details" style="visibility:hidden;">
+      <div class="card-concept-details" style="display:none;">
         <div class="mdl-card__media">
           <div class="mdl-card__title" style="margin-right: 60px">
             <h4 class="mdl-card__title-text">Active Concept</h4>
-            <!--<img src="skytower.jpg" width="173" height="157" border="0"
-           alt="" style="padding:10px;">-->
+<!--            <img class="concept-image" src="" width="289" height="157" border="0"
+           alt="">-->
           </div>
         </div>
-        <textarea class="concept-user-data" rows="5" placeholder="Enter additional notes and information..."></textarea>
-        <div class="concept-references">
+        <img class="concept-image"></img>
+        <textarea class="user-data" rows="5" placeholder="Enter additional notes and information..."></textarea>
+        <div class="references">
           <h5>References</h5>
           <ul></ul>
         </div>
-        <div class="concept-raw-data
+        <div class="raw-data
                     mdl-card__supporting-text
                     mdl-card__actions
                     mdl-card--border">
@@ -84,6 +104,34 @@
           <button class="concept-edit mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect">
             <i class="material-icons">edit</i>
           </button>
+        </div>
+      </div>
+
+      <!-- Selected relation properties -->
+      <div class="card-relation-details" style="display:none;">
+        <div class="mdl-card__media mdl-color--primary">
+          <div class="mdl-card__title">
+            <h4 class="mdl-card__title-text mdl-color-text--primary-contrast">
+              <span class="concept1">Concept 1</span>
+              <i class="material-icons">link</i>
+              <span class="concept2">Concept 2</span>
+            </h4>
+          </div>
+        </div>
+        <div class="relation-label">
+          <label for="relation-label">Label</label>
+          <input class="label" type="text" id="relation-label" />
+        </div>
+        <textarea class="user-data" rows="5" placeholder="Enter additional notes and information..."></textarea>
+        <div class="references">
+          <h5>References</h5>
+          <ul></ul>
+        </div>
+        <div class="raw-data
+                    mdl-card__supporting-text
+                    mdl-card__actions
+                    mdl-card--border">
+          Raw data
         </div>
       </div>
 
@@ -126,6 +174,8 @@
 <script src="lib/d3.v3.min.js"></script>
 <script src="../firefox/src/content/httpPing.js"></script>
 <script src="../firefox/src/content/throttle.js"></script>
+<script src="search.js"></script>
+<script src="SidePanel.js"></script>
 <script src="app.js"></script>
 
 </html>

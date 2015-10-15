@@ -1,10 +1,15 @@
 var links_socket = null;
 var nodes = [],
-    links = [];
+    links = [],
+    filtered_nodes = [],
+    filtered_links = [];
+var filter = '';
 
 // Node Selection (store node ids)
-var selected_node_ids = new Set();
-var active_node_id = null;
+var selection = {
+  nodes: new Set(),
+  links: new Set()
+}
 
 var request_queue = []; // Pending requests (if no node exists yet)
 var queue_timeout = null;
@@ -119,9 +124,21 @@ function start(check = true)
       updateDetailDialogs();
       restart();
     }
+    else if( msg.task == 'CONCEPT-LINK-UPDATE' )
+    {
+      delete msg.task;
+      updateLink(msg);
+    }
+    else if( msg.task == 'CONCEPT-LINK-DELETE' )
+    {
+      console.log(msg);
+      if( removeLinkById(msg.nodes.join(':')) )
+        restart();
+    }
     else if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
     {
-      updateNodeSelection('set', msg.concepts, msg.active, false);
+      for(type in selection)
+        updateSelection(type, 'set', msg[type], false, true, false);
     }
     else if( msg.task == 'GET' )
     {
@@ -149,10 +166,15 @@ function start(check = true)
           addNode(node);
         }
 
-        for(var i = 0; i < msg.links.length; ++i)
-          addLink(msg.links[i]);
+        for(var nodes in msg.links)
+        {
+          var link = msg.links[nodes];
+          link.nodes = nodes.split(':');
+          addLink(link);
+        }
 
-        updateNodeSelection('set', msg.selected, msg.active, false, false);
+        updateSelection('nodes', 'set', msg.selectedNodes, false, false, false);
+        updateSelection('links', 'set', msg.selectedLinks, false, false, false);
         restart();
       }
       else
@@ -229,6 +251,30 @@ function sendMsgRegister()
     task: 'GET',
     id: '/concepts/all'
   });
+}
+
+function updateConcept(id, key, val)
+{
+  var msg = {
+    'task': 'CONCEPT-UPDATE',
+    'cmd': 'update',
+    'id': id,
+  };
+  msg[key] = val;
+
+  send(msg);
+}
+
+function updateRelation(id, key, val)
+{
+  var msg = {
+    'task': 'CONCEPT-LINK-UPDATE',
+    'cmd': 'update',
+    'id': id,
+  };
+  msg[key] = val;
+
+  send(msg);
 }
 
 function handleRequest(msg)
@@ -337,8 +383,31 @@ function updateNode(new_node)
   updateDetailDialogs();
   restart();
 
-  if( selected_node_ids.has(node.id) )
+  if( selection.nodes.has(node.id) )
     sendInitiateForNode(node);
+}
+
+/**
+ * Update link information
+ */
+function updateLink(new_link)
+{
+  var link = getLinkById(new_link.nodes.join(':'));
+  if( !link )
+  {
+    console.warn("Unknown link: " + new_link.nodes);
+    return;
+  }
+
+  console.log("Update link: " + link.name, new_link);
+  for(var prop in new_link)
+  {
+    console.log('set ' + prop + ' to ' + new_link[prop]);
+    link[prop] = new_link[prop];
+  }
+
+  updateDetailDialogs();
+  restart();
 }
 
 function checkRequestQueue()
@@ -377,8 +446,8 @@ function addLink(link)
 
   link.source = first;
   link.target = second;
+  link.id = link.nodes.join(':');
 
-  console.log("add link", link);
   links.push(link);
 }
 
@@ -420,17 +489,20 @@ function nodeIntersect(source, target)
   };
 }
 
-function getNodeById(id)
+function getElementById(list, id)
 {
   if( !id || !id.length )
     return null;
 
-  for(var i = 0; i < nodes.length; ++i)
-    if( nodes[i].id == id )
-      return nodes[i];
+  for(var i = 0; i < list.length; ++i)
+    if( list[i].id == id )
+      return list[i];
 
   return null;
 }
+
+function getNodeById(id) { return getElementById(nodes, id); }
+function getLinkById(id) { return getElementById(links, id); }
 
 /**
  * Remove node and all connected links
@@ -454,7 +526,7 @@ function removeNodeById(id)
   if( !node )
     return false;
 
-  updateNodeSelection('unset', node.id, null, true, false);
+  updateSelection('nodes', 'unset', node.id, true, false, false);
 
   // Remove matching links...
   for(var i = links.length - 1; i >= 0; --i)
@@ -466,7 +538,7 @@ function removeNodeById(id)
     send({
       'task': 'CONCEPT-LINK-UPDATE',
       'cmd': 'delete',
-      'nodes': link.nodes
+      'id': link.id
     });
 
     links.splice(i, 1);
@@ -476,6 +548,37 @@ function removeNodeById(id)
     'task': 'CONCEPT-UPDATE',
     'cmd': 'delete',
     'id': node.id
+  });
+  return true;
+}
+
+/**
+ * Remove link
+ */
+function removeLinkById(id)
+{
+  if( !id || !id.length )
+    return false;
+
+  var link = null;
+  for(var i = 0; i < links.length; ++i)
+  {
+    if( links[i].id == id )
+    {
+      link = links[i];
+      links.splice(i, 1);
+      break;
+    }
+  }
+
+  if( !link )
+    return false;
+
+  updateSelection('links', 'unset', link.id, true, false, false);
+  send({
+    'task': 'CONCEPT-LINK-UPDATE',
+    'cmd': 'delete',
+    'id': link.id
   });
   return true;
 }
@@ -495,8 +598,6 @@ function getLinkForNodes(nodes)
 
 // init D3 force layout
 var force = d3.layout.force()
-    .nodes(nodes)
-    .links(links)
     .linkDistance(function(link){
       return Math.max(
         200,
@@ -532,17 +633,16 @@ svg.append('svg:defs').append('svg:marker')
     .attr('d', 'M10,-5L0,0L10,5')
     .attr('fill', '#000');
 
+var links_group = svg.append('svg:g'),
+    nodes_group = svg.append('svg:g');
+
 // handles to link and node element groups
-var link_paths = svg.append('svg:g').selectAll('path'),
-    node_groups = svg.append('svg:g').selectAll('g');
+var link_groups = null,
+    node_groups = null;
 
 var drag_rect =
   svg.append('svg:rect')
        .attr('class', 'drag-rect');
-
-// mouse event vars
-var selected_link = null,
-    mousedown_link = null;
 
 // update force layout (called automatically each iteration)
 function tick()
@@ -561,8 +661,7 @@ function tick()
     return 'translate(' + d.x + ',' + d.y + ')';
   });
 
-  // draw directed edges with proper padding from node centers
-  link_paths.attr('d', function(d)
+  link_groups.each(function(d)
   {
     var pos_src = nodeIntersect(d.source, d.target),
         pos_tgt = nodeIntersect(d.target, d.source);
@@ -581,10 +680,27 @@ function tick()
         targetX = pos_tgt.x - (targetPadding * normX),
         targetY = pos_tgt.y - (targetPadding * normY);
 
-    return 'M' + sourceX + ',' + sourceY + 'L' + targetX + ',' + targetY;
+    d.p1 = [sourceX, sourceY];
+    d.p2 = [targetX, targetY];
+    d.center = [ 0.5 * (sourceX + targetX),
+                 0.5 * (sourceY + targetY) ];
+
+    var self = d3.select(this);
+
+    self.selectAll('path')
+      .attr( 'd', 'M' + sourceX + ',' + sourceY
+                + 'L' + targetX + ',' + targetY );
+
+    self.select('rect')
+    .attr('x', d.center[0] - 0.5 * d.label_width - 3)
+    .attr('y', d.center[1] - 10);
+
+    self.select('text')
+      .attr('x', d.center[0] - 0.5 * d.label_width)
+      .attr('y', d.center[1] + 4);
   });
 
-  if( force.alpha() < 0.02 || nodes.length == 0 )
+  if( force.alpha() < 0.03 || nodes.length == 0 )
     force.stop();
 
   updateLinksThrottled();
@@ -613,38 +729,53 @@ function resize()
 // update graph (called when needed)
 function restart(update_layout = true)
 {
-  link_paths = link_paths.data(links);
+  if( update_layout )
+  {
+    [filtered_nodes, filtered_links] = search.filter(nodes, links, filter);
 
-  // add new links
-  link_paths.enter().append('svg:path')
-    .attr('class', 'link')
-    .on('mousedown', function(d) {
-      if(d3.event.ctrlKey) return;
+    force.nodes(filtered_nodes)
+         .links(filtered_links);
+  }
 
-      // select link
-      mousedown_link = d;
-      if(mousedown_link === selected_link) selected_link = null;
-      else selected_link = mousedown_link;
-      // TODO clear node selection?
+  // ----------------------
+  // Create links
 
-      d3.select('.card-concept-details')
-        .style('visibility', 'hidden');
+  link_groups = links_group.selectAll('g.link')
+                           .data(filtered_links);
 
-      restart(false);
-    });
+  var links_enter =
+    link_groups.enter().append('svg:g')
+                       .attr('class', 'link');
+  link_groups.exit().remove();
 
-  // remove old links
-  link_paths.exit().remove();
+  link_groups
+    .classed('selected', function(d) { return selection.links.has(d.id); });
 
-  // update links
-  link_paths
-    .classed('selected', function(d) { return d === selected_link; })
-    .style('marker-start', function(d) { return d.left ? 'url(#start-arrow)' : ''; })
-    .style('marker-end', function(d) { return d.right ? 'url(#end-arrow)' : ''; });
+  links_enter.append('svg:path')
+    .attr('class', 'click-proxy')
+    .call(applyMouseSelectionHandler, 'links');
 
-  // circle (node) group
-  // NB: the function arg is crucial here! nodes are known by id, not by index!
-  node_groups = node_groups.data(nodes, function(d) { return d.id; });
+  links_enter.append('svg:path');
+  links_enter.append('svg:rect')
+             .attr('height', 20);
+  links_enter.append('svg:text');
+
+  link_groups.select('text')
+    .text(function(d) { return d['label'] || ''; });
+  link_groups.each(function(d){
+    var g = d3.select(this);
+    d.label_width = g.select('text').node().getComputedTextLength();
+    if( d.label_width > 0 )
+      d.label_width += 6;
+
+    g.select('rect').attr('width', d.label_width);
+  });
+
+  // ----------------------
+  // Create nodes
+
+  node_groups = nodes_group.selectAll('g.node')
+                           .data(filtered_nodes, function(d) { return d.id; });
 
   var nodes_enter =
     node_groups.enter().append('svg:g')
@@ -659,7 +790,7 @@ function restart(update_layout = true)
       })
       .on("drag", function()
       {
-        for(var id of selected_node_ids)
+        for(var id of selection.nodes)
         {
           var node = getNodeById(id);
           node.px = (node.x += d3.event.dx);
@@ -671,31 +802,14 @@ function restart(update_layout = true)
     );
 
   nodes_enter.append('svg:ellipse')
-    // --------------------
-    // Node mousedown/click
-    .on('mousedown', function(d)
-    {
-      if( selected_node_ids.has(d.id) )
+    .call(applyMouseSelectionHandler, 'nodes')
+    .call(externalFileDrop, {
+      enter: function(d) { d3.select(this).attr('transform', 'scale(1.1)'); },
+      leave: function(d) { d3.select(this).attr('transform', null); },
+      drop: function(d, file)
       {
-        d3.select(this).classed('new-selection', false);
-
-        // Do not change selection on mousedown, as it could be the start of a
-        // drag/move gesture.
-        return;
+        updateConcept(d.id, 'img', file.img);
       }
-
-      updateNodeSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
-      d3.select(this).classed('new-selection', true);
-    })
-    .on('click', function(d)
-    {
-      if( d3.event.defaultPrevented )
-        return;
-
-      if( d3.select(this).classed('new-selection') )
-        return;
-
-      updateNodeSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
     });
 
   nodes_enter
@@ -705,7 +819,7 @@ function restart(update_layout = true)
     .attr('class', 'id');
 
   node_groups
-    .classed('selected', function(d) { return selected_node_ids.has(d.id); });
+    .classed('selected', function(d) { return selection.nodes.has(d.id); });
   node_groups.select('ellipse')
     .attr('rx', function(d) { return nodeSize(d)[0]; })
     .attr('ry', function(d) { return nodeSize(d)[1]; });
@@ -856,97 +970,94 @@ function abortAllLinks()
     abortLink(id);
 }
 
-function updateNodeSelection( action,
-                              node_id,
-                              active_id,
-                              send_msg = true,
-                              restart_on_change = true )
+/**
+ * Update the selection of nodes or links
+ *
+ * @param type ('nodes' or 'links')
+ */
+function updateSelection( type,
+                          action,
+                          id,
+                          send_msg = true,
+                          restart_on_change = true,
+                          update_other_selections = true )
 {
-  var previous_selection = new Set(selected_node_ids),
-      previous_active = active_node_id;
+  if( !(type in selection) )
+  {
+    console.warn('Unknown selection type', type);
+    return;
+  }
 
+  var changed = false;
+  var previous_selection = new Set(selection[type]);
   if( action == 'set' )
   {
-    if( typeof node_id == 'object' )
+    if( typeof id == 'object' )
     {
-      selected_node_ids = new Set(node_id);
-      active_node_id = active_id;
+      selection[type] = new Set(id);
     }
     else
     {
-      selected_node_ids.clear();
-      if( node_id )
-        selected_node_ids.add(node_id);
+      selection[type].clear();
+      if( id )
+        selection[type].add(id);
+    }
 
-      active_node_id = node_id;
+    if( update_other_selections )
+    {
+      for(var other in selection)
+        if(other != type)
+        {
+          if( selection[ other ].size > 0 )
+            changed = true;
+
+          selection[ other ] = new Set();
+        }
     }
   }
   else if( action == 'toggle' )
   {
-    if( selected_node_ids.has(node_id) )
-    {
-      selected_node_ids.delete(node_id);
-      if( active_node_id == node_id )
-        active_node_id = null;
-    }
+    if( selection[type].has(id) )
+      selection[type].delete(id);
     else
-    {
-      selected_node_ids.add(node_id);
-      active_node_id = node_id;
-    }
+      selection[type].add(id);
   }
   else if( action == 'unset' )
   {
-    selected_node_ids.delete(node_id);
-    if( active_node_id == node_id )
-      active_node_id = null;
+    selection[type].delete(id);
   }
   else
     console.warn('Unknown action: ' + action);
 
-  var changed = false;
-
   // Automatically link selected nodes
   for(var prev_id of previous_selection)
-    if( !selected_node_ids.has(prev_id) )
+    if( !selection[type].has(prev_id) )
     {
-      abortLink('link://concept/' + prev_id);
+      if( type == 'nodes' )
+        abortLink('link://concept/' + prev_id);
       changed = true;
     }
 
   var autolink = localStorage.getItem('auto-link') == 'true';
 
-  for(var cur_id of selected_node_ids)
+  for(var cur_id of selection[type])
     if( !previous_selection.has(cur_id) )
     {
-      if( autolink )
+      if( autolink && type == 'nodes' )
         sendInitiateForNode(getNodeById(cur_id));
 
       changed = true;
     }
 
-  if(    previous_active == active_node_id
-      && !changed )
+  if( !changed )
     return false;
 
   if( send_msg )
     send({
       'task': 'CONCEPT-SELECTION-UPDATE',
-      'concepts': [...selected_node_ids],
-      'active': active_node_id
+      'nodes': [...selection['nodes']],
+      'links': [...selection['links']]
     });
-
-  if( previous_active )
-  {
-    var user_data = d3.select('.card-concept-details .concept-user-data')
-                      .property('value');
-    send({
-      'task': 'CONCEPT-UPDATE',
-      'cmd': 'update',
-      'id': previous_active,
-      'user-data': user_data
-    });
-  }
 
   updateDetailDialogs();
 
@@ -956,107 +1067,59 @@ function updateNodeSelection( action,
   return true;
 }
 
-function updateDetailDialogs()
+function applyMouseSelectionHandler(sel, type)
 {
-  // -----------------------
-  // Dynamic action menu box
-
-  var action_box = d3.select('#context-toolbox');
-  action_box.selectAll('li')
-            .remove();
-
-  for(var a of user_actions)
+  if( !(type in selection) )
   {
-    if( typeof(a.isEnabled) == 'function' && !a.isEnabled() )
-      continue;
-
-    var li = action_box.append('li');
-    if( a.icon )
-      li.append('span')
-        .attr('class', 'material-icons')
-        .text(a.icon);
-    li.append('span')
-      .attr('class', 'action-title')
-      .text(a.label);
-    li.append('span')
-      .attr('class', 'action-shortcut')
-      .text(a.shortcuts[0]);
-    li.on('click', a.action);
-  }
-
-  // --------------------
-  // Selection properties
-
-  var card = d3.select('.card-concept-details');
-  var active_node = getNodeById(active_node_id);
-
-  if( !active_node )
-  {
-    card.style('visibility', 'hidden');
+    console.warn('Unknown selection type', type);
     return;
   }
 
-  card.style('visibility', 'visible');
-  card.select('.mdl-card__title-text').text(active_node.name);
-  card.select('.concept-user-data').property( 'value',
-                                              active_node['user-data'] || '' );
-  card.select('.concept-raw-data').text(JSON.stringify(active_node, null, 1));
+  sel
+    .on('mousedown', function(d)
+    {
+      if( selection[type].has(d.id) )
+      {
+        d3.select(this).classed('new-selection', false);
 
-  var refs = [];
-  for(var url in active_node.refs)
+        // Do not change selection on mousedown, as it could be the start of a
+        // drag/move gesture.
+        return;
+      }
+
+      updateSelection(type, d3.event.ctrlKey ? 'toggle' : 'set', d.id);
+      d3.select(this).classed('new-selection', true);
+    })
+    .on('click', function(d)
+    {
+      if( d3.event.defaultPrevented )
+        return;
+
+      if( d3.select(this).classed('new-selection') )
+        return;
+
+      updateSelection(type, d3.event.ctrlKey ? 'toggle' : 'set', d.id);
+    });
+}
+
+function updateDetailDialogs()
+{
+  SidePanel.updateActions(user_actions);
+
+  var show_concept = null,
+      show_relation = null;
+
+  if( (selection.nodes.size + selection.links.size) == 1 )
   {
-    var ref = active_node.refs[url];
-    ref['url'] = url;
-    refs.push(ref);
+    if( selection.nodes.size == 1 )
+      show_concept = selection.nodes.values().next().value;
+    else
+      show_relation = selection.links.values().next().value;
   }
 
-  card.select('.concept-references')
-      .style('display', refs.length ? 'block' : 'none');
-
-  var ul = card.select('.concept-references > ul');
-  ul.selectAll('li').remove();
-  var li = ul.selectAll('li')
-             .data(refs)
-             .enter()
-             .append('li');
-
-  li.classed('ref-open', function(d) { return active_urls.has(d.url); });
-  li.append('a')
-    .attr('class', 'ref-img mdl-badge')
-    .attr('data-badge', function(d) { return active_urls.get(d.url); })
-    .append('img')
-      .attr('src', function(d){ return d.icon; });
-  li.append('a')
-    .attr('class', 'ref-url')
-    .attr('href', function(d){ return d.url; })
-    .text(function(d){ return d.title || d.url; });
-  li.append('button')
-    .attr('class', 'concept-ref-delete mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect')
-    .on('click', function(d){
-      send({
-        'task': 'CONCEPT-UPDATE-REFS',
-        'cmd': 'delete',
-        'url': d.url,
-        'id': active_node.id
-      });
-    })
-      .append('i')
-      .attr('class', 'material-icons')
-      .text('delete');
-
-  card.select('.concept-edit')
-      .on('click', function() {
-        dlgConceptName.show(function(name){
-            send({
-              'task': 'CONCEPT-UPDATE',
-              'cmd': 'update',
-              'id': active_node_id,
-              'name': name
-            });
-          },
-          active_node.name
-        );
-      });
+  SidePanel.showSelectionCard(!show_concept && !show_relation);
+  SidePanel.showConceptDetailsCard(show_concept);
+  SidePanel.showRelationDetailsCard(show_relation);
 }
 
 var dlgActive = null;
@@ -1165,7 +1228,8 @@ svg
         || d3.event.ctrlKey )
       return;
 
-    updateNodeSelection('set', null);
+    for(var type in selection)
+      updateSelection(type, 'set', null, true, true, false);
 
     drag_start_pos = d3.mouse(this);
     drag_rect.attr('x', drag_start_pos[0])
@@ -1196,19 +1260,25 @@ d3.select(window)
              .attr('width', x2 - x1)
              .attr('height', y2 - y1);
 
+    var mode = d3.event.ctrlKey ? 'toggle' : 'set';
+
     var selected_nodes = new Set();
-    for(var node of nodes)
+    for(var node of filtered_nodes)
     {
       if(    x1 <= node.x && node.x <= x2
           && y1 <= node.y && node.y <= y2 )
         selected_nodes.add(node.id);
     }
+    updateSelection('nodes', mode, selected_nodes, true, true, false);
 
-    updateNodeSelection(
-      'set',
-      selected_nodes,
-      selected_nodes.values().next().value
-    );
+    var selected_links = new Set();
+    for(var link of filtered_links)
+    {
+      if(    x1 <= link.center[0] && link.center[0] <= x2
+          && y1 <= link.center[1] && link.center[1] <= y2 )
+        selected_links.add(link.id);
+    }
+    updateSelection('links', mode, selected_links, true, true, false);
   })
 
   // ----------------------
@@ -1259,12 +1329,18 @@ d3.select(window)
     // Restore state
     for(var setting of settings_menu_entries)
       setting.change(localStorage.getItem(setting.id) == 'true');
+
+    d3.select('#input-filter').on('input', function()
+    {
+      filter = this.value.toLowerCase();
+      restart();
+    })
   })
   .on('visibilitychange', function() {
     if( document.hidden )
       abortAllLinks();
     else
-      for(var cur_id of selected_node_ids)
+      for(var cur_id of selection.nodes)
         sendInitiateForNode(getNodeById(cur_id));
   })
   .on('beforeunload', function(){
@@ -1311,19 +1387,18 @@ var user_actions = [
     shortcuts: ['Shift+A'],
     action: addConceptWithDialog
   },
-  { label: 'Delete Selected Concept(s)',
+  { label: 'Delete Selected Concept(s)/Relation(s)',
     icon: 'delete',
     shortcuts: ['Delete', 'Backspace'],
     //isMenuVisible: function() { return this.isEnabled(); },
-    isEnabled: function() { return selected_node_ids.size > 0; },
+    isEnabled: function() { return selection.nodes.size > 0
+                                || selection.links.size > 0; },
     action: function()
     {
-      for(var node_id of selected_node_ids)
+      for(var node_id of selection.nodes)
         removeNodeById(node_id);
-
-      if( selected_link )
-        links.splice(links.indexOf(selected_link), 1);
-      selected_link = null;
+      for(var link_id of selection.links)
+        removeLinkById(link_id);
 
       restart();
     }
@@ -1333,15 +1408,15 @@ var user_actions = [
     //isMenuVisible: function() { return this.isEnabled(); },
     isEnabled: function()
     {
-      return  selected_node_ids.size == 2
-           && !getLinkForNodes(selected_node_ids);
+      return  selection.nodes.size == 2
+           && !getLinkForNodes(selection.nodes);
     },
     action: function()
     {
       send({
         'task': 'CONCEPT-LINK-UPDATE',
         'cmd': 'new',
-        'nodes': [...selected_node_ids]
+        'nodes': [...selection.nodes]
       });
     }
   },
@@ -1349,12 +1424,12 @@ var user_actions = [
     shortcuts: ['F'],
     isEnabled: function()
     {
-      return selected_node_ids.size > 0
+      return selection.nodes.size > 0
           && localStorage.getItem('expert-mode') == 'true';
     },
     action: function()
     {
-      for(var id of selected_node_ids)
+      for(var id of selection.nodes)
       {
         var node = getNodeById(id);
         node.fixed = false;

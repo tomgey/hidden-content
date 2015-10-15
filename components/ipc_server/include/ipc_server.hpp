@@ -38,8 +38,7 @@ namespace LinksRouting
   struct ClientInfo;
 
   typedef QSet<QString> StringSet;
-  typedef QMap<QString, Properties> ConceptNodes;
-  typedef QMap<QPair<QString, QString>, Properties> ConceptEdges;
+  typedef QMap<QString, Properties> PropertyObjectMap;
 
   class IPCServer:
     public QObject,
@@ -152,7 +151,7 @@ namespace LinksRouting
        * @return An iterator to the existing or newly created concept and a bool
        *         indicating whether a new concept has been inserted.
        */
-      QPair<ConceptNodes::iterator, bool>
+      QPair<PropertyObjectMap::iterator, bool>
       getConcept( QJsonObject const& msg,
                   bool create = false,
                   QString const& error_desc = "" );
@@ -167,7 +166,7 @@ namespace LinksRouting
        * @return An iterator to the existing or newly created edge and a bool
        *         indicating whether a new edge has been inserted.
        */
-      QPair<ConceptEdges::iterator, bool>
+      QPair<PropertyObjectMap::iterator, bool>
       getConceptLink( QJsonObject const& msg,
                       bool create = false,
                       QString const& error_desc = "" );
@@ -284,10 +283,10 @@ namespace LinksRouting
                                         //   application.
       QMap<QUrl, int8_t>  _changed_urls;
 
-      ConceptNodes  _concept_nodes;
-      ConceptEdges  _concept_links;
-      StringSet     _selected_concepts;
-      QString       _active_concept;
+      PropertyObjectMap _concept_nodes,
+                        _concept_links;
+      StringSet         _selected_nodes,
+                        _selected_links;
 
       slot_t<std::vector<Rect>>::type _slot_regions;
 

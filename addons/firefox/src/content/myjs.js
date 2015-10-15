@@ -1662,7 +1662,7 @@ function register(match_title = false, src_id = 0)
       else if( msg.task.startsWith('CONCEPT-') )
       {
         if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
-          selected_concepts = msg.concepts;
+          selected_concepts = msg.nodes;
         else if( msg.task == 'CONCEPT-NEW' || msg.task == 'CONCEPT-UPDATE' )
         {
           delete msg.task;
