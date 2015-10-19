@@ -81,7 +81,7 @@
 
       <!-- Selected concept properties -->
       <div class="card-concept-details" style="display:none;">
-        <div class="mdl-card__media">
+        <div class="mdl-card__media title-bar">
           <div class="mdl-card__title" style="margin-right: 60px">
             <h4 class="mdl-card__title-text">Active Concept</h4>
 <!--            <img class="concept-image" src="" width="289" height="157" border="0"
@@ -104,6 +104,10 @@
           <button class="concept-edit mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect">
             <i class="material-icons">edit</i>
           </button>
+          <label for="concept-color" class="mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect">
+            <i class="material-icons">palette</i>
+            <input type="color" id="concept-color" value="#ff0000"/>
+          </label>
         </div>
       </div>
 
@@ -174,6 +178,7 @@
 <script src="lib/d3.v3.min.js"></script>
 <script src="../firefox/src/content/httpPing.js"></script>
 <script src="../firefox/src/content/throttle.js"></script>
+<script src="color.js"></script>
 <script src="search.js"></script>
 <script src="SidePanel.js"></script>
 <script src="app.js"></script>

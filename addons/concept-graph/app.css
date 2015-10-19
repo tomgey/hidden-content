@@ -117,6 +117,10 @@ span.action-shortcut {
   flex: 1;
 }
 
+#concept-color {
+  display: none;
+}
+
 .user-data {
   width: calc(100% - 0.6em);
 }
@@ -299,7 +303,9 @@ html.debug-mode .raw-data {
 
 .node.selected ellipse {
   fill: rgb(255, 82, 82);
-  filter: drop-shadow(1px 2px 6px rgba(26, 8, 8, 0.9));
+  filter: drop-shadow(1px 2px 12px rgba(255, 50, 50, 1));
+  stroke-width: 2px;
+  stroke: red;
 }
 
 circle.ref-highlight {

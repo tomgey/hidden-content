@@ -461,6 +461,11 @@ function nodeSize(node)
   ];
 }
 
+function nodeColor(node)
+{
+  return node.color || '#eeeeee';
+}
+
 function nodeIntersect(source, target)
 {
   var node_size = nodeSize(source);
@@ -822,9 +827,11 @@ function restart(update_layout = true)
     .classed('selected', function(d) { return selection.nodes.has(d.id); });
   node_groups.select('ellipse')
     .attr('rx', function(d) { return nodeSize(d)[0]; })
-    .attr('ry', function(d) { return nodeSize(d)[1]; });
+    .attr('ry', function(d) { return nodeSize(d)[1]; })
+    .style('fill', function(d) { return nodeColor(d); });
   node_groups.selectAll('text')
-    .text(function(d) { return d.name; });
+    .text(function(d) { return d.name; })
+    .style('fill', function(d) { return contrastColor(nodeColor(d)); });
 
   node_groups.selectAll('g.ref')
     .remove();

@@ -98,21 +98,53 @@ var SidePanel = {
     if( !active_node )
       return;
 
+    var updateConceptColor = function(new_color)
+    {
+      var color = new_color || nodeColor(active_node),
+          contrast_color = contrastColor(color);
+
+      card.select('.title-bar')
+        .style('background-color', color);
+      card.select('.title-bar > *')
+        .style('color', contrast_color);
+      card.select('.mdl-card__menu')
+        .style('color', contrast_color);
+
+      svg.select('.node.selected > ellipse')
+       .style('fill', color);
+      svg.select('.node.selected > text.id')
+      .style('fill', contrast_color);
+    };
+
+    updateConceptColor();
     card.select('.mdl-card__title-text').text(active_node.name);
     card.select('.concept-image').attr('src', active_node.img);
+
+    card.select('#concept-color')
+      .property('value', nodeColor(active_node))
+      .on('change', function()
+      {
+        updateConcept(SidePanel._active_concept, 'color', this.value)
+      })
+      .on('input', function()
+      {
+        updateConceptColor(this.value);
+      });
+
     card.select('.user-data').property('value', active_node['user-data'] || '');
     card.select('.raw-data').text(JSON.stringify(active_node, null, 1));
 
     this._buildRefList(card, active_node.refs, 'concept', active_node.id);
 
     card.select('.concept-edit')
-        .on('click', function() {
-          dlgConceptName.show(function(name){
-              updateConcept(SidePanel._active_concept, 'name', name);
-            },
-            active_node.name
-          );
-        });
+      .on('click', function()
+      {
+        dlgConceptName.show(function(name){
+            updateConcept(SidePanel._active_concept, 'name', name);
+          },
+          active_node.name
+        );
+      });
   },
 
   /**
