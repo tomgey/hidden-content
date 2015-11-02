@@ -187,6 +187,8 @@ namespace LinksRouting
       void onValueGetFound(ClientRef, QJsonObject const& msg);
       void onValueSet(ClientRef, QJsonObject const& msg);
 
+      void onWindowManagementCommand(ClientRef, QJsonObject const& msg);
+
       void onSaveState(ClientRef, QJsonObject const& msg);
 
       void onLinkInitiate(ClientRef, QJsonObject const& msg);
@@ -285,8 +287,7 @@ namespace LinksRouting
 
       PropertyObjectMap _concept_nodes,
                         _concept_links;
-      StringSet         _selected_nodes,
-                        _selected_links;
+      StringSet         _concept_selection; //!< Selected concepts and relations
 
       slot_t<std::vector<Rect>>::type _slot_regions;
 

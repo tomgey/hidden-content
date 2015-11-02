@@ -188,6 +188,8 @@ namespace LinksRouting
       std::bind(&IPCServer::onClientSync, this, _1, _2);
     _msg_handlers["UPDATE"] =
       std::bind(&IPCServer::onLinkUpdate, this, _1, _2);
+    _msg_handlers["WM"] =
+      std::bind(&IPCServer::onWindowManagementCommand, this, _1, _2);
   }
 
   //----------------------------------------------------------------------------
@@ -1083,6 +1085,7 @@ namespace LinksRouting
       qWarning() << "Empty concept id" << error_desc << msg;
       return {_concept_nodes.end(), false};
     }
+    id.replace(':', '_'); // colon is reserved for link ids
 
     auto it = _concept_nodes.find(id);
     if( it == _concept_nodes.end() )
@@ -1113,6 +1116,15 @@ namespace LinksRouting
       return {_concept_links.end(), false};
     }
 
+    for(QString const& id: node_ids)
+    {
+      if( id.isEmpty() )
+      {
+        qWarning() << error_desc << "Empty node id." << node_ids;
+        return {_concept_links.end(), false};
+      }
+    }
+
     node_ids.sort();
     QString link_id = node_ids.join(':');
 
@@ -1120,7 +1132,7 @@ namespace LinksRouting
     if( it == _concept_links.end() )
     {
       if( create )
-        return {_concept_links.insert(link_id, {}), true};
+        return {_concept_links.insert(link_id, {{"nodes", node_ids}}), true};
       else if( !error_desc.isEmpty() )
         qWarning() << "Can not" << error_desc << "not existing edge" << msg;
     }
@@ -1443,22 +1455,11 @@ namespace LinksRouting
 
   //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-SELECTION-UPDATE',
-  //    'nodes': [<list of concept ids>],
-  //    'links': [[<list of concept ids>], [<list of concept ids>], ...]
+  //    'selection': [<list of concept and relation ids>]
   void IPCServer::onConceptSelectionUpdate( ClientRef client,
                                             QJsonObject const& msg )
   {
-    _selected_nodes = from_json<StringSet>(msg.value("nodes"));
-
-    _selected_links.clear();
-    QJsonArray links = msg.value("links").toArray();
-    for(auto link: links)
-    {
-      QStringList node_ids = from_json<QStringList>(link);
-      node_ids.sort();
-      _selected_links.insert(node_ids.join(':'));
-    }
-
+    _concept_selection = from_json<StringSet>(msg.value("selection"));
     distributeMessage(msg, client);
   }
 
@@ -1599,6 +1600,29 @@ namespace LinksRouting
     }
 
     dirtyLinks();
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onWindowManagementCommand(ClientRef, QJsonObject const& msg)
+  {
+    QString const cmd = from_json<QString>(msg.value("cmd"));
+    if( cmd == "activate-window" )
+    {
+      QUrl const url = from_json<QUrl>(msg.value("url"));
+      if( !url.isValid() )
+      {
+        qWarning() << "WM command: Missing or invalid 'url'.";
+        return;
+      }
+
+      for(auto client: _clients)
+      {
+        if( client.second->url() == url )
+          client.second->activateWindow();
+      }
+    }
+    else
+      qWarning() << "Unknown window management command:" << msg;
   }
 
   //----------------------------------------------------------------------------
@@ -2864,10 +2888,9 @@ namespace LinksRouting
   QJsonObject IPCServer::conceptGraphToJson() const
   {
     QJsonObject graph;
-    graph["nodes"] = to_json(_concept_nodes);
-    graph["links"] = to_json(_concept_links);
-    graph["selectedNodes"] = to_json(_selected_nodes);
-    graph["selectedLinks"] = to_json(_selected_links);
+    graph["concepts"] = to_json(_concept_nodes);
+    graph["relations"] = to_json(_concept_links);
+    graph["selection"] = to_json(_concept_selection);
 
     return graph;
   }

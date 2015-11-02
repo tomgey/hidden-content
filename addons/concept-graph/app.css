@@ -87,6 +87,12 @@ span.action-shortcut {
   position: relative;
 }
 
+.card-concept-details .title-bar {
+  border-color: #bbb;
+  border-width: 1px 0;
+  border-style: solid;
+}
+
 .card-concept-details .concept-image {
   max-width: calc(100% - 1em);
   max-height: 256px;
@@ -263,13 +269,16 @@ html.debug-mode .raw-data {
   pointer-events: none;
 }
 
-.link > path.click-proxy {
-  stroke: rgba(255,255,255,0.5);
-  stroke-width: 16px;
+.link {
   cursor: pointer;
 }
 
-.link > path.click-proxy:hover {
+.link > path.click-proxy {
+  stroke: rgba(255,255,255,0.5);
+  stroke-width: 16px;
+}
+
+.link:hover > path.click-proxy {
   filter: drop-shadow(1px 2px 3px rgba(100, 50, 50, 0.8));
 }
 

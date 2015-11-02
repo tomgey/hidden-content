@@ -12,15 +12,15 @@ var search = {
       var label_filter = query.substr(5);
       var node_map = new Map();
 
-      filtered_links = links.filter(function(link)
+      links.forEach(function(link, id)
       {
         if(    !link.label
             || !link.label.toLowerCase().includes(label_filter) )
-          return false;
+          return;
 
         node_map.set(link.source.id, link.source);
         node_map.set(link.target.id, link.target);
-        return true;
+        filtered_links.push(link);
       });
 
       filtered_nodes = [...node_map.values()];
@@ -28,18 +28,19 @@ var search = {
     else
     {
       var visible_nodes = new Set();
-      filtered_nodes = nodes.filter(function(node)
+      nodes.forEach(function(concept, id)
       {
-        if( filter.length && !node.name.toLowerCase().includes(filter) )
-          return false;
-  
-        visible_nodes.add(node.id);
-        return true;
+        if( filter.length && !concept.name.toLowerCase().includes(filter) )
+          return;
+
+        visible_nodes.add(id);
+        filtered_nodes.push(concept);
       });
-      filtered_links = links.filter(function(link)
+      links.forEach(function(link)
       {
-        return visible_nodes.has(link.nodes[0])
-            && visible_nodes.has(link.nodes[1]);
+        if(    visible_nodes.has(link.nodes[0])
+            && visible_nodes.has(link.nodes[1]) )
+          filtered_links.push(link);
       });
     }
 

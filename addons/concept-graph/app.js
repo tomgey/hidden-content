@@ -1,15 +1,52 @@
 var links_socket = null;
-var nodes = [],
-    links = [],
-    filtered_nodes = [],
+var filtered_nodes = [],
     filtered_links = [];
 var filter = '';
 
-// Node Selection (store node ids)
-var selection = {
-  nodes: new Set(),
-  links: new Set()
-}
+var concept_graph = new ConceptGraph();
+concept_graph
+  .on('concept-new', function(id, node)
+  {
+    console.log("New concept: " + id, node);
+
+    if( node.x == undefined )
+      node.x = force.size()[0] / 2 + (Math.random() - 0.5) * 100;
+    if( node.y == undefined )
+      node.y = force.size()[1] / 2 + (Math.random() - 0.5) * 100;
+
+    if( queue_timeout )
+      clearTimeout(queue_timeout);
+    queue_timeout = setTimeout(checkRequestQueue, 200);
+
+    restart();
+  })
+  .on('concept-update', function(id, concept)
+  {
+    updateDetailDialogs();
+    restart();
+
+    if( concept_graph.selection.has(concept.id) )
+      sendInitiateForNode(concept);
+  })
+  .on('selection-add', function(id, type)
+  {
+    if( localBool('auto-link') && type == 'concept' )
+      sendInitiateForNode( concept_graph.getConceptById(id) );
+  })
+  .on('selection-remove', function(id, type)
+  {
+    if( type == 'concept' )
+      abortLink('link://concept/' + id);
+  })
+  .on([ 'concept-delete',
+        'relation-new',
+        'relation-update',
+        'relation-delete',
+        'selection-change' ], function(id, rel)
+  {
+    updateDetailDialogs();
+    restart();
+  });
 
 var request_queue = []; // Pending requests (if no node exists yet)
 var queue_timeout = null;
@@ -101,45 +138,8 @@ function start(check = true)
   links_socket.onmessage = function(event)
   {
     var msg = JSON.parse(event.data);
-    if( msg.task == 'CONCEPT-NEW' )
-    {
-      delete msg.task;
-      addNode(msg);
-      restart();
-    }
-    else if( msg.task == 'CONCEPT-UPDATE' )
-    {
-      delete msg.task;
-      updateNode(msg);
-    }
-    else if( msg.task == 'CONCEPT-DELETE' )
-    {
-      if( removeNodeById(msg.id) )
-        restart();
-    }
-    else if( msg.task == 'CONCEPT-LINK-NEW' )
-    {
-      delete msg.task;
-      addLink(msg);
-      updateDetailDialogs();
-      restart();
-    }
-    else if( msg.task == 'CONCEPT-LINK-UPDATE' )
-    {
-      delete msg.task;
-      updateLink(msg);
-    }
-    else if( msg.task == 'CONCEPT-LINK-DELETE' )
-    {
-      console.log(msg);
-      if( removeLinkById(msg.nodes.join(':')) )
-        restart();
-    }
-    else if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
-    {
-      for(type in selection)
-        updateSelection(type, 'set', msg[type], false, true, false);
-    }
+    if( concept_graph.handleMessage(msg) )
+      return;
     else if( msg.task == 'GET' )
     {
       if( msg.id == '/state/all' )
@@ -151,31 +151,6 @@ function start(check = true)
             'type': 'concept-graph',
           }
         });
-      }
-      else
-        console.log("Got unknown data: " + event.data);
-    }
-    else if( msg.task == 'GET-FOUND' )
-    {
-      if( msg.id == '/concepts/all' )
-      {
-        for(var n in msg.nodes)
-        {
-          var node = msg.nodes[n];
-          node.id = n;
-          addNode(node);
-        }
-
-        for(var nodes in msg.links)
-        {
-          var link = msg.links[nodes];
-          link.nodes = nodes.split(':');
-          addLink(link);
-        }
-
-        updateSelection('nodes', 'set', msg.selectedNodes, false, false, false);
-        updateSelection('links', 'set', msg.selectedLinks, false, false, false);
-        restart();
       }
       else
         console.log("Got unknown data: " + event.data);
@@ -253,28 +228,45 @@ function sendMsgRegister()
   });
 }
 
-function updateConcept(id, key, val)
+function localBool(key)
 {
+  return localStorage.getItem(key) == 'true';
+}
+
+function updateConcept(concept, key, val)
+{
+  var old_val = concept[key];
+  if(     (old_val && old_val == val)
+      || (!old_val && !val) )
+    return false;
+
   var msg = {
     'task': 'CONCEPT-UPDATE',
     'cmd': 'update',
-    'id': id,
+    'id': concept.id,
   };
   msg[key] = val;
 
   send(msg);
+  return true;
 }
 
-function updateRelation(id, key, val)
+function updateRelation(relation, key, val)
 {
+  var old_val = relation[key];
+  if(     (old_val && old_val == val)
+      || (!old_val && !val) )
+    return false;
+
   var msg = {
     'task': 'CONCEPT-LINK-UPDATE',
     'cmd': 'update',
-    'id': id,
+    'id': relation.id,
   };
   msg[key] = val;
 
   send(msg);
+  return true;
 }
 
 function handleRequest(msg)
@@ -286,7 +278,7 @@ function handleRequest(msg)
     return true;
   }
 
-  var node = getNodeById( msg.id.substring(c.length) );
+  var node = concept_graph.getConceptById( msg.id.substring(c.length) );
   if( !node )
     return false; // Try again (eg. if new nodes arrive)
 
@@ -338,78 +330,6 @@ function circlePoints(pos)
   return points;
 }
 
-/**
- * Insert a new node in the graph.
- */
-function addNode(node)
-{
-  if( getNodeById(node.id) )
-  {
-    console.warn("Duplicate node: " + node.id);
-    return;
-  }
-
-  console.log("New concept: " + node.name, node);
-
-  if( node.x == undefined ) node.x = force.size()[0] / 2 + (Math.random() - 0.5) * 100;
-  if( node.y == undefined ) node.y = force.size()[1] / 2 + (Math.random() - 0.5) * 100;
-
-  nodes.push(node);
-
-  if( queue_timeout )
-    clearTimeout(queue_timeout);
-  queue_timeout = setTimeout(checkRequestQueue, 200);
-}
-
-/**
- * Update node information
- */
-function updateNode(new_node)
-{
-  var node = getNodeById(new_node.id);
-  if( !node )
-  {
-    console.warn("Unknown node: " + new_node.id);
-    return;
-  }
-
-  console.log("Update node: " + node.name, new_node);
-  for(var prop in new_node)
-  {
-    console.log('set ' + prop + ' to ' + new_node[prop]);
-    node[prop] = new_node[prop];
-  }
-
-  updateDetailDialogs();
-  restart();
-
-  if( selection.nodes.has(node.id) )
-    sendInitiateForNode(node);
-}
-
-/**
- * Update link information
- */
-function updateLink(new_link)
-{
-  var link = getLinkById(new_link.nodes.join(':'));
-  if( !link )
-  {
-    console.warn("Unknown link: " + new_link.nodes);
-    return;
-  }
-
-  console.log("Update link: " + link.name, new_link);
-  for(var prop in new_link)
-  {
-    console.log('set ' + prop + ' to ' + new_link[prop]);
-    link[prop] = new_link[prop];
-  }
-
-  updateDetailDialogs();
-  restart();
-}
-
 function checkRequestQueue()
 {
   for(var i = request_queue.length - 1; i >= 0; --i)
@@ -423,32 +343,6 @@ function checkRequestQueue()
 
   queue_timeout = request_queue.size ? setTimeout(checkRequestQueue, 1111)
                                      : null;
-}
-
-/**
- * Connect two nodes with a link.
- */
-function addLink(link)
-{
-  var first = getNodeById(link.nodes[0]),
-      second = getNodeById(link.nodes[1]);
-
-  if( !first)
-  {
-    console.warn("Unknown node: " + link.nodes[0]);
-    return;
-  }
-  if( !second )
-  {
-    console.warn("Unknown node: " + link.nodes[1]);
-    return;
-  }
-
-  link.source = first;
-  link.target = second;
-  link.id = link.nodes.join(':');
-
-  links.push(link);
 }
 
 var svg = d3.select('svg');
@@ -504,101 +398,6 @@ function getElementById(list, id)
       return list[i];
 
   return null;
-}
-
-function getNodeById(id) { return getElementById(nodes, id); }
-function getLinkById(id) { return getElementById(links, id); }
-
-/**
- * Remove node and all connected links
- */
-function removeNodeById(id)
-{
-  if( !id || !id.length )
-    return false;
-
-  var node = null;
-  for(var i = 0; i < nodes.length; ++i)
-  {
-    if( nodes[i].id == id )
-    {
-      node = nodes[i];
-      nodes.splice(i, 1);
-      break;
-    }
-  }
-
-  if( !node )
-    return false;
-
-  updateSelection('nodes', 'unset', node.id, true, false, false);
-
-  // Remove matching links...
-  for(var i = links.length - 1; i >= 0; --i)
-  {
-    var link = links[i];
-    if( link.nodes.indexOf(node.id) < 0 )
-      continue;
-
-    send({
-      'task': 'CONCEPT-LINK-UPDATE',
-      'cmd': 'delete',
-      'id': link.id
-    });
-
-    links.splice(i, 1);
-  }
-
-  send({
-    'task': 'CONCEPT-UPDATE',
-    'cmd': 'delete',
-    'id': node.id
-  });
-  return true;
-}
-
-/**
- * Remove link
- */
-function removeLinkById(id)
-{
-  if( !id || !id.length )
-    return false;
-
-  var link = null;
-  for(var i = 0; i < links.length; ++i)
-  {
-    if( links[i].id == id )
-    {
-      link = links[i];
-      links.splice(i, 1);
-      break;
-    }
-  }
-
-  if( !link )
-    return false;
-
-  updateSelection('links', 'unset', link.id, true, false, false);
-  send({
-    'task': 'CONCEPT-LINK-UPDATE',
-    'cmd': 'delete',
-    'id': link.id
-  });
-  return true;
-}
-
-/**
- * Get the link connecting the given list of two nodes
- */
-function getLinkForNodes(nodes)
-{
-  var node_set = new Set(nodes);
-  return links.filter(function(l)
-  {
-    return nodes.has(l.nodes[0])
-        && nodes.has(l.nodes[1]);
-  })[0];
 }
 
 // init D3 force layout
@@ -697,15 +496,15 @@ function tick()
                 + 'L' + targetX + ',' + targetY );
 
     self.select('rect')
-    .attr('x', d.center[0] - 0.5 * d.label_width - 3)
-    .attr('y', d.center[1] - 10);
+      .attr('x', d.center[0] - 0.5 * d.label_width - 3)
+      .attr('y', d.center[1] - 10);
 
     self.select('text')
       .attr('x', d.center[0] - 0.5 * d.label_width)
       .attr('y', d.center[1] + 4);
   });
 
-  if( force.alpha() < 0.03 || nodes.length == 0 )
+  if( force.alpha() < 0.031 || !force.nodes().length )
     force.stop();
 
   updateLinksThrottled();
@@ -736,7 +535,9 @@ function restart(update_layout = true)
 {
   if( update_layout )
   {
-    [filtered_nodes, filtered_links] = search.filter(nodes, links, filter);
+    [filtered_nodes, filtered_links] = search.filter( concept_graph.concepts,
+                                                      concept_graph.relations,
+                                                      filter );
 
     force.nodes(filtered_nodes)
          .links(filtered_links);
@@ -754,11 +555,13 @@ function restart(update_layout = true)
   link_groups.exit().remove();
 
   link_groups
-    .classed('selected', function(d) { return selection.links.has(d.id); });
+    .classed('selected', function(d) { return concept_graph.selection.has(d.id); });
+
+  links_enter
+    .call(applyMouseSelectionHandler);
 
   links_enter.append('svg:path')
-    .attr('class', 'click-proxy')
-    .call(applyMouseSelectionHandler, 'links');
+    .attr('class', 'click-proxy');
 
   links_enter.append('svg:path');
   links_enter.append('svg:rect')
@@ -795,25 +598,28 @@ function restart(update_layout = true)
       })
       .on("drag", function()
       {
-        for(var id of selection.nodes)
+        for(var id of concept_graph.selection)
         {
-          var node = getNodeById(id);
-          node.px = (node.x += d3.event.dx);
-          node.py = (node.y += d3.event.dy);
-          node.fixed = true;
+          var node = concept_graph.getConceptById(id);
+          if( node )
+          {
+            node.px = (node.x += d3.event.dx);
+            node.py = (node.y += d3.event.dy);
+            node.fixed = true;
+          }
         }
         force.resume();
       })
     );
 
   nodes_enter.append('svg:ellipse')
-    .call(applyMouseSelectionHandler, 'nodes')
+    .call(applyMouseSelectionHandler)
     .call(externalFileDrop, {
       enter: function(d) { d3.select(this).attr('transform', 'scale(1.1)'); },
       leave: function(d) { d3.select(this).attr('transform', null); },
       drop: function(d, file)
       {
-        updateConcept(d.id, 'img', file.img);
+        updateConcept(d, 'img', file.img);
       }
     });
 
@@ -824,7 +630,7 @@ function restart(update_layout = true)
     .attr('class', 'id');
 
   node_groups
-    .classed('selected', function(d) { return selection.nodes.has(d.id); });
+    .classed('selected', function(d) { return concept_graph.selection.has(d.id); });
   node_groups.select('ellipse')
     .attr('rx', function(d) { return nodeSize(d)[0]; })
     .attr('ry', function(d) { return nodeSize(d)[1]; })
@@ -875,11 +681,28 @@ function restart(update_layout = true)
         d3.event.stopPropagation();
       });
 
+  var open_url_options =
+    'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
+
   ref_enter
     .append('image')
     .attr('width', 16)
-    .attr('height', 16);
-    //.attr('clip-path', 'url(#clipCircle)');
+    .attr('height', 16)
+    .on('click', function(d)
+     {
+       if( active_urls.has(d.url) )
+         send({
+           task: 'WM',
+           cmd: 'activate-window',
+           url: d.url
+         });
+       else
+         window.open(
+           d.url,
+           '_blank',
+           open_url_options + ',width=1000,height=800'
+         );
+     });
   ref_enter
     .append('circle')
     .classed('ref-highlight', true)
@@ -977,115 +800,12 @@ function abortAllLinks()
     abortLink(id);
 }
 
-/**
- * Update the selection of nodes or links
- *
- * @param type ('nodes' or 'links')
- */
-function updateSelection( type,
-                          action,
-                          id,
-                          send_msg = true,
-                          restart_on_change = true,
-                          update_other_selections = true )
+function applyMouseSelectionHandler(sel)
 {
-  if( !(type in selection) )
-  {
-    console.warn('Unknown selection type', type);
-    return;
-  }
-
-  var changed = false;
-  var previous_selection = new Set(selection[type]);
-  if( action == 'set' )
-  {
-    if( typeof id == 'object' )
-    {
-      selection[type] = new Set(id);
-    }
-    else
-    {
-      selection[type].clear();
-      if( id )
-        selection[type].add(id);
-    }
-
-    if( update_other_selections )
-    {
-      for(var other in selection)
-        if(other != type)
-        {
-          if( selection[ other ].size > 0 )
-            changed = true;
-
-          selection[ other ] = new Set();
-        }
-    }
-  }
-  else if( action == 'toggle' )
-  {
-    if( selection[type].has(id) )
-      selection[type].delete(id);
-    else
-      selection[type].add(id);
-  }
-  else if( action == 'unset' )
-  {
-    selection[type].delete(id);
-  }
-  else
-    console.warn('Unknown action: ' + action);
-
-  // Automatically link selected nodes
-  for(var prev_id of previous_selection)
-    if( !selection[type].has(prev_id) )
-    {
-      if( type == 'nodes' )
-        abortLink('link://concept/' + prev_id);
-      changed = true;
-    }
-
-  var autolink = localStorage.getItem('auto-link') == 'true';
-
-  for(var cur_id of selection[type])
-    if( !previous_selection.has(cur_id) )
-    {
-      if( autolink && type == 'nodes' )
-        sendInitiateForNode(getNodeById(cur_id));
-
-      changed = true;
-    }
-
-  if( !changed )
-    return false;
-
-  if( send_msg )
-    send({
-      'task': 'CONCEPT-SELECTION-UPDATE',
-      'nodes': [...selection['nodes']],
-      'links': [...selection['links']]
-    });
-
-  updateDetailDialogs();
-
-  if( restart_on_change )
-    restart(false);
-
-  return true;
-}
-
-function applyMouseSelectionHandler(sel, type)
-{
-  if( !(type in selection) )
-  {
-    console.warn('Unknown selection type', type);
-    return;
-  }
-
   sel
     .on('mousedown', function(d)
     {
-      if( selection[type].has(d.id) )
+      if( concept_graph.selection.has(d.id) )
       {
         d3.select(this).classed('new-selection', false);
 
@@ -1094,7 +814,7 @@ function applyMouseSelectionHandler(sel, type)
         return;
       }
 
-      updateSelection(type, d3.event.ctrlKey ? 'toggle' : 'set', d.id);
+      concept_graph.updateSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
       d3.select(this).classed('new-selection', true);
     })
     .on('click', function(d)
@@ -1105,7 +825,7 @@ function applyMouseSelectionHandler(sel, type)
       if( d3.select(this).classed('new-selection') )
         return;
 
-      updateSelection(type, d3.event.ctrlKey ? 'toggle' : 'set', d.id);
+      concept_graph.updateSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
     });
 }
 
@@ -1113,16 +833,8 @@ function updateDetailDialogs()
 {
   SidePanel.updateActions(user_actions);
 
-  var show_concept = null,
-      show_relation = null;
-
-  if( (selection.nodes.size + selection.links.size) == 1 )
-  {
-    if( selection.nodes.size == 1 )
-      show_concept = selection.nodes.values().next().value;
-    else
-      show_relation = selection.links.values().next().value;
-  }
+  var show_concept = concept_graph.getSelectedConcept(),
+      show_relation = concept_graph.getSelectedRelation();
 
   SidePanel.showSelectionCard(!show_concept && !show_relation);
   SidePanel.showConceptDetailsCard(show_concept);
@@ -1235,8 +947,7 @@ svg
         || d3.event.ctrlKey )
       return;
 
-    for(var type in selection)
-      updateSelection(type, 'set', null, true, true, false);
+    concept_graph.updateSelection('set', null);
 
     drag_start_pos = d3.mouse(this);
     drag_rect.attr('x', drag_start_pos[0])
@@ -1268,24 +979,23 @@ d3.select(window)
              .attr('height', y2 - y1);
 
     var mode = d3.event.ctrlKey ? 'toggle' : 'set';
+    var selection = new Set();
 
-    var selected_nodes = new Set();
     for(var node of filtered_nodes)
     {
       if(    x1 <= node.x && node.x <= x2
           && y1 <= node.y && node.y <= y2 )
-        selected_nodes.add(node.id);
+        selection.add(node.id);
     }
-    updateSelection('nodes', mode, selected_nodes, true, true, false);
 
-    var selected_links = new Set();
     for(var link of filtered_links)
     {
       if(    x1 <= link.center[0] && link.center[0] <= x2
           && y1 <= link.center[1] && link.center[1] <= y2 )
-        selected_links.add(link.id);
+        selection.add(link.id);
     }
-    updateSelection('links', mode, selected_links, true, true, false);
+
+    concept_graph.updateSelection(mode, selection);
   })
 
   // ----------------------
@@ -1346,9 +1056,9 @@ d3.select(window)
   .on('visibilitychange', function() {
     if( document.hidden )
       abortAllLinks();
-    else
-      for(var cur_id of selection.nodes)
-        sendInitiateForNode(getNodeById(cur_id));
+    else if( localBool('auto-link') )
+      for(var concept of concept_graph.getSelectedConcepts())
+        sendInitiateForNode(concept);
   })
   .on('beforeunload', function(){
     abortAllLinks();
@@ -1398,14 +1108,11 @@ var user_actions = [
     icon: 'delete',
     shortcuts: ['Delete', 'Backspace'],
     //isMenuVisible: function() { return this.isEnabled(); },
-    isEnabled: function() { return selection.nodes.size > 0
-                                || selection.links.size > 0; },
+    isEnabled: function() { return concept_graph.selection.size > 0; },
     action: function()
     {
-      for(var node_id of selection.nodes)
-        removeNodeById(node_id);
-      for(var link_id of selection.links)
-        removeLinkById(link_id);
+      for(var id of concept_graph.selection)
+        concept_graph.remove(id);
 
       restart();
     }
@@ -1415,15 +1122,16 @@ var user_actions = [
     //isMenuVisible: function() { return this.isEnabled(); },
     isEnabled: function()
     {
-      return  selection.nodes.size == 2
-           && !getLinkForNodes(selection.nodes);
+      var concepts = concept_graph.getSelectedConceptIds();
+      return  concepts.length == 2
+           && !concept_graph.getRelationForConcepts(...concepts);
     },
     action: function()
     {
       send({
         'task': 'CONCEPT-LINK-UPDATE',
         'cmd': 'new',
-        'nodes': [...selection.nodes]
+        'nodes': concept_graph.getSelectedConceptIds()
       });
     }
   },
@@ -1431,15 +1139,16 @@ var user_actions = [
     shortcuts: ['F'],
     isEnabled: function()
     {
-      return selection.nodes.size > 0
+      return concept_graph.selection.size > 0
           && localStorage.getItem('expert-mode') == 'true';
     },
     action: function()
     {
-      for(var id of selection.nodes)
+      for(var id of concept_graph.selection)
       {
-        var node = getNodeById(id);
-        node.fixed = false;
+        var node = concept_graph.getConceptById(id);
+        if( node )
+          node.fixed = false;
       }
       force.resume();
     }

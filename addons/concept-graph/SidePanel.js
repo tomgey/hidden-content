@@ -19,7 +19,7 @@ var SidePanel = {
 
   /**
    * Dynamic action menu box
-   * 
+   *
    * @param user_actions
    */
   updateActions: function(user_actions)
@@ -49,7 +49,7 @@ var SidePanel = {
   },
 
   /**
-   * 
+   *
    */
   showSelectionCard: function(visible = true)
   {
@@ -57,50 +57,52 @@ var SidePanel = {
     if( !visible )
       return;
 
+    var selected_concepts = concept_graph.getSelectedConcepts(),
+        selected_relations = concept_graph.getSelectedRelations();
+
     var concepts =
       card.select('.concepts')
-          .style( 'display', selection.nodes.size ? 'inline' : 'none');
+          .style( 'display', selected_concepts.length ? 'inline' : 'none');
 
     var li = concepts.select('ul')
                      .selectAll('li')
-                     .data([...selection.nodes]);
+                     .data(selected_concepts);
     li.enter().append('li');
     li.exit().remove();
-    li.text(function(d){ return d; });
+    li.text(function(d){ return JSON.stringify(d); });
 
     var relations =
       card.select('.relations')
-          .style('display', selection.links.size ? 'inline' : 'none');
+          .style('display', selected_relations.length ? 'inline' : 'none');
 
     var li = relations.select('ul')
                       .selectAll('li')
-                      .data([...selection.links]);
+                      .data(selected_relations);
     li.enter().append('li');
     li.exit().remove();
-    li.text(function(d){ return d; });
+    li.text(function(d){ return JSON.stringify(d); });
   },
 
   /**
-   * 
+   *
    */
-  showConceptDetailsCard: function(concept_id)
+  showConceptDetailsCard: function(concept)
   {
-    var active_node = getNodeById(concept_id);
-    var card = this.showCard('concept', active_node != null);
+    var card = this.showCard('concept', concept != null);
 
     if( this._active_concept )
     {
       var user_data = card.select('.user-data').property('value');
       updateConcept(this._active_concept, 'user-data', user_data);
     }
-    this._active_concept = active_node ? active_node.id : null;
 
-    if( !active_node )
+    this._active_concept = concept;
+    if( !concept )
       return;
 
     var updateConceptColor = function(new_color)
     {
-      var color = new_color || nodeColor(active_node),
+      var color = new_color || nodeColor(concept),
           contrast_color = contrastColor(color);
 
       card.select('.title-bar')
@@ -117,11 +119,11 @@ var SidePanel = {
     };
 
     updateConceptColor();
-    card.select('.mdl-card__title-text').text(active_node.name);
-    card.select('.concept-image').attr('src', active_node.img);
+    card.select('.mdl-card__title-text').text(concept.name);
+    card.select('.concept-image').attr('src', concept.img);
 
     card.select('#concept-color')
-      .property('value', nodeColor(active_node))
+      .property('value', nodeColor(concept))
       .on('change', function()
       {
         updateConcept(SidePanel._active_concept, 'color', this.value)
@@ -131,10 +133,10 @@ var SidePanel = {
         updateConceptColor(this.value);
       });
 
-    card.select('.user-data').property('value', active_node['user-data'] || '');
-    card.select('.raw-data').text(JSON.stringify(active_node, null, 1));
+    card.select('.user-data').property('value', concept['user-data'] || '');
+    card.select('.raw-data').text(JSON.stringify(concept, null, 1));
 
-    this._buildRefList(card, active_node.refs, 'concept', active_node.id);
+    this._buildRefList(card, concept.refs, 'concept', concept.id);
 
     card.select('.concept-edit')
       .on('click', function()
@@ -142,44 +144,43 @@ var SidePanel = {
         dlgConceptName.show(function(name){
             updateConcept(SidePanel._active_concept, 'name', name);
           },
-          active_node.name
+          concept.name
         );
       });
   },
 
   /**
-   * 
+   *
    */
-  showRelationDetailsCard: function(link_id)
+  showRelationDetailsCard: function(relation)
   {
-    var active_link = getLinkById(link_id);
-    var card = this.showCard('relation', active_link != null);
+    var card = this.showCard('relation', relation != null);
 
-    if( this._active_link )
+    if( this._active_relation )
     {
       var user_data = card.select('.user-data').property('value');
-      updateRelation(this._active_link, 'user-data', user_data);
+      updateRelation(this._active_relation, 'user-data', user_data);
 
       var label = card.select('.label').property('value');
-      updateRelation(this._active_link, 'label', label);
+      updateRelation(this._active_relation, 'label', label);
     }
-    this._active_link = active_link ? active_link.id : null;
 
-    if( !active_link )
+    this._active_relation = relation;
+    if( !relation )
       return;
 
-    card.select('.concept1').text(active_link.source.name);
-    card.select('.concept2').text(active_link.target.name);
-    card.select('.user-data').property('value', active_link['user-data'] || '');
-    card.select('.label').property('value', active_link['label'] || '');
-    card.select('.raw-data').text(JSON.stringify(active_link, null, 1));
+    card.select('.concept1').text(relation.source.name);
+    card.select('.concept2').text(relation.target.name);
+    card.select('.user-data').property('value', relation['user-data'] || '');
+    card.select('.label').property('value', relation['label'] || '');
+    card.select('.raw-data').text(JSON.stringify(relation, null, 1));
 
-    this._buildRefList(card, active_link.refs, 'relation', active_link.id);
+    this._buildRefList(card, relation.refs, 'relation', relation.id);
   },
-  
+
   // private:
   /**
-   * 
+   *
    */
   _buildRefList: function(card, refs_map, type, id)
   {
