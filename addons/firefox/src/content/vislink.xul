@@ -3,16 +3,51 @@
 
 <overlay id="Scrapper-Overlay" xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
 
+<script type="application/x-javascript" src="chrome://hidden-content/content/ConceptGraph.js" />
+<script type="application/x-javascript" src="chrome://hidden-content/content/color.js" />
+<script type="application/x-javascript" src="chrome://hidden-content/content/d3.v3.min.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/grab.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/httpPing.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/Queue.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/sha1.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/throttle.js" />
 <script type="application/x-javascript" src="chrome://hidden-content/content/myjs.js" />
+<script type="application/x-javascript" src="chrome://hidden-content/content/UI.js" />
+<script type="application/x-javascript" src="chrome://hidden-content/content/utils.js" />
+
+<popupset id="mainPopupSet">
+  <panel id="vislink-panel" type="arrow">
+    <vbox>
+      <vbox id="sec-selection">
+        <h2>Selection</h2>
+        <ul class="selection"></ul>
+      </vbox>
+
+      <h2>Reference</h2>
+      <radiogroup id="ref-scope">
+        <radio id="ref-all" value="all" label="Whole Document"/>
+        <radio id="ref-selection" value="selection" label="Browser Selection"/>
+      </radiogroup>
+
+      <h2>Action</h2>
+      <div class="command-tiles">
+        <button id="btn-add-reference"
+                onclick="UI.Panel._onAddReference(this);">Add Reference</button>
+        <button id="btn-create-relation"
+                onclick="UI.Panel._onCreateRelation(this);">Create Relation</button>
+        <button id="btn-create-concept"
+                onclick="UI.Panel._onCreateConcept(this);">Create Concept</button>
+        <toolbarbutton class="preferences"
+                       oncommand="UI.showPreferences()"/>
+      </div>
+      <div class="info"></div>
+    </vbox>
+  </panel>
+</popupset>
 
 <toolbarpalette id="BrowserToolbarPalette">
   <toolbarbutton type="menu-button"
-	             id="vislink"
+	             id="vislink-old"
 	             label="Hidden Content"
 	             tooltiptext="Visualize Hidden Content"
 	             oncommand="onVisLinkButton(event)"
@@ -23,12 +58,16 @@
       </div>
       <menuseparator />
       <menuitem label="Abort all" oncommand="onAbort('', -1)"/>
-      <menuitem label="Settings" oncommand="window.open('chrome://hidden-content/content/preferences.xul', 'VisLinks - Settings', 'chrome');"/>
+      <menuitem label="Settings" oncommand="UI.showPreferences()"/>
       <menuitem label="Dump Links" oncommand="onDump()"/>
       <menuitem label="Save State" oncommand="onSaveState()"/>
       <menuseparator />
     </menupopup>
   </toolbarbutton>
+
+  <toolbarbutton id="vislink"
+                 label="Hidden Content"
+                 oncommand="UI.Panel.show(d3.select('#vislink').node())"/>
 
   <toolbarbutton type="button"
                  id="vislink-search-prev"
@@ -72,11 +111,6 @@
               tooltiptext="Add reference to selected text to selected objects."
               onclick="onConceptAddRef(this, event);"
               label="Add Reference" />
-    <menuitem id="context-concepts-link-selection"
-              class="menuitem-iconic"
-              tooltiptext="Link selectetd concepts with a reference to the selected text."
-              onclick="onConceptEdgeNew(this, event);"
-              label="Link Concepts"/>
   </menugroup>
   <menuseparator id="context-sep-concepts" insertafter="context-concepts"/>
 </menupopup>

@@ -3,8 +3,8 @@ var filtered_nodes = [],
     filtered_links = [];
 var filter = '';
 
-var concept_graph = new ConceptGraph();
-concept_graph
+var concept_graph =
+  new ConceptGraph()
   .on('concept-new', function(id, node)
   {
     console.log("New concept: " + id, node);
@@ -25,7 +25,7 @@ concept_graph
     updateDetailDialogs();
     restart();
 
-    if( concept_graph.selection.has(concept.id) )
+    if( localBool('auto-link') && concept_graph.selection.has(concept.id) )
       sendInitiateForNode(concept);
   })
   .on('selection-add', function(id, type)
@@ -42,10 +42,10 @@ concept_graph
         'relation-new',
         'relation-update',
         'relation-delete',
-        'selection-change' ], function(id, rel)
+        'selection-change' ], function(id, rel, type)
   {
     updateDetailDialogs();
-    restart();
+    restart(type != 'selection-change');
   });
 
 var request_queue = []; // Pending requests (if no node exists yet)
@@ -355,11 +355,6 @@ function nodeSize(node)
   ];
 }
 
-function nodeColor(node)
-{
-  return node.color || '#eeeeee';
-}
-
 function nodeIntersect(source, target)
 {
   var node_size = nodeSize(source);
@@ -634,10 +629,10 @@ function restart(update_layout = true)
   node_groups.select('ellipse')
     .attr('rx', function(d) { return nodeSize(d)[0]; })
     .attr('ry', function(d) { return nodeSize(d)[1]; })
-    .style('fill', function(d) { return nodeColor(d); });
+    .style('fill', function(d) { return d.getColor(); });
   node_groups.selectAll('text')
     .text(function(d) { return d.name; })
-    .style('fill', function(d) { return contrastColor(nodeColor(d)); });
+    .style('fill', function(d) { return contrastColor(d.getColor()); });
 
   node_groups.selectAll('g.ref')
     .remove();
@@ -1123,7 +1118,7 @@ var user_actions = [
     isEnabled: function()
     {
       var concepts = concept_graph.getSelectedConceptIds();
-      return  concepts.length == 2
+      return  concepts.size == 2
            && !concept_graph.getRelationForConcepts(...concepts);
     },
     action: function()
@@ -1131,7 +1126,7 @@ var user_actions = [
       send({
         'task': 'CONCEPT-LINK-UPDATE',
         'cmd': 'new',
-        'nodes': concept_graph.getSelectedConceptIds()
+        'nodes': [...concept_graph.getSelectedConceptIds()]
       });
     }
   },

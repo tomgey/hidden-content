@@ -102,7 +102,7 @@ var SidePanel = {
 
     var updateConceptColor = function(new_color)
     {
-      var color = new_color || nodeColor(concept),
+      var color = new_color || concept.getColor(),
           contrast_color = contrastColor(color);
 
       card.select('.title-bar')
@@ -123,7 +123,7 @@ var SidePanel = {
     card.select('.concept-image').attr('src', concept.img);
 
     card.select('#concept-color')
-      .property('value', nodeColor(concept))
+      .property('value', concept.getColor())
       .on('change', function()
       {
         updateConcept(SidePanel._active_concept, 'color', this.value)

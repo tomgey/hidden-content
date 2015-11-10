@@ -11,7 +11,7 @@ function ConceptGraph()
    */
   this.relations = new Map();
 
-  /** Selected concepts and relations (by the user) */
+  /** Selected concept and relation ids */
   this.selection = new Set();
 }
 
@@ -47,6 +47,12 @@ ConceptGraph.prototype.addConcept = function(cfg)
     console.warn("addConcept: already exists: " + id);
     return false;
   }
+
+  cfg.type = 'concept';
+  cfg.getColor = function()
+  {
+    return this.color || '#eeeeee';
+  };
 
   this.concepts.set(id, cfg);
   this._callHandler('concept-new', id, cfg);
@@ -127,9 +133,14 @@ ConceptGraph.prototype.addRelation = function(cfg)
     return false;
   }
 
+  cfg.type = 'relation';
   cfg.source = first;
   cfg.target = second;
   cfg.id = id;
+  cfg.getColor = function()
+  {
+    return this.color || '#eeeeee';
+  };
 
   this.relations.set(id, cfg);
   this._callHandler('relation-new', id, cfg);
@@ -259,6 +270,30 @@ ConceptGraph.prototype.remove = function(id)
 }
 
 /**
+ * Get the ids of all selected concepts and relations
+ */
+ConceptGraph.prototype.getSelectionIds = function()
+{
+  return this.selection;
+}
+
+/**
+ * Get the selected concepts and relations
+ */
+ConceptGraph.prototype.getSelection = function()
+{
+  var selection = new Set();
+  this.selection.forEach(function(id)
+  {
+    if( this._isRelationId(id) )
+      selection.add( this.getRelationById(id) );
+    else
+      selection.add( this.getConceptById(id) );
+  }, this);
+  return selection;
+}
+
+/**
  * Get the id of the selected concept or relation if only a single item is
  * selected.
  */
@@ -301,11 +336,11 @@ ConceptGraph.prototype.getSelectedConceptIds = function()
 {
   if( !this._selected_concept_ids )
   {
-    this._selected_concept_ids = [];
+    this._selected_concept_ids = new Set();
     this.selection.forEach(function(id)
     {
       if( !this._isRelationId(id) )
-        this._selected_concept_ids.push(id);
+        this._selected_concept_ids.add(id);
     }, this);
   }
 
@@ -333,11 +368,11 @@ ConceptGraph.prototype.getSelectedRelationIds = function()
 {
   if( !this._selected_relation_ids )
   {
-    this._selected_relation_ids = [];
+    this._selected_relation_ids = new Set();
     this.selection.forEach(function(id)
     {
       if( this._isRelationId(id) )
-        this._selected_relation_ids.push(id);
+        this._selected_relation_ids.add(id);
     }, this);
   }
 
@@ -445,7 +480,7 @@ ConceptGraph.prototype._callHandler = function(type, ...args)
 {
   var cb = this.handlers.get(type);
   if( cb )
-    cb(...args);
+    cb(...args, type);
 }
 
 /**

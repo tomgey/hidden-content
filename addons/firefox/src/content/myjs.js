@@ -7,8 +7,6 @@ var ctrl_socket = null;
 var ctrl_queue = null;
 var status = '';
 var status_sync = '';
-var concepts = {};
-var selected_concepts = [];
 
 function getPid()
 {
@@ -94,6 +92,8 @@ var tile_requests = null;
 var tile_timeout = false;
 var do_report = true;
 
+var concept_graph = new ConceptGraph();
+
 var prefs = Cc["@mozilla.org/fuel/application;1"]
               .getService(Ci.fuelIApplication)
               .prefs;
@@ -163,7 +163,7 @@ function getPref(key)
  */
 function setStatus(stat)
 {
-  $('vislink').setAttribute('class', stat);
+  $('vislink-old').setAttribute('class', stat);
   status = stat;
 }
 
@@ -332,53 +332,6 @@ function getScrollRegion()
 }
 
 /**
- * XPath for given DOM Element
- */
-function getXPathForElement(el, root)
-{
-  var xpath = '';
-  while( el && el !== root )
-  {
-    var sibling = el;
-    var pos = 0;
-
-    do
-    {
-      if(    /*sibling.nodeType === Element.ELEMENT_NODE
-          &&*/ sibling.nodeName === el.nodeName )
-        pos += 1;
-
-      sibling = sibling.previousSibling;
-    } while( sibling );
-
-    if( el.nodeType === Element.TEXT_NODE )
-      var nodeName = 'text()';
-    else
-      var nodeName = el.nodeName;
-
-    xpath = "/" + nodeName + "[" + pos + "]" + xpath;
-    el = el.parentNode;
-  }
-  if( el )
-    xpath = "." + xpath;
-  return xpath;
-}
-
-/**
- * Get DOM Element for given XPath
- */
-function getElementForXPath(xpath, root)
-{
-  return root.ownerDocument
-             .evaluate( xpath,
-                        root,
-                        null,
-                        XPathResult.FIRST_ORDERED_NODE_TYPE,
-                        null )
-             .singleNodeValue;
-}
-
-/**
  * URL change hook (page load, tab change, etc.)
  */
 function onUrlChange(url, tab, reason)
@@ -477,7 +430,7 @@ function onPageLoad(event)
       {
         for(var xpath in scrollables)
         {
-          var el = getElementForXPath(xpath, doc.body);
+          var el = utils.getElementForXPath(xpath, doc.body);
           if( !el )
             continue;
 
@@ -550,7 +503,7 @@ function onPageLoad(event)
         && el.style.overflowY != "scroll" )
       continue;
 
-    var xpath = getXPathForElement(el, doc.body);
+    var xpath = utils.getXPathForElement(el, doc.body);
     var cb = throttle(onElementScrollImpl, 100);
     el.addEventListener("scroll", cb, false);
 
@@ -813,8 +766,8 @@ function onContextMenu()
   $("context-concepts-new-node").hidden = !links_active;
 
   var selected_active =  links_active
-                      && selected_concepts.length;
-  $("context-concepts-link-selection").hidden = !selected_active;
+                      && concept_graph.selection.size;
+  // TODO $("context-concepts-link-selection").hidden = !selected_active;
   $('context-concepts-add-ref').hidden = !selected_active;
 }
 
@@ -856,68 +809,6 @@ function imgToBase64(url, fallback_text, cb_done)
   }
 }
 
-/**
- * Add reference to given list of ids for current selection.
- */
-function addRefSelection(ids, sel)
-{
-  if(typeof ids == 'string')
-    var ids = [ids];
-
-  var sel = sel || content.getSelection();
-  var body = content.document.body;
-
-  var ranges = [];
-  for(var i = 0; i < sel.rangeCount; i++)
-  {
-    var range = sel.getRangeAt(i);
-    ranges.push({
-      'start-node': getXPathForElement(range.startContainer, body),
-      'start-offset': range.startOffset,
-      'end-node': getXPathForElement(range.endContainer, body),
-      'end-offset': range.endOffset
-    });
-  }
-
-  var base_domain = getBaseDomainFromHost(content.location.hostname);
-  var url = getContentUrl();
-  var title = content.document.title;
-
-  imgToBase64(
-    gBrowser.getIcon(),
-    base_domain[0].toUpperCase(),
-    function(img_data)
-    {
-      var ref = {
-        'title': title,
-        'url': url,
-        'icon': img_data,
-        'selections': [ranges]
-      };
-
-      for(var i = 0; i < ids.length; i++)
-      {
-        var msg = {
-          'cmd': 'add',
-          'ref': ref
-        };
-        if(typeof ids[i] == "string")
-        {
-          msg['task'] = 'CONCEPT-UPDATE-REFS';
-          msg['id'] = ids[i];
-        }
-        else
-        {
-          msg['task'] = 'CONCEPT-LINK-UPDATE-REFS';
-          msg['nodes'] = ids[i];
-        }
-
-        send(msg);
-      }
-    }
-  );
-}
-
 function onConceptNodeNew(el, event)
 {
   var sel = content.getSelection();
@@ -939,23 +830,12 @@ function onConceptNodeNew(el, event)
     'id': name
   });
 
-  addRefSelection(name.toLowerCase(), sel);
+  utils.addReference(name.toLowerCase(), 'selection');
 }
 
 function onConceptAddRef(el, event)
 {
-  addRefSelection(selected_concepts);
-}
-
-function onConceptEdgeNew(el, event)
-{
-  send({
-    'task': 'CONCEPT-LINK-UPDATE',
-    'cmd': 'new',
-    'nodes': selected_concepts
-  });
-
-  addRefSelection([selected_concepts]);
+  UI.Panel.show(el, 'selection');
 }
 
 /**
@@ -1078,7 +958,7 @@ function start(match_title = false, src_id = 0, check = true)
 //------------------------------------------------------------------------------
 function onVisLinkButton(ev)
 {
-  if( ev.target.id != 'vislink' )
+  if( ev.target.id != 'vislink-old' )
     // Do not use event if not button itself but an entry from the menu has
     // been activated.
     return;
@@ -1342,7 +1222,7 @@ function onElementScrollImpl(e)
     'type': 'SCROLL',
     'item': 'ELEMENT',
     'pos': [e.target.scrollLeft, e.target.scrollTop],
-    'xpath': getXPathForElement(e.target, content.document.body),
+    'xpath': utils.getXPathForElement(e.target, content.document.body),
     'tab-id': content.document._hcd_tab_id
   };
   send(msg);
@@ -1367,7 +1247,7 @@ function handleSyncMsg(msg)
   {
     if( msg['xpath'] )
     {
-      var el = getElementForXPath(msg['xpath'], content.document.body);
+      var el = utils.getElementForXPath(msg['xpath'], content.document.body);
       el.scrollLeft = msg.pos[0];
       el.scrollTop = msg.pos[1];
     }
@@ -1480,7 +1360,7 @@ function register(match_title = false, src_id = 0)
 
   // Get the box object for the link button to get window handler from the
   // window at the position of the box
-  var box = $("vislink").boxObject;
+  var box = $("vislink-old").boxObject;
   var click_pos = [box.screenX + box.width / 2, box.screenY + box.height / 2];
 
   try
@@ -1515,7 +1395,9 @@ function register(match_title = false, src_id = 0)
     links_socket.onmessage = function(event)
     {
       var msg = JSON.parse(event.data);
-      if( msg.task == 'REQUEST' )
+      if( concept_graph.handleMessage(msg) )
+        updateConcepts();
+      else if( msg.task == 'REQUEST' )
       {
         if( !msg.id.startsWith("link://") )
         {
@@ -1597,11 +1479,6 @@ function register(match_title = false, src_id = 0)
             items_routing.appendChild(item);
           }
         }
-        else if( msg.id == '/concepts/all' )
-        {
-          concepts = msg.nodes;
-          updateConcepts();
-        }
         else
         {
           cfg[msg.id] = msg.val;
@@ -1659,24 +1536,6 @@ function register(match_title = false, src_id = 0)
       }
       else if( msg.task == 'SYNC' )
         handleSyncMsg(msg);
-      else if( msg.task.startsWith('CONCEPT-') )
-      {
-        if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
-          selected_concepts = msg.nodes;
-        else if( msg.task == 'CONCEPT-NEW' || msg.task == 'CONCEPT-UPDATE' )
-        {
-          delete msg.task;
-          concepts[msg.id] = msg;
-
-          updateConcepts();
-        }
-        else if( msg.task == 'CONCEPT-DELETE' )
-        {
-          delete concepts[msg.id];
-          console.log("deleting", msg.id, concepts);
-          updateConcepts();
-        }
-      }
       else if( msg.task == 'OPENED-URLS-UPDATE' )
       {
         // ignore
@@ -1850,8 +1709,13 @@ function appendBBsFromSelection(bbs, sel, offset)
   var sel_bbs = [];
   for(var range of sel)
   {
-    var node_start = getElementForXPath(range['start-node'], body),
-        node_end = getElementForXPath(range['end-node'], body);
+    if( range.type == 'document' )
+    {
+      // TODO document range
+      continue;
+    }
+    var node_start = utils.getElementForXPath(range['start-node'], body),
+        node_end = utils.getElementForXPath(range['end-node'], body);
 
     var range_obj = content.document.createRange();
     range_obj.setStart(node_start, range['start-offset']);
@@ -2078,26 +1942,24 @@ function updateConcepts()
   var bb_body = body.getBoundingClientRect();
 
   var top = 4;
-  for(var id in concepts)
+  for(var [id, concept] of concept_graph.concepts)
   {
-    var concept = concepts[id];
-
     var ref = concept.refs ? concept.refs[ getContentUrl() ] : undefined;
     if( !ref )
       continue;
 
-    var a = document.createElementNS("http://www.w3.org/1999/xhtml", "html:a");
-    a.dataset.id = id;
-    a.innerHTML = concept.name;
-    a.title = "Link concept '" + concept.name + "'";
-    a.style.top = top + "px";
-    a.onclick = function(e)
-    {
-      alert("click " + this.dataset.id);
-    };
-
-    concept_area.appendChild(a);
-    top += a.offsetHeight + 5;
+//    var a = document.createElementNS("http://www.w3.org/1999/xhtml", "html:a");
+//    a.dataset.id = id;
+//    a.innerHTML = concept.name;
+//    a.title = "Link concept '" + concept.name + "'";
+//    a.style.top = top + "px";
+//    a.onclick = function(e)
+//    {
+//      alert("click " + this.dataset.id);
+//    };
+//
+//    concept_area.appendChild(a);
+//    top += a.offsetHeight + 5;
 
     var bbs = [];
     for(var sel of ref.selections)
