@@ -163,24 +163,28 @@ function getPref(key)
  */
 function setStatus(stat)
 {
-  $('vislink-old').setAttribute('class', stat);
+  d3.select('#vislink')
+    .classed(status, false)
+    .classed(stat, true);
+
   status = stat;
 }
 
 function setStatusSync(stat)
 {
-  var sync_icon = $('vislink-sync');
-  if( !sync_icon )
+  var sync_icon = d3.select('#vislink-sync');
+  if( sync_icon.empty() )
   {
     console.warn("Sync icon not available.");
     return;
   }
 
-  sync_icon.setAttribute('class', stat);
+  sync_icon.classed(status_sync, false)
+           .classed(stat, true);
   status_sync = stat;
 
   var hidden = (stat == 'no-src');
-  sync_icon.hidden = hidden;
+  sync_icon.node().hidden = hidden;
   $('vislink-sync-src').hidden = hidden;
 }
 
@@ -658,7 +662,7 @@ function _getCurrentTabData(e)
 
   var links = [];
   for(var query in active_routes)
-    links[links.length] = query;
+    links.push(query);
 
   var data = {
     "url": browser.currentURI.spec,
@@ -743,32 +747,18 @@ function onGlobalWheel(e)
 
 function onContextMenu()
 {
-  var shouldShow = gContextMenu.isContentSelected;
-
-  gContextMenu.showItem("context-concepts", shouldShow);
-  gContextMenu.showItem("context-sep-concepts", shouldShow);
-
   var links_active = links_socket && links_socket.readyState == WebSocket.OPEN;
-  var label = $("context-concepts-label");
 
-  if( links_active )
-  {
-    label.label = "Concepts";
-    label.style.color = "inherit";
-  }
-  else
-  {
-    label.label = "Missing server for concepts!";
-    label.style.color = "#e66";
-  }
+  gContextMenu.showItem('context-concepts-label', !links_active);
+  if( !links_active )
+    d3.select('#context-concepts-label')
+      .attr('label', "Missing server for concepts!")
+      .style('color', '#e66');
 
-  label.hidden = links_active;
-  $("context-concepts-new-node").hidden = !links_active;
-
-  var selected_active =  links_active
-                      && concept_graph.selection.size;
-  // TODO $("context-concepts-link-selection").hidden = !selected_active;
-  $('context-concepts-add-ref').hidden = !selected_active;
+  gContextMenu.showItem('context-keyword-link',
+                        links_active && gContextMenu.isContentSelected);
+  gContextMenu.showItem('context-concepts-action', links_active);
+  gContextMenu.showItem('context-sep-concepts', true);
 }
 
 function imgToBase64(url, fallback_text, cb_done)
@@ -956,20 +946,6 @@ function start(match_title = false, src_id = 0, check = true)
 }
 
 //------------------------------------------------------------------------------
-function onVisLinkButton(ev)
-{
-  if( ev.target.id != 'vislink-old' )
-    // Do not use event if not button itself but an entry from the menu has
-    // been activated.
-    return;
-
-  if( status == 'active')
-    selectVisLink();
-  else
-    start();
-}
-
-//------------------------------------------------------------------------------
 function onTabSyncButton(ev)
 {
   if( ev.target.id != 'vislink-sync' )
@@ -1013,12 +989,11 @@ function onStandardSearchButton(backwards = false)
 // This function is triggered by the user if he want's to get something linked
 function selectVisLink()
 {
-  var	selectionId = getSelectionId();
-	if( selectionId == null || selectionId == "" )
-	  return;
-	window.localSelectionId = selectionId;
+  var selectionId = getSelectionId();
+  if( selectionId == null || selectionId == "" )
+    return;
 
-	reportVisLinks(selectionId);
+  reportVisLinks(selectionId);
 }
 
 //------------------------------------------------------------------------------
@@ -1360,7 +1335,7 @@ function register(match_title = false, src_id = 0)
 
   // Get the box object for the link button to get window handler from the
   // window at the position of the box
-  var box = $("vislink-old").boxObject;
+  var box = $("vislink").boxObject;
   var click_pos = [box.screenX + box.width / 2, box.screenY + box.height / 2];
 
   try
@@ -1647,7 +1622,7 @@ function searchAreaTitles(doc, id)
    		    //sourceString = thisNode.getAttribute('title');
    		    //coordsString = thisNode.getAttribute('coords');
      		//alert( sourceString + " - coords: " + coordsString + " - node name: " + thisNode.parentNode.nodeName );
-     		result[result.length] =	thisNode;
+     		result.push(thisNode);
      		thisNode = areanodes.iterateNext();
    		}
  	}
@@ -1668,7 +1643,7 @@ function searchAreaTitles(doc, id)
 			var bb = findAreaBoundingBox(doc, img, r.getAttribute('coords'));
 			//var	bb = findObjectBoundingBox(imgArray[0]);
 			if (bb != null)	{
-				bbs[bbs.length]	= bb;
+				bbs.push(bb);
 			}
 		}
 
@@ -1694,7 +1669,7 @@ function appendBBsFromRange(bbs, range, offset)
       var r = Math.round(offset[0] + scale * (bb.right + 1));
       var t = Math.round(offset[1] + scale * (bb.top - 1));
       var b = Math.round(offset[1] + scale * (bb.bottom));
-      bbs[bbs.length] = [[l, t], [r, t], [r, b], [l, b]];
+      bbs.push([[l, t], [r, t], [r, b], [l, b]]);
     }
   }
 }
@@ -1711,7 +1686,12 @@ function appendBBsFromSelection(bbs, sel, offset)
   {
     if( range.type == 'document' )
     {
-      // TODO document range
+      var reg_vp = getRegionViewport(),
+          coords = reg_vp[0],
+          cfg = reg_vp[1];
+
+      coords.push(cfg);
+      bbs.push(coords);
       continue;
     }
     var node_start = utils.getElementForXPath(range['start-node'], body),
@@ -1749,30 +1729,34 @@ function appendBBsFromSelection(bbs, sel, offset)
     b = Math.max(b, b_i);
   }
 
-  bbs[bbs.length] = [[l, t], [r, t], [r, b], [l, b]];
+  bbs.push([[l, t], [r, t], [r, b], [l, b]]);
+}
+
+//------------------------------------------------------------------------------
+function getRegionViewport()
+{
+  var vp = getViewport();
+  var l = 1;
+  var t = 1;
+  var r = vp[2] - vp[0] - 1;
+  var b = vp[3] - vp[0] - 1;
+  return [
+    [[l, t], [r, t], [r, b], [l, b]],
+    {
+      "is-window-outline": true,
+      "ref": "viewport"
+    }
+  ];
 }
 
 //------------------------------------------------------------------------------
 function searchDocument(doc, id)
 {
   if( id.startsWith("link://") )
-  {
-    var vp = getViewport();
-    var l = 1;
-    var t = 1;
-    var r = vp[2] - vp[0] - 1;
-    var b = vp[3] - vp[0] - 1;
-    return [
-      [[l, t], [r, t], [r, b], [l, b]],
-      {
-        "is-window-outline": true,
-        "ref": "viewport"
-      }
-    ];
-  }
+    return getRegionViewport();
 
   updateScale();
-  var	bbs	= new Array();
+  var bbs = new Array();
 
   var id_regex = id.replace(/[\s-._]+/g, "[\\s-._]+");
   var textnodes = doc.evaluate("//body//*/text()", doc, null,  XPathResult.ANY_TYPE, null);
@@ -1809,7 +1793,7 @@ function findAreaBoundingBox(doc, img, areaCoords){
 	while(sepIndex >= 0){
 		var numString = areaCoords;
 		numString = numString.substring(0, sepIndex);
-		coords[coords.length] = parseInt(numString);
+		coords.push( parseInt(numString) );
 		areaCoords = areaCoords.substring(sepIndex + 1, areaCoords.length);
 		//alert("numString: " + numString + " - coords: " + areaCoords + " sepIndex: " + sepIndex + ", length: " + areaCoords.length);
 		sepIndex = areaCoords.indexOf(',');
@@ -1817,7 +1801,7 @@ function findAreaBoundingBox(doc, img, areaCoords){
 	}
 
 	// last element
-	coords[coords.length] = parseInt(areaCoords);
+	coords.push( parseInt(areaCoords) );
 
 	//alert(coords.length + " coords found - last: " + coords[coords.length-1]);
 

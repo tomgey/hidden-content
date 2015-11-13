@@ -69,7 +69,7 @@ var SidePanel = {
                      .data(selected_concepts);
     li.enter().append('li');
     li.exit().remove();
-    li.text(function(d){ return JSON.stringify(d); });
+    li.text(function(d){ return d.getLabel(); });
 
     var relations =
       card.select('.relations')
@@ -80,7 +80,7 @@ var SidePanel = {
                       .data(selected_relations);
     li.enter().append('li');
     li.exit().remove();
-    li.text(function(d){ return JSON.stringify(d); });
+    li.text(function(d){ return d.getLabel(); });
   },
 
   /**

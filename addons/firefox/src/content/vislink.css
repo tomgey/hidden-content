@@ -1,14 +1,14 @@
-#vislink, #vislink-old
+#vislink
 {
   list-style-image: url("chrome://hidden-content/content/icon-16.png");
 }
 
-#vislink.active, #vislink-old.active
+#vislink.active
 {
   list-style-image: url("chrome://hidden-content/content/icon-active-16.png");
 }
 
-#vislink.error, #vislink-old.error
+#vislink.error
 {
   list-style-image: url("chrome://hidden-content/content/icon-error-16.png");
 }
@@ -52,6 +52,19 @@
 toolbarbutton.preferences {
   list-style-image: url(chrome://browser/skin/Toolbar.png);
   -moz-image-region: rect(0px, 468px, 18px, 450px);
+}
+
+#vislink-panel .section-header {
+  margin: 0 0 0.5em;
+  max-width: 400px;
+}
+
+#vislink-panel .section {
+  margin: 0 0 1.1em;
+}
+
+#vislink-panel description {
+  color: #aaa;
 }
 
 .selection {

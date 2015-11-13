@@ -16,6 +16,62 @@ function ConceptGraph()
 }
 
 /**
+ * A concept
+ */
+function Concept(cfg)
+{
+  for(var prop in cfg)
+    if( this[prop] )
+      console.warn('can not override member by property', prop);
+    else
+      this[prop] = cfg[prop];
+}
+
+Concept.prototype.getLabel = function()
+{
+  return this.name;
+}
+
+Concept.prototype.getType = function()
+{
+  return 'concept';
+}
+
+Concept.prototype.isConcept = function() { return true; }
+Concept.prototype.isRelation = function() { return false; }
+
+/**
+ * A relation between (two) concepts
+ */
+function Relation(cfg)
+{
+  for(var prop in cfg)
+    if( this[prop] )
+      console.warn('can not override member by property', prop);
+    else
+      this[prop] = cfg[prop];
+}
+
+Relation.prototype.getLabel = function()
+{
+  return this.source.name + ' <-> ' + this.target.name;
+}
+
+Relation.prototype.getType = function()
+{
+  return 'relation';
+}
+
+Relation.prototype.isConcept = function() { return false; }
+Relation.prototype.isRelation = function() { return true; }
+
+Concept.prototype.getColor =
+Relation.prototype.getColor = function()
+{
+  return this.color || '#eeeeee';
+}
+
+/**
  * Register an event handler
  *
  * @param type  Event type
@@ -48,14 +104,10 @@ ConceptGraph.prototype.addConcept = function(cfg)
     return false;
   }
 
-  cfg.type = 'concept';
-  cfg.getColor = function()
-  {
-    return this.color || '#eeeeee';
-  };
+  var concept = new Concept(cfg);
 
-  this.concepts.set(id, cfg);
-  this._callHandler('concept-new', id, cfg);
+  this.concepts.set(id, concept);
+  this._callHandler('concept-new', id, concept);
 
   return true;
 }
@@ -133,17 +185,13 @@ ConceptGraph.prototype.addRelation = function(cfg)
     return false;
   }
 
-  cfg.type = 'relation';
   cfg.source = first;
   cfg.target = second;
   cfg.id = id;
-  cfg.getColor = function()
-  {
-    return this.color || '#eeeeee';
-  };
+  var rel = new Relation(cfg);
 
-  this.relations.set(id, cfg);
-  this._callHandler('relation-new', id, cfg);
+  this.relations.set(id, rel);
+  this._callHandler('relation-new', id, rel);
 
   return true;
 }
@@ -267,6 +315,19 @@ ConceptGraph.prototype.remove = function(id)
 {
   return this._isRelationId(id) ? this.removeRelation(id)
                                 : this.removeConcept(id);
+}
+
+/**
+ * Get the ids of all concepts and relations
+ */
+ConceptGraph.prototype.getIds = function()
+{
+  var ids = new Set();
+  for(var [id] of this.concepts)
+    ids.add(id);
+  for(var [id] of this.relations)
+    ids.add(id);
+  return ids;
 }
 
 /**

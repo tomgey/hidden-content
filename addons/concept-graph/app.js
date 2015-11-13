@@ -19,11 +19,12 @@ var concept_graph =
     queue_timeout = setTimeout(checkRequestQueue, 200);
 
     restart();
+    updateDetailDialogs();
   })
   .on('concept-update', function(id, concept)
   {
-    updateDetailDialogs();
     restart();
+    updateDetailDialogs();
 
     if( localBool('auto-link') && concept_graph.selection.has(concept.id) )
       sendInitiateForNode(concept);
@@ -44,8 +45,8 @@ var concept_graph =
         'relation-delete',
         'selection-change' ], function(id, rel, type)
   {
-    updateDetailDialogs();
     restart(type != 'selection-change');
+    updateDetailDialogs();
   });
 
 var request_queue = []; // Pending requests (if no node exists yet)
@@ -272,15 +273,18 @@ function updateRelation(relation, key, val)
 function handleRequest(msg)
 {
   var c = 'link://concept/';
-  if( !msg.id.startsWith(c) )
+  if( msg.id.startsWith(c) )
   {
-    console.log("Ignoring link request", msg);
-    return true;
+    var node = concept_graph.getConceptById( msg.id.substring(c.length) );
+    if( !node )
+      return false; // Try again (eg. if new nodes arrive)
   }
-
-  var node = concept_graph.getConceptById( msg.id.substring(c.length) );
-  if( !node )
-    return false; // Try again (eg. if new nodes arrive)
+  else
+  {
+    var node = concept_graph.getConceptById(msg.id);
+    if( !node )
+      return true; // Just ignore keyword links not matching any concept
+  }
 
   active_links.add(msg.id);
 
@@ -1046,6 +1050,7 @@ d3.select(window)
     {
       filter = this.value.toLowerCase();
       restart();
+      updateDetailDialogs();
     })
   })
   .on('visibilitychange', function() {
@@ -1099,6 +1104,15 @@ var user_actions = [
     shortcuts: ['Shift+A'],
     action: addConceptWithDialog
   },
+  { label: 'Select All Concepts and Relations',
+    icon: 'select_all',
+    shortcuts: ['Control+A'],
+    isEnabled: function() { return filtered_nodes.length > 0; },
+    action: function()
+    {
+      concept_graph.updateSelection('set', concept_graph.getIds());
+    }
+  },
   { label: 'Delete Selected Concept(s)/Relation(s)',
     icon: 'delete',
     shortcuts: ['Delete', 'Backspace'],
@@ -1106,6 +1120,7 @@ var user_actions = [
     isEnabled: function() { return concept_graph.selection.size > 0; },
     action: function()
     {
+      // TODO check if visible (not filtered)
       for(var id of concept_graph.selection)
         concept_graph.remove(id);
 
@@ -1117,6 +1132,7 @@ var user_actions = [
     //isMenuVisible: function() { return this.isEnabled(); },
     isEnabled: function()
     {
+      // TODO check if visible (not filtered)
       var concepts = concept_graph.getSelectedConceptIds();
       return  concepts.size == 2
            && !concept_graph.getRelationForConcepts(...concepts);
@@ -1134,6 +1150,7 @@ var user_actions = [
     shortcuts: ['F'],
     isEnabled: function()
     {
+      // TODO check if visible (not filtered) and at least one concept
       return concept_graph.selection.size > 0
           && localStorage.getItem('expert-mode') == 'true';
     },

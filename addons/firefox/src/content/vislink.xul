@@ -18,28 +18,56 @@
 <popupset id="mainPopupSet">
   <panel id="vislink-panel" type="arrow">
     <vbox>
-      <vbox id="sec-selection">
-        <h2>Selection</h2>
+      <vbox id="sec-selection" class="section">
+        <hbox align="center" class="section-header">
+          <description>Select the Concepts and Relations you want to modify or relate:</description>
+          <spacer flex="1"/>
+          <button type="menu" label="Select...">
+            <menupopup>
+              <menuitem label="All Relations"/>
+              <menuitem label="No Relation"/>
+              <menuitem label="All Concepts"/>
+              <menuitem label="No Concept"/>
+            </menupopup>
+          </button>
+        </hbox>
         <ul class="selection"></ul>
       </vbox>
 
-      <h2>Reference</h2>
-      <radiogroup id="ref-scope">
-        <radio id="ref-all" value="all" label="Whole Document"/>
-        <radio id="ref-selection" value="selection" label="Browser Selection"/>
-      </radiogroup>
+      <vbox id="sec-ref-scope" class="section">
+        <description>
+          Choose if the following action should reference the whole document or
+          just the selected parts. The normal mouse selection is used.
+        </description>
+        <radiogroup id="ref-scope">
+          <radio id="ref-all" value="all" label="Whole Document"/>
+          <radio id="ref-selection" value="selection" label="Browser Selection"/>
+        </radiogroup>
+      </vbox>
 
-      <h2>Action</h2>
-      <div class="command-tiles">
-        <button id="btn-add-reference"
-                onclick="UI.Panel._onAddReference(this);">Add Reference</button>
-        <button id="btn-create-relation"
-                onclick="UI.Panel._onCreateRelation(this);">Create Relation</button>
-        <button id="btn-create-concept"
-                onclick="UI.Panel._onCreateConcept(this);">Create Concept</button>
-        <toolbarbutton class="preferences"
-                       oncommand="UI.showPreferences()"/>
-      </div>
+      <vbox class="section">
+        <h2>Action</h2>
+        <div class="command-tiles">
+          <button id="btn-add-reference"
+                  onclick="UI.Panel._onAddReference(this);">Add Reference</button>
+          <button id="btn-create-relation"
+                  onclick="UI.Panel._onCreateRelation(this);">Create Relation</button>
+          <button id="btn-create-concept"
+                  onclick="UI.Panel._onCreateConcept(this);">Create Concept</button>
+          <spacer flex="1"/>
+          <toolbarbutton type="menu-button"
+                         class="preferences"
+                         oncommand="UI.showPreferences()">
+            <menupopup id="ctx-vislink_menu">
+              <menuitem label="Abort all" oncommand="onAbort('', -1)"/>
+              <menuitem label="Settings" oncommand="UI.showPreferences()"/>
+              <menuitem label="Dump Links" oncommand="onDump()"/>
+              <menuitem label="Save State" oncommand="onSaveState()"/>
+              <menuseparator />
+            </menupopup>
+          </toolbarbutton>
+        </div>
+      </vbox>
       <div class="info"></div>
     </vbox>
   </panel>
@@ -47,14 +75,14 @@
 
 <toolbarpalette id="BrowserToolbarPalette">
   <toolbarbutton type="menu-button"
-	             id="vislink-old"
-	             label="Hidden Content"
-	             tooltiptext="Visualize Hidden Content"
-	             oncommand="onVisLinkButton(event)"
-	             class="toolbarbutton-1 chromeclass-toolbar-additional vislink">
+                 id="vislink"
+                 label="Hidden Content"
+                 tooltiptext="Click to conncect..."
+                 oncommand="UI.onToolButtonClick(this, event)"
+                 class="toolbarbutton-1">
     <menupopup id="vislink_menu">
       <div id="routing-selector" orient="vertical">
-        <menuitem label="No routing algorithm1" disabled="true" />
+        <menuitem label="No routing algorithm" disabled="true" />
       </div>
       <menuseparator />
       <menuitem label="Abort all" oncommand="onAbort('', -1)"/>
@@ -64,10 +92,6 @@
       <menuseparator />
     </menupopup>
   </toolbarbutton>
-
-  <toolbarbutton id="vislink"
-                 label="Hidden Content"
-                 oncommand="UI.Panel.show(d3.select('#vislink').node())"/>
 
   <toolbarbutton type="button"
                  id="vislink-search-prev"
@@ -96,23 +120,24 @@
 </toolbarpalette>
 
 <menupopup id="contentAreaContextMenu">
-  <menugroup id="context-concepts" insertafter="context-sep-navigation">
-    <menuitem id="context-concepts-label"
-              class="menuitem-non-iconic"
-              label="Concept"
-              disabled="true" />
-    <menuitem id="context-concepts-new-node"
-              class="menuitem-iconic"
-              tooltiptext="Create new concept node from selected text."
-              onclick="onConceptNodeNew(this, event);"
-              label="New Concept" />
-    <menuitem id="context-concepts-add-ref"
-              class="menuitem-iconic"
-              tooltiptext="Add reference to selected text to selected objects."
-              onclick="onConceptAddRef(this, event);"
-              label="Add Reference" />
-  </menugroup>
-  <menuseparator id="context-sep-concepts" insertafter="context-concepts"/>
+  <menuitem id="context-concepts-label"
+            insertafter="context-sep-navigation"
+            label="Server status unknown..."
+            disabled="true" />
+  <menuitem id="context-keyword-link"
+            insertafter="context-concepts-label"
+            tooltiptext="Search and link the selected keyword."
+            onclick="selectVisLink(this, event);"
+            label="Keyword Link"
+            accesskey="k" />
+  <menuitem id="context-concepts-action"
+            insertafter="context-keyword-link"
+            tooltiptext="Perfom an operation on the concept graph."
+            onclick="UI.Panel.show(this);"
+            label="Concept Graph Action"
+            accesskey="c" />
+  <menuseparator id="context-sep-concepts"
+                 insertafter="context-concepts-action" />
 </menupopup>
 
 </overlay>
