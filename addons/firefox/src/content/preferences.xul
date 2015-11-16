@@ -1,15 +1,18 @@
 <?xml version="1.0"?>
-<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>   
-<prefwindow xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<prefwindow xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" onunload="alert('pref-close');">
   <prefpane id="vislink-settings" label="VisLink settings">
     <preferences>
+      <preference id="pref-server-ping-address" name="extensions.vislinks.server.ping-address" type="string"/>
+      <preference id="pref-server-websocket-address" name="extensions.vislinks.server.websocket-address" type="string"/>
+
       <preference id="pref-auto-connect" name="extensions.vislinks.auto-connect" type="bool"/>
       <preference id="pref-replace-route" name="extensions.vislinks.replace-route" type="bool"/>
       <preference id="pref-invert-wheel" name="extensions.vislinks.invert-wheel" type="bool"/>
     </preferences>
-    
+
     <groupbox id="client-settings">
-			<caption label="Client Settings"/>
+      <caption label="Client Settings"/>
 
       <checkbox label="Automaticall connect to server." preference="pref-auto-connect"/>
       <checkbox label="Replace on new search (Keep last search active if disabled)." preference="pref-replace-route"/>
@@ -19,20 +22,41 @@
     <groupbox id="server-settings">
       <caption label="Server Settings"/>
 
+      <grid>
+        <columns>
+          <column/>
+          <column flex="1"/>
+          <column/>
+        </columns>
+
+        <rows>
+          <row>
+            <label value="Ping Address" control="server.ping-address"/>
+            <textbox id="server.ping-address" preference="pref-server-ping-address"/>
+            <button label="Reset" onclick="prefs.clearUserPref('server.ping-address')"/>
+          </row>
+          <row>
+            <label value="Websocket Address" control="server.websocket-address"/>
+            <textbox id="server.websocket-address" preference="pref-server-websocket-address"/>
+            <button label="Reset" onclick="prefs.clearUserPref('server.websocket-address')"/>
+          </row>
+        </rows>
+      </grid>
+
       <p id="connection-status" style="margin-bottom:0.5em;">Unknow status</p>
 
       <grid id="server-settings-box">
-				<columns>
-					<column/>
-					<column flex="1"/>
-				</columns>
+        <columns>
+          <column/>
+          <column flex="1"/>
+        </columns>
 
         <rows>
 
           <row>
             <hbox align="center">
-							<label value="Default routing algorithm" control="default-routing"/>
-						</hbox>
+              <label value="Default routing algorithm" control="default-routing"/>
+            </hbox>
             <menulist id="default-routing" align="center">
               <menupopup id="default-routing-popup">
                 <menuitem label="Automatic" value=""/>
@@ -132,12 +156,12 @@
                      onchange="onChangeSetting(this, 'Float');" />
           </row>
 
-				</rows>
-			</grid>
-      
+        </rows>
+      </grid>
+
     </groupbox>
   </prefpane>
-  
+
   <script type="application/x-javascript" src="chrome://hidden-content/content/throttle.js" />
   <script type="application/x-javascript" src="chrome://hidden-content/content/preferences.js" />
 </prefwindow>

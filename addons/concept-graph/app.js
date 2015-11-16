@@ -103,7 +103,7 @@ function start(check = true)
   {
     NotificationMessage.show("Check if server is alive...", false);
     httpPing(
-      'http://localhost:4486/',
+      localStorage.getItem('server.ping-address'),
       function() {
         NotificationMessage.show("Connecting...");
         setTimeout(start, 0, false);
@@ -118,7 +118,7 @@ function start(check = true)
     NotificationMessage.show("Connecting...");
 
   console.log("Creating new WebSocket.");
-  links_socket = new WebSocket('ws://localhost:4487', 'VLP');
+  links_socket = new WebSocket(localStorage.getItem('server.websocket-address'), 'VLP');
   links_socket.binaryType = "arraybuffer";
   links_socket.onopen = function(event)
   {
@@ -1012,46 +1012,74 @@ d3.select(window)
   // Page load hook
   .on('load', function()
   {
-    restart();
-    start();
+    d3.select('#drawer-settings')
+      .selectAll('div')
+      .data(settings_menu_entries)
+      .enter()
+      .append('div')
+      .each(function(d)
+      {
+        var self = d3.select(this);
 
-    var label =
-      d3.select('#drawer-settings')
-        .selectAll('label')
-        .data(settings_menu_entries)
-        .enter()
-        .append('label')
-          .attr('class', 'mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect')
-          .attr('for', function(d){ return 'setting-check-' + d.id; });
-    label.append('input')
-           .attr('type', 'checkbox')
-           .attr('id', function(d){ return 'setting-check-' + d.id; })
-           .attr('class', 'mdl-checkbox__input')
-           .property('checked', function(d)
-           {
-             console.log("set checked", d.id, localStorage.getItem(d.id));
-             return localStorage.getItem(d.id) == 'true' ? true : null;
-           })
-           .on('click', function(d)
-           {
-             localStorage.setItem(d.id, this.checked);
-             d.change(this.checked);
-           });
-    label.append('span')
-           .attr('class', 'mdl-checkbox__label')
-           .text(function(d){ return d.label; });
+        if( d.type == 'string' )
+        {
+          var val = localStorage.getItem(d.id) || d.def;
+
+          self.append('label')
+            .attr('for', 'setting-string-' + d.id)
+            .text(d.label);
+          self.append('input')
+            .attr('type', 'text')
+            .attr('id', 'setting-string-' + d.id)
+            .attr('value', val)
+            .on('blur', function(d)
+            {
+              localStorage.setItem(d.id, this.value);
+              d.change(this.value);
+            });
+
+          // Restore state
+          localStorage.setItem(d.id, val);
+          d.change(val);
+        }
+        else
+        {
+          var label =
+            self.append('label')
+              .attr('class', 'mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect')
+              .attr('for', 'setting-check-' + d.id);
+
+          label.append('input')
+            .attr('type', 'checkbox')
+            .attr('id', 'setting-check-' + d.id)
+            .attr('class', 'mdl-checkbox__input')
+            .property('checked', localStorage.getItem(d.id) == 'true'
+                               ? true
+                               : null)
+            .on('click', function(d)
+            {
+              localStorage.setItem(d.id, this.checked);
+              d.change(this.checked);
+            });
+          label.append('span')
+            .attr('class', 'mdl-checkbox__label')
+            .text(d.label);
+
+          // Restore state
+          d.change(localStorage.getItem(d.id) == 'true')
+        }
+      });
     componentHandler.upgradeDom(); // TODO just update single elements?
-
-    // Restore state
-    for(var setting of settings_menu_entries)
-      setting.change(localStorage.getItem(setting.id) == 'true');
 
     d3.select('#input-filter').on('input', function()
     {
       filter = this.value.toLowerCase();
       restart();
       updateDetailDialogs();
-    })
+    });
+
+    restart();
+    start();
   })
   .on('visibilitychange', function() {
     if( document.hidden )
@@ -1093,6 +1121,18 @@ var settings_menu_entries = [
       updateDetailDialogs();
     }
   },
+  { id: 'server.ping-address',
+    label: 'Ping Address',
+    type: 'string',
+    def: 'http://localhost:4486/',
+    change: function() {}
+  },
+  { id: 'server.websocket-address',
+    label: 'Websocket Address',
+    type: 'string',
+    def: 'ws://localhost:4487',
+    change: function() {}
+  }
 ];
 
 //------------------------------------

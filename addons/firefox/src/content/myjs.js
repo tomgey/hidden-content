@@ -914,7 +914,7 @@ function start(match_title = false, src_id = 0, check = true)
 
     // console.log("Check if server is alive...");
     httpPing(
-      'http://localhost:4486/',
+      getPref('server.ping-address'),
       function() {
         // console.log("Server alive => connect");
         setTimeout(start, 0, match_title, src_id, false);
@@ -1343,7 +1343,7 @@ function register(match_title = false, src_id = 0)
     tile_requests = new Stack(); //Queue();
 
     console.log("Creating new WebSocket.");
-    links_socket = new WebSocket('ws://localhost:4487', 'VLP');
+    links_socket = new WebSocket(getPref('server.websocket-address'), 'VLP');
     links_socket.binaryType = "arraybuffer";
     links_socket.onopen = function(event)
     {

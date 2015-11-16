@@ -1,3 +1,5 @@
+const Cc = Components.classes, Ci = Components.interfaces;
+
 function changeSetting(val, type)
 {
   if( !(val instanceof XULElement) )
@@ -20,6 +22,10 @@ var onChangeSetting = debounce(changeSetting, 400);
 var p_status = document.getElementById("connection-status");
 var box_settings = document.getElementById("server-settings-box");
 var send = window.opener.send;
+
+var prefs = Components.classes["@mozilla.org/preferences-service;1"]
+                      .getService(Components.interfaces.nsIPrefService)
+                      .getBranch("extensions.vislinks.");
 
 if( window.opener.status != 'active' )
 {
