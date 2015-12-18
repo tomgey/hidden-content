@@ -289,7 +289,9 @@ html.debug-mode .raw-data {
 }
 
 .link.selected > path {
-  stroke-dasharray: 10,2;
+  stroke: rgb(255, 82, 82);
+  stroke-width: 4px;
+  stroke-dasharray:10,8;
 }
 
 .link.hidden > path {
@@ -313,8 +315,9 @@ html.debug-mode .raw-data {
 .node.selected ellipse {
   fill: rgb(255, 82, 82);
   filter: drop-shadow(1px 2px 12px rgba(255, 50, 50, 1));
-  stroke-width: 2px;
+  stroke-width: 4px;
   stroke: red;
+  stroke-dasharray:10,8;
 }
 
 circle.ref-highlight {

@@ -54,7 +54,8 @@ var queue_timeout = null;
 var active_links = new Set();
 var active_urls = new Set();
 
-var drag_start_pos = null;
+var drag_start_pos = null,
+    drag_start_selection = null;
 
 function $(id)
 {
@@ -942,11 +943,12 @@ d3.select('#button-add-concept').on('click', addConceptWithDialog);
 svg
   .on('mousedown', function(d)
   {
-    if(    d3.event.target.tagName != 'svg'
-        || d3.event.ctrlKey )
+    if( d3.event.target.tagName != 'svg' )
       return;
 
-    concept_graph.updateSelection('set', null);
+    if( !d3.event.ctrlKey )
+      concept_graph.updateSelection('set', null);
+    drag_start_selection = new Set(concept_graph.selection);
 
     drag_start_pos = d3.mouse(this);
     drag_rect.attr('x', drag_start_pos[0])
@@ -977,24 +979,31 @@ d3.select(window)
              .attr('width', x2 - x1)
              .attr('height', y2 - y1);
 
-    var mode = d3.event.ctrlKey ? 'toggle' : 'set';
-    var selection = new Set();
+    var selection = new Set(drag_start_selection);
 
     for(var node of filtered_nodes)
     {
-      if(    x1 <= node.x && node.x <= x2
-          && y1 <= node.y && node.y <= y2 )
+      if(    node.x < x1 || node.x > x2
+          || node.y < y1 || node.y > y2 )
+        continue;
+
+      // Toggle selection of element
+      if( !selection.delete(node.id) )
         selection.add(node.id);
     }
 
     for(var link of filtered_links)
     {
-      if(    x1 <= link.center[0] && link.center[0] <= x2
-          && y1 <= link.center[1] && link.center[1] <= y2 )
+      if(    link.center[0] < x1 || link.center[0] > x2
+          || link.center[1] < y1 || link.center[1] > y2 )
+        continue;
+
+      // Toggle..
+      if( !selection.delete(link.id) )
         selection.add(link.id);
     }
 
-    concept_graph.updateSelection(mode, selection);
+    concept_graph.updateSelection('set', selection);
   })
 
   // ----------------------
