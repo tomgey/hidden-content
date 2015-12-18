@@ -153,6 +153,23 @@ QSet<QString> from_json<QSet<QString>>( const QJsonValue& val,
 
 //------------------------------------------------------------------------------
 template<>
+PropertyObjectMap from_json<PropertyObjectMap>( const QJsonValue& val,
+                                                const PropertyObjectMap& def)
+{
+  if( !val.isObject() )
+    return def;
+
+  PropertyObjectMap map;
+  QJsonObject obj = val.toObject();
+
+  for(auto it = obj.begin(); it != obj.end(); ++it)
+    map[it.key()] = it.value().toObject().toVariantMap();
+
+  return map;
+}
+
+//------------------------------------------------------------------------------
+template<>
 QColor from_json<QColor>( const QJsonValue& val,
                           const QColor& def )
 {

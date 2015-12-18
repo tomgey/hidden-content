@@ -17,11 +17,10 @@
 #include <iostream>
 
 typedef std::vector<std::string> StringList;
+typedef QMap<QString, QVariantMap> PropertyObjectMap;
 
 namespace LinksRouting
 {
-  typedef QMap<QString, QVariant> Properties;
-
   enum class Direction { LEFT, UP, RIGHT, DOWN };
   Direction dirFromNorm(const float2& normal);
 
@@ -337,7 +336,7 @@ namespace LinkDescription
                      const Color& color,
                      const StringList& client_whitelist,
                      const StringList& client_blacklist,
-                     const Properties& props ):
+                     const QVariantMap& props ):
       _id( id ),
       _stamp( stamp ),
       _link( link ),
@@ -357,7 +356,7 @@ namespace LinkDescription
     Color         _color;
     StringList    _client_whitelist,
                   _client_blacklist;
-    Properties    _props;
+    QVariantMap   _props;
   };
 
   typedef std::list<LinkDescription> LinkList;

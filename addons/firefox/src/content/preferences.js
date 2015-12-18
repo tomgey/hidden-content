@@ -37,17 +37,17 @@ else
 {
   box_settings.style.display = 'default';
 
-  var socket = window.opener.socket;
+  var socket = window.opener.links_socket;
 
-  p_status.style.color = 'green';  
+  p_status.style.color = 'green';
   p_status.textContent = 'Connected to ' + socket.url;
-  
+
   var combo_routing = document.getElementById("default-routing-popup");
   while( combo_routing.numChildren > 1 )
     combo_routing.removeChild(combo_routing.lastChild);
-  
+
   var routing = window.opener.routing;
-  
+
   for(var router in routing.available)
   {
     var valid = routing.available[router][1];
@@ -59,7 +59,7 @@ else
     item.setAttribute("label", name);
     item.setAttribute("value", name);
     combo_routing.appendChild(item);
-    
+
     if( routing.default == name )
       combo_routing.parentNode.selectedItem = combo_routing.lastChild;
   }

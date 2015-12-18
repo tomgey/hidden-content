@@ -89,6 +89,7 @@
       <menuitem label="Settings" oncommand="UI.showPreferences()"/>
       <menuitem label="Dump Links" oncommand="onDump()"/>
       <menuitem label="Save State" oncommand="onSaveState()"/>
+      <menuitem label="Load State" oncommand="onLoadState()"/>
       <menuitem label="Disconnect" oncommand="stop()"/>
       <menuseparator />
     </menupopup>

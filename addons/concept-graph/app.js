@@ -146,11 +146,20 @@ function start(check = true)
     {
       if( msg.id == '/state/all' )
       {
+        var layout = {};
+        for(var [id, concept] of concept_graph.concepts)
+          layout[id] = {
+            x: concept.x,
+            y: concept.y,
+            fixed: concept.fixed || false
+          };
+
         send({
           'task': 'GET-FOUND',
           'id': '/state/all',
           'data': {
             'type': 'concept-graph',
+            'concept-layout': layout
           }
         });
       }

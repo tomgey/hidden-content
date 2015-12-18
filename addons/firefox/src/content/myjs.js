@@ -1074,6 +1074,22 @@ function onSaveState()
 }
 
 //------------------------------------------------------------------------------
+function onLoadState()
+{
+  var nsIFilePicker = Ci.nsIFilePicker;
+  var fp = Cc["@mozilla.org/filepicker;1"].createInstance(nsIFilePicker);
+  fp.init(window, "Select a File", nsIFilePicker.modeOpen);
+  fp.appendFilter( "Concept State File (*.concept-local.json)",
+                   "*.concept-local.json" );
+
+  var res = fp.show();
+  if( res == nsIFilePicker.returnCancel )
+    return;
+
+  send({'task': 'LOAD-STATE', 'path': fp.fileURL.path});
+}
+
+//------------------------------------------------------------------------------
 function reportVisLinks(id, found, refs)
 {
   if( !do_report || status != 'active' || !id.length )

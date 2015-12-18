@@ -527,6 +527,22 @@ ConceptGraph.prototype.handleMessage = function(msg)
     for(var id in msg.concepts)
       this.addConcept(msg.concepts[id]);
 
+    if( msg.layout )
+    {
+      for(var id in msg.layout)
+      {
+        var concept = this.concepts.get(id);
+        if( !concept )
+          continue;
+
+        for(var k in msg.layout[id])
+          this.concepts.get(id)[k] = msg.layout[id][k];
+
+        concept.px = concept.x;
+        concept.py = concept.y;
+      }
+    }
+
     for(var id in msg.relations)
       this.addRelation(msg.relations[id]);
 

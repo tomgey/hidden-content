@@ -174,6 +174,8 @@ namespace LinksRouting
       std::bind(&IPCServer::onValueGetFound, this, _1, _2);
     _msg_handlers["INITIATE"] =
       std::bind(&IPCServer::onLinkInitiate, this, _1, _2);
+    _msg_handlers["LOAD-STATE"] =
+      std::bind(&IPCServer::onLoadState, this, _1, _2);
     _msg_handlers["REGISTER"] =
       std::bind(&IPCServer::onClientRegister, this, _1, _2);
     _msg_handlers["RESIZE"] =
@@ -676,6 +678,62 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  void IPCServer::loadState(const QString& file_name)
+  {
+    qDebug() << "Loading state from" << file_name;
+
+    QFile state_file(file_name);
+    if( !state_file.open(QIODevice::ReadOnly | QIODevice::Text) )
+    {
+      qWarning() << "Failed to open state file" << file_name;
+      return;
+    }
+
+    QJsonObject state = parseJson(state_file.readAll());
+    if( !state.contains("concepts") )
+    {
+      qWarning() << "Invalid state: missing concept graph data.";
+      return;
+    }
+
+    QJsonObject clients = state["clients"].toObject(),
+                links = state["links"].toObject(),
+                screen = state["screen"].toObject();
+
+    loadConceptGraphFromJson(state["concepts"].toObject());
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::clearConceptGraph()
+  {
+    distributeMessage(QJsonObject({
+      {"task", "CONCEPT-SELECTION-UPDATE"},
+      {"selection", QJsonArray()}
+    }));
+    _concept_selection.clear();
+
+    for( auto rel = _concept_links.begin();
+              rel != _concept_links.end();
+            ++rel )
+      distributeMessage(QJsonObject({
+        {"task", "CONCEPT-LINK-DELETE"},
+        {"id", rel.key()}
+      }));
+    _concept_links.clear();
+
+    for( auto concept = _concept_nodes.begin();
+              concept != _concept_nodes.end();
+            ++concept )
+      distributeMessage(QJsonObject({
+        {"task", "CONCEPT-DELETE"},
+        {"id", concept.key()}
+      }));
+    _concept_nodes.clear();
+
+    _concept_layout.clear();
+  }
+
+  //----------------------------------------------------------------------------
   void IPCServer::onClientConnection()
   {
     QWebSocket* client = _server->nextPendingConnection();
@@ -1141,7 +1199,7 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  void IPCServer::updateRefs( Properties& props,
+  void IPCServer::updateRefs( QVariantMap& props,
                               QJsonObject const& msg )
   {
     QJsonObject new_ref = msg.value("ref").toObject();
@@ -1423,7 +1481,7 @@ namespace LinksRouting
 
       distributeMessage(QJsonObject({
         {"task", "CONCEPT-LINK-DELETE"},
-        {"nodes", to_json(node_ids.split(':'))}
+        {"id", it.key()}
       }));
     }
   }
@@ -1566,6 +1624,10 @@ namespace LinksRouting
     }
 
     client->setStateData(msg.value("data").toObject());
+    QJsonValue layout = client->stateData().value("concept-layout");
+    if( layout.isObject() )
+      _concept_layout = from_json<PropertyObjectMap>(layout);
+
     checkStateData();
   }
 
@@ -1629,6 +1691,16 @@ namespace LinksRouting
   void IPCServer::onSaveState(ClientRef, QJsonObject const&)
   {
     saveState();
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onLoadState(ClientRef, QJsonObject const& msg)
+  {
+    QString const file_name = from_json<QString>(msg.value("path")).trimmed();
+    if( !file_name.isEmpty() )
+      loadState(file_name);
+    else
+      qWarning() << "Missing 'path' for loading state!";
   }
 
   //----------------------------------------------------------------------------
@@ -2891,8 +2963,26 @@ namespace LinksRouting
     graph["concepts"] = to_json(_concept_nodes);
     graph["relations"] = to_json(_concept_links);
     graph["selection"] = to_json(_concept_selection);
+    graph["layout"] = to_json(_concept_layout);
 
     return graph;
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::loadConceptGraphFromJson(const QJsonObject& graph)
+  {
+    clearConceptGraph();
+
+    _concept_nodes = from_json<PropertyObjectMap>(graph["concepts"]);
+    _concept_links = from_json<PropertyObjectMap>(graph["relations"]);
+    _concept_selection = from_json<StringSet>(graph["selection"]);
+    _concept_layout = from_json<PropertyObjectMap>(graph["layout"]);
+
+    QJsonObject msg(graph);
+    msg["id"] = "/concepts/all";
+    msg["task"] = "GET-FOUND";
+
+    distributeMessage(msg);
   }
 
   //----------------------------------------------------------------------------

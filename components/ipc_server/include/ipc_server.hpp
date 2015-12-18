@@ -38,7 +38,6 @@ namespace LinksRouting
   struct ClientInfo;
 
   typedef QSet<QString> StringSet;
-  typedef QMap<QString, Properties> PropertyObjectMap;
 
   class IPCServer:
     public QObject,
@@ -114,6 +113,9 @@ namespace LinksRouting
 
       void dumpState(std::ostream& strm = std::cout) const;
       void saveState(const QString& file_name = "");
+      void loadState(const QString& file_name);
+
+      void clearConceptGraph();
 
     private slots:
 
@@ -174,7 +176,7 @@ namespace LinksRouting
       /**
        * Update refs in the given properties (of a node or an edge)
        */
-      void updateRefs( Properties& props,
+      void updateRefs( QVariantMap& props,
                        QJsonObject const& msg );
 
       void onConceptUpdate(ClientRef, QJsonObject const& msg);
@@ -190,6 +192,7 @@ namespace LinksRouting
       void onWindowManagementCommand(ClientRef, QJsonObject const& msg);
 
       void onSaveState(ClientRef, QJsonObject const& msg);
+      void onLoadState(ClientRef, QJsonObject const& msg);
 
       void onLinkInitiate(ClientRef, QJsonObject const& msg);
       void onLinkUpdate(ClientRef, QJsonObject const& msg);
@@ -263,6 +266,9 @@ namespace LinksRouting
       /** Get concept graph as json object */
       QJsonObject conceptGraphToJson() const;
 
+      /** Load concept graph from json object. (existing graph is deleted) */
+      void loadConceptGraphFromJson(const QJsonObject& graph);
+
     private:
 
       QWebSocketServer   *_server;
@@ -288,6 +294,9 @@ namespace LinksRouting
       PropertyObjectMap _concept_nodes,
                         _concept_links;
       StringSet         _concept_selection; //!< Selected concepts and relations
+
+      PropertyObjectMap _concept_layout; //!< Node layout (in the browser
+                                         //   concept graph
 
       slot_t<std::vector<Rect>>::type _slot_regions;
 
