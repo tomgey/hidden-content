@@ -1,49 +1,64 @@
 var search = {
   filter: function(nodes, links, query)
   {
-    var filtered_nodes = [],
-        filtered_links = [];
-
     // White space separated query parts (with support for quotes)
-    var query_parts = query.match(/[^"\s]+|"(?:\\"|[^"])+"/g);
+    var regex = /([^"\s]+)|"((?:\\"|[^"])+)"/g;
+    var part = null,
+        link_query = null,
+        node_query = null;
 
-    if( query.startsWith('link:') )
+    while( (part = regex.exec(query)) != null )
     {
-      var label_filter = query.substr(5);
-      var node_map = new Map();
+      var p = part[1] || part[2];
+      if( p.startsWith('link:') )
+        link_query = p.slice('link:'.length);
+      else
+        node_query = p;
+    }
+
+    if( node_query )
+    {
+      var visible_nodes = new Map();
+
+      nodes.forEach(function(concept, id)
+      {
+        if( concept.name.toLowerCase().includes(node_query) )
+          visible_nodes.set(id, concept);
+      });
+    }
+    else
+      var visible_nodes = new Map(nodes);
+
+    var filtered_links = [];
+    if( link_query )
+    {
+      var node_canditates = visible_nodes;
+      visible_nodes = new Map();
 
       links.forEach(function(link, id)
       {
         if(    !link.label
-            || !link.label.toLowerCase().includes(label_filter) )
+            || !link.label.toLowerCase().includes(link_query)
+            || (  !node_canditates.has(link.source.id)
+               && !node_canditates.has(link.target.id)) )
           return;
 
-        node_map.set(link.source.id, link.source);
-        node_map.set(link.target.id, link.target);
+        // if at least on node of the link is visible show both nodes
+        visible_nodes.set(link.source.id, link.source);
+        visible_nodes.set(link.target.id, link.target);
         filtered_links.push(link);
       });
-
-      filtered_nodes = [...node_map.values()];
     }
     else
     {
-      var visible_nodes = new Set();
-      nodes.forEach(function(concept, id)
-      {
-        if( filter.length && !concept.name.toLowerCase().includes(filter) )
-          return;
-
-        visible_nodes.add(id);
-        filtered_nodes.push(concept);
-      });
       links.forEach(function(link)
       {
-        if(    visible_nodes.has(link.nodes[0])
-            && visible_nodes.has(link.nodes[1]) )
+        if(    visible_nodes.has(link.source.id)
+            && visible_nodes.has(link.target.id) )
           filtered_links.push(link);
       });
     }
 
-    return [filtered_nodes, filtered_links];
+    return [[...visible_nodes.values()], filtered_links];
   }
 };
