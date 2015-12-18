@@ -126,7 +126,7 @@ var utils = {
   addConcept: function(scope)
   {
     var sel = content.getSelection();
-    if( scope == 'selection' && !sel.isCollapsed )
+    if( /*scope == 'selection' &&*/ !sel.isCollapsed )
       var name = sel.toString();
     else
       var name = content.document.title;

@@ -18,10 +18,10 @@
 <popupset id="mainPopupSet">
   <panel id="vislink-panel" type="arrow">
     <vbox>
-      <vbox id="sec-selection" class="section">
-        <hbox align="center" class="section-header">
-          <description>Select the Concepts and Relations you want to modify or relate:</description>
-          <spacer flex="1"/>
+      <vbox id="sec-selection"
+            class="section"
+            tooltiptext="Select the Concepts and Relations you want to modify or relate.">
+        <!--<hbox align="center" class="section-header">
           <button type="menu" label="Select...">
             <menupopup>
               <menuitem label="All Relations"/>
@@ -30,15 +30,14 @@
               <menuitem label="No Concept"/>
             </menupopup>
           </button>
-        </hbox>
+        </hbox>-->
         <ul class="selection"></ul>
       </vbox>
 
-      <vbox id="sec-ref-scope" class="section">
-        <description>
-          Choose if the following action should reference the whole document or
-          just the selected parts. The normal mouse selection is used.
-        </description>
+      <vbox id="sec-ref-scope"
+            class="section"
+            tooltiptext="Choose if the following action should reference the whole document or just the selected parts (mouse selection)">
+        <h2>Reference</h2>
         <radiogroup id="ref-scope">
           <radio id="ref-all" value="all" label="Whole Document"/>
           <radio id="ref-selection" value="selection" label="Browser Selection"/>
@@ -48,14 +47,14 @@
       <vbox class="section">
         <h2>Action</h2>
         <div class="command-tiles">
+          <button id="btn-create-concept"
+                  onclick="UI.Panel._onCreateConcept(this);">Create Concept</button>
           <button id="btn-add-reference"
                   onclick="UI.Panel._onAddReference(this);">Add Reference</button>
           <button id="btn-create-relation"
                   onclick="UI.Panel._onCreateRelation(this);">Create Relation</button>
-          <button id="btn-create-concept"
-                  onclick="UI.Panel._onCreateConcept(this);">Create Concept</button>
           <spacer flex="1"/>
-          <toolbarbutton type="menu-button"
+          <!--<toolbarbutton type="menu-button"
                          class="preferences"
                          oncommand="UI.showPreferences()">
             <menupopup id="ctx-vislink_menu">
@@ -65,7 +64,7 @@
               <menuitem label="Save State" oncommand="onSaveState()"/>
               <menuseparator />
             </menupopup>
-          </toolbarbutton>
+          </toolbarbutton>-->
         </div>
       </vbox>
       <div class="info"></div>
@@ -135,7 +134,7 @@
   <menuitem id="context-concepts-action"
             insertafter="context-keyword-link"
             tooltiptext="Perfom an operation on the concept graph."
-            onclick="UI.Panel.show(this);"
+            onclick="UI.Panel.show(this, 'selection');"
             label="Concept Graph Action"
             accesskey="c" />
   <menuseparator id="context-sep-concepts"
