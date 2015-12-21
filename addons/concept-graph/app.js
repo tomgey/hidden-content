@@ -24,6 +24,10 @@ var concept_graph =
   .on('concept-update', function(id, concept)
   {
     restart();
+
+    if( SidePanel._active_concept && SidePanel._active_concept.id == id )
+      SidePanel._active_concept = null;
+
     updateDetailDialogs();
 
     if( localBool('auto-link') && concept_graph.selection.has(concept.id) )
@@ -46,6 +50,12 @@ var concept_graph =
         'selection-change' ], function(id, rel, type)
   {
     restart(type != 'selection-change');
+    if( type == 'relation-update' )
+    {
+      if( SidePanel._active_relation && SidePanel._active_relation.id == id )
+        SidePanel._active_relation = null;
+    }
+
     updateDetailDialogs();
   });
 
@@ -251,14 +261,12 @@ function updateConcept(concept, key, val)
       || (!old_val && !val) )
     return false;
 
-  var msg = {
-    'task': 'CONCEPT-UPDATE',
-    'cmd': 'update',
-    'id': concept.id,
+  var new_cfg = {
+    id: concept.id
   };
-  msg[key] = val;
+  new_cfg[key] = val;
 
-  send(msg);
+  concept_graph.updateConcept(new_cfg);
   return true;
 }
 
@@ -1197,10 +1205,8 @@ var user_actions = [
     },
     action: function()
     {
-      send({
-        'task': 'CONCEPT-LINK-UPDATE',
-        'cmd': 'new',
-        'nodes': [...concept_graph.getSelectedConceptIds()]
+      concept_graph.addRelation({
+        nodes: [...concept_graph.getSelectedConceptIds()]
       });
     }
   },

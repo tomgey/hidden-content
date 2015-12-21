@@ -95,12 +95,13 @@ ConceptGraph.prototype.on = function(type, cb)
 /**
  * Add a new concept
  */
-ConceptGraph.prototype.addConcept = function(cfg)
+ConceptGraph.prototype.addConcept = function(cfg, send_msg = true)
 {
   var id = cfg.id;
   if( this.concepts.has(id) )
   {
-    console.warn("addConcept: already exists: " + id);
+    if( send_msg )
+      console.warn("addConcept: already exists: " + id);
     return false;
   }
 
@@ -109,13 +110,21 @@ ConceptGraph.prototype.addConcept = function(cfg)
   this.concepts.set(id, concept);
   this._callHandler('concept-new', id, concept);
 
+  if( send_msg )
+    send({
+      'task': 'CONCEPT-UPDATE',
+      'cmd': 'new',
+      'id': id,
+      'name': cfg.name
+    });
+
   return true;
 }
 
 /**
  * Update concept information
  */
-ConceptGraph.prototype.updateConcept = function(new_cfg)
+ConceptGraph.prototype.updateConcept = function(new_cfg, send_msg = true)
 {
   var concept = this.concepts.get(new_cfg.id);
   if( !concept )
@@ -129,6 +138,13 @@ ConceptGraph.prototype.updateConcept = function(new_cfg)
     concept[prop] = new_cfg[prop];
 
   this._callHandler('concept-update', concept.id, concept);
+
+  if( send_msg )
+  {
+    new_cfg['task'] = 'CONCEPT-UPDATE';
+    new_cfg['cmd']  = 'update';
+    send(new_cfg);
+  }
 }
 
 /**
@@ -148,13 +164,14 @@ ConceptGraph.prototype.removeConcept = function(id, send_msg = true)
 
   this.updateSelection('unset', id, send_msg);
   this.concepts.delete(id);
+  this._callHandler('concept-delete', id);
+
   if( send_msg )
     send({
       'task': 'CONCEPT-UPDATE',
       'cmd': 'delete',
       'id': id
     });
-  this._callHandler('concept-delete', id);
 
   return true;
 }
@@ -162,7 +179,7 @@ ConceptGraph.prototype.removeConcept = function(id, send_msg = true)
 /**
  * Add a new relation between concepts
  */
-ConceptGraph.prototype.addRelation = function(cfg)
+ConceptGraph.prototype.addRelation = function(cfg, send_msg = true)
 {
   var first = this.concepts.get(cfg.nodes[0]),
       second = this.concepts.get(cfg.nodes[1]);
@@ -181,7 +198,8 @@ ConceptGraph.prototype.addRelation = function(cfg)
   var id = cfg.nodes.join(':');
   if( this.relations.has(id) )
   {
-    console.warn("addRelation: already exists: " + id);
+    if( send_msg)
+      console.warn("addRelation: already exists: " + id);
     return false;
   }
 
@@ -192,6 +210,13 @@ ConceptGraph.prototype.addRelation = function(cfg)
 
   this.relations.set(id, rel);
   this._callHandler('relation-new', id, rel);
+
+  if( send_msg )
+    send({
+      'task': 'CONCEPT-LINK-UPDATE',
+      'cmd': 'new',
+      'nodes': cfg.nodes
+    });
 
   return true;
 }
@@ -486,13 +511,13 @@ ConceptGraph.prototype.handleMessage = function(msg)
   if( msg.task == 'CONCEPT-NEW' )
   {
     delete msg.task;
-    this.addConcept(msg);
+    this.addConcept(msg, false);
     return true;
   }
   else if( msg.task == 'CONCEPT-UPDATE' )
   {
     delete msg.task;
-    this.updateConcept(msg);
+    this.updateConcept(msg, false);
     return true;
   }
   else if( msg.task == 'CONCEPT-DELETE' )
@@ -503,7 +528,7 @@ ConceptGraph.prototype.handleMessage = function(msg)
   else if( msg.task == 'CONCEPT-LINK-NEW' )
   {
     delete msg.task;
-    this.addRelation(msg);
+    this.addRelation(msg, false);
     return true;
   }
   else if( msg.task == 'CONCEPT-LINK-UPDATE' )
@@ -525,7 +550,7 @@ ConceptGraph.prototype.handleMessage = function(msg)
   else if( msg.task == 'GET-FOUND' && msg.id == '/concepts/all' )
   {
     for(var id in msg.concepts)
-      this.addConcept(msg.concepts[id]);
+      this.addConcept(msg.concepts[id], false);
 
     if( msg.layout )
     {
@@ -544,7 +569,7 @@ ConceptGraph.prototype.handleMessage = function(msg)
     }
 
     for(var id in msg.relations)
-      this.addRelation(msg.relations[id]);
+      this.addRelation(msg.relations[id], false);
 
     this.updateSelection('set', msg.selection, false);
     return true;
