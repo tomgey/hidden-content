@@ -2,6 +2,7 @@ var links_socket = null;
 var filtered_nodes = [],
     filtered_links = [];
 var filter = '';
+var try_connect = false;
 
 var concept_graph =
   new ConceptGraph()
@@ -92,6 +93,9 @@ function getViewport()
 
 function startWithCountdownMessage(timeout)
 {
+  if( !try_connect )
+    return;
+
   if( timeout >= 1000 )
   {
     NotificationMessage.show(
@@ -112,6 +116,12 @@ function start(check = true)
 {
   if( check )
   {
+    if( !try_connect )
+    {
+      NotificationMessage.show('<b>Standalone Mode</b> (Not connected)');
+      return;
+    }
+
     NotificationMessage.show("Check if server is alive...", false);
     httpPing(
       localStorage.getItem('server.ping-address'),
@@ -206,8 +216,22 @@ function start(check = true)
   }
 }
 
+function stop()
+{
+  try_connect = false;
+
+  if( links_socket )
+  {
+    links_socket.close();
+    links_socket = null;
+  }
+}
+
 function send(data)
 {
+  if( !try_connect )
+    return;
+
   try
   {
     if( !links_socket )
@@ -1045,57 +1069,66 @@ d3.select(window)
       .append('div')
       .each(function(d)
       {
+        var css_id = d.id.replace('.', '_');
         var self = d3.select(this);
+        self.attr('id', 'setting-' + css_id);
+
+        var val = localStorage.getItem(d.id) || d.def;
 
         if( d.type == 'string' )
         {
-          var val = localStorage.getItem(d.id) || d.def;
-
           self.append('label')
-            .attr('for', 'setting-string-' + d.id)
+            .attr('for', 'setting-string-' + css_id)
             .text(d.label);
           self.append('input')
             .attr('type', 'text')
-            .attr('id', 'setting-string-' + d.id)
+            .attr('id', 'setting-string-' + css_id)
             .attr('value', val)
             .on('blur', function(d)
             {
               localStorage.setItem(d.id, this.value);
               d.change(this.value);
             });
-
-          // Restore state
-          localStorage.setItem(d.id, val);
-          d.change(val);
         }
         else
         {
+          val = val.toString() == 'true';
           var label =
             self.append('label')
               .attr('class', 'mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect')
-              .attr('for', 'setting-check-' + d.id);
+              .attr('for', 'setting-check-' + css_id);
 
           label.append('input')
             .attr('type', 'checkbox')
-            .attr('id', 'setting-check-' + d.id)
+            .attr('id', 'setting-check-' + css_id)
             .attr('class', 'mdl-checkbox__input')
-            .property('checked', localStorage.getItem(d.id) == 'true'
-                               ? true
-                               : null)
+            .property('checked', val ? true : null)
             .on('click', function(d)
             {
-              localStorage.setItem(d.id, this.checked);
+              localStorage.setItem(d.id, this.checked.toString());
               d.change(this.checked);
             });
           label.append('span')
             .attr('class', 'mdl-checkbox__label')
             .text(d.label);
-
-          // Restore state
-          d.change(localStorage.getItem(d.id) == 'true')
         }
+
+        localStorage.setItem(d.id, val.toString());
       });
     componentHandler.upgradeDom(); // TODO just update single elements?
+
+    // Update initial state of all settings (do it in a separate loop to ensure
+    // all UI elements are already available and can eg. be hidden or colored)
+    d3.select('#drawer-settings')
+      .selectAll('div')
+      .each(function(d)
+      {
+        var val = localStorage.getItem(d.id);
+        if( d.type != 'string' )
+          val = val == 'true';
+
+        d.change(val);
+      });
 
     d3.select('#input-filter').on('input', function()
     {
@@ -1145,6 +1178,22 @@ var settings_menu_entries = [
     change: function(val)
     {
       updateDetailDialogs();
+    }
+  },
+  { id: 'server.enabled',
+    label: 'Use Server',
+    def: true,
+    change: function(val)
+    {
+      d3.selectAll( '#setting-server_ping-address,'
+                  + '#setting-server_websocket-address' )
+        .style('display', val ? 'inline' : 'none');
+
+      try_connect = val;
+      if( val )
+        start();
+      else
+        stop();
     }
   },
   { id: 'server.ping-address',
