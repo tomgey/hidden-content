@@ -130,12 +130,23 @@ ConceptGraph.prototype.updateConcept = function(new_cfg, send_msg = true)
   if( !concept )
   {
     console.warn("Unknown concept: " + new_cfg.id);
-    return;
+    return false;
   }
 
-  console.log("Update concept: " + concept.name, new_cfg);
+  var changed = false;
   for(var prop in new_cfg)
+  {
+    if(   prop == 'id'
+       || new_cfg[prop] == concept[prop]
+       || new_cfg[prop] === '' && concept[prop] === undefined )
+      continue;
+
     concept[prop] = new_cfg[prop];
+    changed = true;
+  }
+
+  if( !changed )
+    return false;
 
   this._callHandler('concept-update', concept.id, concept);
 
@@ -145,6 +156,8 @@ ConceptGraph.prototype.updateConcept = function(new_cfg, send_msg = true)
     new_cfg['cmd']  = 'update';
     send(new_cfg);
   }
+  
+  return true;
 }
 
 /**
@@ -224,21 +237,42 @@ ConceptGraph.prototype.addRelation = function(cfg, send_msg = true)
 /**
  * Update relation information
  */
-ConceptGraph.prototype.updateRelation = function(new_cfg)
+ConceptGraph.prototype.updateRelation = function(new_cfg, send_msg = true)
 {
-  var id = new_cfg.nodes.join(':');
+  var id = new_cfg.id || new_cfg.nodes.join(':');
   var relation = this.relations.get(id);
   if( !relation )
   {
     console.warn("Unknown relation: [" + new_cfg.nodes + "]");
-    return;
+    return false;
   }
 
-  console.log("Update relation: " + relation.id, new_cfg);
+  var changed = false;
   for(var prop in new_cfg)
+  {
+    if(   prop == 'id'
+       || prop == 'nodes'
+       || new_cfg[prop] == relation[prop]
+       || new_cfg[prop] === '' && relation[prop] === undefined )
+      continue;
+
     relation[prop] = new_cfg[prop];
+    changed = true;
+  }
+
+  if( !changed )
+    return false;
 
   this._callHandler('relation-update', relation.id, relation);
+
+  if( send_msg )
+  {
+    new_cfg['task'] = 'CONCEPT-LINK-UPDATE';
+    new_cfg['cmd']  = 'update';
+    send(new_cfg);
+  }
+
+  return true;
 }
 
 /**
@@ -251,13 +285,14 @@ ConceptGraph.prototype.removeRelation = function(id, send_event = true)
 
   this.updateSelection('unset', id, send_event);
   this.relations.delete(id);
+  this._callHandler('relation-delete', id);
+
   if( send_event )
     send({
       'task': 'CONCEPT-LINK-UPDATE',
       'cmd': 'delete',
       'id': id
     });
-  this._callHandler('relation-delete', id);
 
   return true;
 }
@@ -534,7 +569,7 @@ ConceptGraph.prototype.handleMessage = function(msg)
   else if( msg.task == 'CONCEPT-LINK-UPDATE' )
   {
     delete msg.task;
-    this.updateRelation(msg);
+    this.updateRelation(msg, false);
     return true;
   }
   else if( msg.task == 'CONCEPT-LINK-DELETE' )

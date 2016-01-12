@@ -91,10 +91,10 @@ var SidePanel = {
     var card = this.showCard('concept', concept != null);
 
     if( this._active_concept )
-    {
-      var user_data = card.select('.user-data').property('value');
-      updateConcept(this._active_concept, 'user-data', user_data);
-    }
+      concept_graph.updateConcept({
+        id: this._active_concept.id,
+        'user-data': card.select('.user-data').property('value')
+      });
 
     this._active_concept = concept;
     if( !concept )
@@ -126,7 +126,10 @@ var SidePanel = {
       .property('value', concept.getColor())
       .on('change', function()
       {
-        updateConcept(SidePanel._active_concept, 'color', this.value)
+        concept_graph.updateConcept({
+          id: SidePanel._active_concept.id,
+          'color': this.value
+        });
       })
       .on('input', function()
       {
@@ -142,7 +145,10 @@ var SidePanel = {
       .on('click', function()
       {
         dlgConceptName.show(function(name){
-            updateConcept(SidePanel._active_concept, 'name', name);
+            concept_graph.updateConcept({
+              id: SidePanel._active_concept.id,
+              'name': name
+            });
           },
           concept.name
         );
@@ -158,11 +164,14 @@ var SidePanel = {
 
     if( this._active_relation )
     {
-      var user_data = card.select('.user-data').property('value');
-      updateRelation(this._active_relation, 'user-data', user_data);
+      var active_id = this._active_relation.id;
+      this._active_relation = null; // Prevent double updates (eg. in callbacks)
 
-      var label = card.select('.label').property('value');
-      updateRelation(this._active_relation, 'label', label);
+      concept_graph.updateRelation({
+        id: active_id,
+        'user-data': card.select('.user-data').property('value'),
+        'label': card.select('.label').property('value')
+      });
     }
 
     this._active_relation = relation;

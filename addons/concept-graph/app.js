@@ -51,12 +51,6 @@ var concept_graph =
         'selection-change' ], function(id, rel, type)
   {
     restart(type != 'selection-change');
-    if( type == 'relation-update' )
-    {
-      if( SidePanel._active_relation && SidePanel._active_relation.id == id )
-        SidePanel._active_relation = null;
-    }
-
     updateDetailDialogs();
   });
 
@@ -276,40 +270,6 @@ function sendMsgRegister()
 function localBool(key)
 {
   return localStorage.getItem(key) == 'true';
-}
-
-function updateConcept(concept, key, val)
-{
-  var old_val = concept[key];
-  if(     (old_val && old_val == val)
-      || (!old_val && !val) )
-    return false;
-
-  var new_cfg = {
-    id: concept.id
-  };
-  new_cfg[key] = val;
-
-  concept_graph.updateConcept(new_cfg);
-  return true;
-}
-
-function updateRelation(relation, key, val)
-{
-  var old_val = relation[key];
-  if(     (old_val && old_val == val)
-      || (!old_val && !val) )
-    return false;
-
-  var msg = {
-    'task': 'CONCEPT-LINK-UPDATE',
-    'cmd': 'update',
-    'id': relation.id,
-  };
-  msg[key] = val;
-
-  send(msg);
-  return true;
 }
 
 function handleRequest(msg)
@@ -660,7 +620,10 @@ function restart(update_layout = true)
       leave: function(d) { d3.select(this).attr('transform', null); },
       drop: function(d, file)
       {
-        updateConcept(d, 'img', file.img);
+        concept_graph.updateConcept({
+          id: d.id,
+          'img': file.img
+        });
       }
     });
 
