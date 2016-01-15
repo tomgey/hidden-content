@@ -942,10 +942,10 @@ d3.select('#dlg-concept-name').on('submit', function() {
 function addConceptWithDialog()
 {
   dlgConceptName.show(function(name){
-    send({
-      'task': 'CONCEPT-UPDATE',
-      'cmd': 'new',
-      'id': name
+    var name = name.trim();
+    concept_graph.addConcept({
+      name: name,
+      id: name.toLowerCase()
     });
   });
 }
