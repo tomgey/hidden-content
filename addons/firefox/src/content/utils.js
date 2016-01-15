@@ -1,4 +1,46 @@
 var utils = {
+
+  /**
+   * 
+   */
+  imgToBase64: function(url, fallback_text, cb_done)
+  {
+    var img = new Image();
+    img.src = url;
+
+    var w = 16,
+        h = 16;
+    var canvas =
+      document.createElementNS("http://www.w3.org/1999/xhtml", "html:canvas");
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext("2d");
+    var cb_wrapper = function()
+    {
+      var data = canvas.toDataURL("image/png");
+      cb_done( data /*.replace(/^data:image\/(png|jpg);base64,/, "")*/ );
+    };
+
+    img.onload = function ()
+    {
+      ctx.drawImage(this, 0, 0, w, h);
+      cb_wrapper();
+    };
+    img.onerror = function(e)
+    {
+      ctx.fillStyle = "#fee";
+      ctx.fillRect(0, 0, w, h);
+      ctx.font = "14px Sans-serif";
+      ctx.fontWeight = "bold";
+      ctx.fillStyle = "#333";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(fallback_text, w/2, h/2);
+
+      cb_wrapper();
+    }
+  },
+
   /**
    * XPath for given DOM Element
    */
@@ -74,7 +116,7 @@ var utils = {
   /**
    * Add references to either the selected content parts or the whole document.
    */
-  addReference: function(ids, scope)
+  addReference: function(ids, scope, url)
   {
     if( scope == 'all' )
       var ranges = [{type: 'document'}];
@@ -82,15 +124,16 @@ var utils = {
       var ranges = utils.getContentSelection();
 
     var base_domain = getBaseDomainFromHost(content.location.hostname);
-    var url = getContentUrl();
+    var url = url || getContentUrl();
     var title = content.document.title;
+    var icon = typeof(gBrowser) !== 'undefined' ? gBrowser.getIcon() : null;
 
-    imgToBase64(
-      gBrowser.getIcon(),
+    utils.imgToBase64(
+      icon,
       base_domain[0].toUpperCase(),
       function(img_data)
       {
-        var ref = {
+       var ref = {
           'title': title,
           'url': url,
           'icon': img_data,

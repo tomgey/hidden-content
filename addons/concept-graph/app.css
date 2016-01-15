@@ -177,12 +177,24 @@ span.action-shortcut {
   margin: auto 24px auto 0;
 }
 
-.references button {
+.references li button {
   visibility: hidden;
 }
 
 .references li:hover button {
   visibility: visible;
+}
+
+.add-reference {
+  display: flex;
+}
+
+.add-reference input {
+  flex: 1;
+}
+
+.add-reference button {
+  margin: 0.1em;
 }
 
 .raw-data {
@@ -257,6 +269,12 @@ html.debug-mode .raw-data {
 
 #overlay > .notification-message {
   margin-top: 0;
+}
+
+.mdl-button--fab.button-font-size-fab {
+  height: 1em;
+  min-width: 1em;
+  width: 1em;
 }
 
 /* SVG */

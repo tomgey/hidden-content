@@ -201,8 +201,8 @@ var SidePanel = {
       refs.push(ref);
     }
 
-    card.select('.references')
-        .style('display', refs.length ? 'block' : 'none');
+//    card.select('.references')
+//        .style('display', refs.length ? 'block' : 'none');
 
     var ul = card.select('.references > ul');
     ul.selectAll('li').remove();
@@ -219,19 +219,12 @@ var SidePanel = {
         .attr('src', function(d){ return d.icon; });
     li.append('a')
       .attr('class', 'ref-url')
+      .attr('target', '_blank')
       .attr('href', function(d){ return d.url; })
       .text(function(d){ return d.title || d.url; });
     li.append('button')
       .attr('class', 'concept-ref-delete mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect')
-      .on('click', function(d){
-        send({
-          'task': type == 'concept' ? 'CONCEPT-UPDATE-REFS'
-                                    : 'CONCEPT-LINK-UPDATE-REFS',
-          'cmd': 'delete',
-          'url': d.url,
-          'id': id
-        });
-      })
+      .on('click', function(d){ concept_graph.removeReference(id, d.url); })
         .append('i')
         .attr('class', 'material-icons')
         .text('delete');

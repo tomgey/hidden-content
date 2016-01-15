@@ -4,6 +4,14 @@ var filtered_nodes = [],
 var filter = '';
 var try_connect = false;
 
+function getBaseDomainFromHost(host)
+{
+  if( !host )
+    return 'localhost';
+
+  return host.replace('www.', '');
+}
+
 var concept_graph =
   new ConceptGraph()
   .on('concept-new', function(id, node)
@@ -57,7 +65,7 @@ var concept_graph =
 var request_queue = []; // Pending requests (if no node exists yet)
 var queue_timeout = null;
 var active_links = new Set();
-var active_urls = new Set();
+var active_urls = new Map();
 
 var drag_start_pos = null,
     drag_start_selection = null;
@@ -736,7 +744,7 @@ function keydown()
 {
   var e = d3.event,
       tag = e.target.tagName;
-  if( tag == 'TEXTAREA' || tag == 'INPUT' )
+  if( tag == 'TEXTAREA' || tag == 'INPUT' || e.target.isContentEditable )
     return;
 
   var drawer = d3.select('.mdl-layout__drawer');
@@ -1099,6 +1107,45 @@ d3.select(window)
       restart();
       updateDetailDialogs();
     });
+    d3.selectAll('#tool-area .references')
+      .append('form')
+      .attr('class', 'add-reference')
+      .each(function()
+      {
+        var form = d3.select(this);
+
+        var input =
+        form.append('input')
+          .attr('type', 'text')
+          .attr('class', 'target-paste-reference')
+          .attr('placeholder', "Enter/Paste reference here...")
+          .on('paste', function()
+          {
+//            var data = d3.event.clipboardData;
+//            console.log(data, data.files, data.types, data.getData("text/plain"));
+          });
+
+        form.append('button')
+          .attr('type', 'submit')
+          .attr('class', 'mdl-button mdl-js-button mdl-button--fab button-font-size-fab')
+          .append('i')
+            .attr('class', 'material-icons')
+            .text('add');
+
+        form.on('submit', function()
+        {
+          d3.event.preventDefault();
+          var url = input.property('value');
+          input.property('value', '');
+
+          var title = url;
+          if( url.indexOf('://') < 0 )
+            url = 'http://' + url;
+
+          concept_graph.addReference( concept_graph.getSelectedId(),
+                                      {url: url, title: title} );
+        });
+      });
 
     restart();
     start();

@@ -298,6 +298,100 @@ ConceptGraph.prototype.removeRelation = function(id, send_event = true)
 }
 
 /**
+ * Add a reference to a concept or relation
+ */
+ConceptGraph.prototype.addReference = function(id, cfg, send_event = true)
+{
+  var el = this.getById(id);
+  if( !el )
+  {
+    console.log('Unknown element id', id);
+    return false;
+  }
+  
+  var url = cfg.url;
+  if( typeof(url) !== 'string' || !url.length )
+  {
+    console.log('Missing/invalid url', cfg);
+    return false;
+  }
+
+  el.refs = el.refs || {};
+  var ref = el.refs[url] = el.refs[url] || {};
+
+  if( cfg.title ) ref.title = cfg.title;
+  if( cfg.icon  ) ref.icon  = cfg.icon;
+
+  var ranges = cfg.ranges || [{type: 'document'}];
+
+  ref.selections = ref.selections || [];
+  ref.selections.push(ranges);
+
+  var base_domain = getBaseDomainFromHost(cfg.host || ref.title);
+  var self = this;
+  var is_relation = self._isRelationId(id);
+
+  utils.imgToBase64(
+    cfg.icon,
+    base_domain[0].toUpperCase(),
+    function(img_data)
+    {
+      ref.icon = img_data;
+      self._callHandler( is_relation ? 'relation-update' : 'concept-update',
+                         id, el );
+
+      if( !send_event )
+        return;
+
+      cfg.selections = [ranges];
+      cfg.icon = img_data;
+
+      var msg = {
+        task: is_relation ? 'CONCEPT-LINK-UPDATE-REFS' : 'CONCEPT-UPDATE-REFS',
+        id: id,
+        cmd: 'add',
+        ref: cfg
+      };
+
+      send(msg);
+    }
+  );
+
+  return true;
+}
+
+/**
+ * Remover reference from concept or relation
+ */
+ConceptGraph.prototype.removeReference = function(id, url, send_msg = true)
+{
+  var el = this.getById(id);
+  if( !el )
+  {
+    console.log('Unknown element id', id);
+    return false;
+  }
+
+  if( el.refs )
+    delete el.refs[url];
+
+  this._callHandler( this._isRelationId(id) ? 'relation-update'
+                                            : 'concept-update',
+                     id, el );
+
+  if( send_msg )
+    send({
+      'task': this._isRelationId(id) ? 'CONCEPT-LINK-UPDATE-REFS'
+                                     : 'CONCEPT-UPDATE-REFS',
+      'cmd': 'delete',
+      'url': url,
+      'id': id
+    });
+
+  return true;
+}
+
+/**
  * Update the selection of concepts or relations
  *
  * @param type ('nodes' or 'links')
@@ -528,6 +622,17 @@ ConceptGraph.prototype.getConceptById = function(id)
 ConceptGraph.prototype.getRelationById = function(id)
 {
   return this.relations.get(id);
+}
+
+/**
+ * Get concept or relation by id
+ */
+ConceptGraph.prototype.getById = function(id)
+{
+  if( this._isRelationId(id) )
+    return this.relations.get(id);
+  else
+    return this.concepts.get(id);
 }
 
 /**

@@ -761,44 +761,6 @@ function onContextMenu()
   gContextMenu.showItem('context-sep-concepts', true);
 }
 
-function imgToBase64(url, fallback_text, cb_done)
-{
-  var img = new Image();
-  img.src = url;
-
-  var w = 16,
-      h = 16;
-  var canvas =
-    document.createElementNS("http://www.w3.org/1999/xhtml", "html:canvas");
-  canvas.width = w;
-  canvas.height = h;
-  var ctx = canvas.getContext("2d");
-  var cb_wrapper = function()
-  {
-    var data = canvas.toDataURL("image/png");
-    cb_done( data /*.replace(/^data:image\/(png|jpg);base64,/, "")*/ );
-  };
-
-  img.onload = function ()
-  {
-    ctx.drawImage(this, 0, 0, w, h);
-    cb_wrapper();
-  };
-  img.onerror = function(e)
-  {
-    ctx.fillStyle = "#fee";
-    ctx.fillRect(0, 0, w, h);
-    ctx.font = "14px Sans-serif";
-    ctx.fontWeight = "bold";
-    ctx.fillStyle = "#333";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(fallback_text, w/2, h/2);
-
-    cb_wrapper();
-  }
-}
-
 function onConceptNodeNew(el, event)
 {
   var sel = content.getSelection();
