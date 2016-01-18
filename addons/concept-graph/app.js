@@ -622,18 +622,7 @@ function restart(update_layout = true)
     );
 
   nodes_enter.append('svg:ellipse')
-    .call(applyMouseSelectionHandler)
-    .call(externalFileDrop, {
-      enter: function(d) { d3.select(this).attr('transform', 'scale(1.1)'); },
-      leave: function(d) { d3.select(this).attr('transform', null); },
-      drop: function(d, file)
-      {
-        concept_graph.updateConcept({
-          id: d.id,
-          'img': file.img
-        });
-      }
-    });
+    .call(applyMouseSelectionHandler);
 
   nodes_enter
     .append('text')
