@@ -1034,43 +1034,51 @@ d3.select(window)
         self.attr('id', 'setting-' + css_id);
 
         var val = localStorage.getItem(d.id) || d.def || false;
+        var id_prefix = 'setting-' + (d.type || 'string') + '-';
 
-        if( d.type == 'string' )
+        switch( d.type )
         {
-          self.append('label')
-            .attr('for', 'setting-string-' + css_id)
-            .text(d.label);
-          self.append('input')
-            .attr('type', 'text')
-            .attr('id', 'setting-string-' + css_id)
-            .attr('value', val)
-            .on('blur', function(d)
-            {
-              localStorage.setItem(d.id, this.value);
-              d.change(this.value);
-            });
-        }
-        else
-        {
-          val = val.toString() == 'true';
-          var label =
+          case 'bool':
+          {
+            val = val.toString() == 'true';
+            var label =
+              self.append('label')
+                .attr('class', 'mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect')
+                .attr('for', id_prefix + css_id);
+
+            label.append('input')
+              .attr('type', 'checkbox')
+              .attr('id', id_prefix + css_id)
+              .attr('class', 'mdl-checkbox__input')
+              .property('checked', val ? true : null)
+              .on('click', function(d)
+              {
+                localStorage.setItem(d.id, this.checked.toString());
+                d.change(this.checked);
+              });
+            label.append('span')
+              .attr('class', 'mdl-checkbox__label')
+              .text(d.label);
+            break;
+          }
+          case 'integer':
+          case 'string':
+          default:
+          {
             self.append('label')
-              .attr('class', 'mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect')
-              .attr('for', 'setting-check-' + css_id);
-
-          label.append('input')
-            .attr('type', 'checkbox')
-            .attr('id', 'setting-check-' + css_id)
-            .attr('class', 'mdl-checkbox__input')
-            .property('checked', val ? true : null)
-            .on('click', function(d)
-            {
-              localStorage.setItem(d.id, this.checked.toString());
-              d.change(this.checked);
-            });
-          label.append('span')
-            .attr('class', 'mdl-checkbox__label')
-            .text(d.label);
+              .attr('for', id_prefix + css_id)
+              .text(d.label);
+            self.append('input')
+              .attr('type', d.type == 'integer' ? 'number' : 'text')
+              .attr('id', id_prefix + css_id)
+              .attr('value', val)
+              .on('blur', function(d)
+              {
+                localStorage.setItem(d.id, this.value);
+                d.change(this.value);
+              });
+            break;
+          }
         }
 
         localStorage.setItem(d.id, val.toString());
@@ -1084,8 +1092,12 @@ d3.select(window)
       .each(function(d)
       {
         var val = localStorage.getItem(d.id);
-        if( d.type != 'string' )
-          val = val == 'true';
+        switch( d.type )
+        {
+          case 'bool': val = val == 'true'; break;
+          case 'integer': val = parseInt(val); break;
+          default: break;
+        }
 
         d.change(val);
       });
@@ -1156,6 +1168,7 @@ d3.select(window)
 var settings_menu_entries = [
   { id: 'link-circle',
     label: 'Link with Circle',
+    type: 'bool',
     def: true,
     change: function()
     {
@@ -1164,11 +1177,13 @@ var settings_menu_entries = [
   },
   { id: 'auto-link',
     label: 'Auto-link selected Concepts',
+    type: 'bool',
     def: false,
     change: function() {}
   },
   { id: 'debug-mode',
     label: 'Enable Debug Tools',
+    type: 'bool',
     def: false,
     change: function(val)
     {
@@ -1177,6 +1192,7 @@ var settings_menu_entries = [
   },
   { id: 'expert-mode',
     label: 'Enable Expert Modus',
+    type: 'bool',
     def: false,
     change: function(val)
     {
@@ -1185,12 +1201,16 @@ var settings_menu_entries = [
   },
   { id: 'server.enabled',
     label: 'Use Server',
+    type: 'bool',
     def: true,
     change: function(val)
     {
       d3.selectAll( '#setting-server_ping-address,'
                   + '#setting-server_websocket-address' )
         .style('display', val ? 'inline' : 'none');
+      d3.selectAll( '#setting-desktop_width,'
+                  + '#setting-desktop_height' )
+        .style('display', val ? 'none' : 'inline');
 
       try_connect = val;
       if( val )
@@ -1209,6 +1229,18 @@ var settings_menu_entries = [
     label: 'Websocket Address',
     type: 'string',
     def: 'ws://localhost:4487',
+    change: function() {}
+  },
+  { id: 'desktop.width',
+    label: 'Desktop Width',
+    type: 'integer',
+    def: 1920,
+    change: function() {}
+  },
+  { id: 'desktop.height',
+    label: 'Desktop Height',
+    type: 'integer',
+    def: 1080,
     change: function() {}
   }
 ];
