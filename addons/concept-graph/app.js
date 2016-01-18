@@ -1044,7 +1044,7 @@ d3.select(window)
         var self = d3.select(this);
         self.attr('id', 'setting-' + css_id);
 
-        var val = localStorage.getItem(d.id) || d.def;
+        var val = localStorage.getItem(d.id) || d.def || false;
 
         if( d.type == 'string' )
         {
@@ -1166,18 +1166,21 @@ d3.select(window)
 
 var settings_menu_entries = [
   { id: 'link-circle',
-   label: 'Link with Circle',
-   change: function()
-   {
-     updateLinks();
-   }
+    label: 'Link with Circle',
+    def: true,
+    change: function()
+    {
+      updateLinks();
+    }
   },
   { id: 'auto-link',
-   label: 'Auto-link selected Concepts',
-   change: function() {}
+    label: 'Auto-link selected Concepts',
+    def: false,
+    change: function() {}
   },
   { id: 'debug-mode',
     label: 'Enable Debug Tools',
+    def: false,
     change: function(val)
     {
       d3.select('html').classed('debug-mode', val);
@@ -1185,6 +1188,7 @@ var settings_menu_entries = [
   },
   { id: 'expert-mode',
     label: 'Enable Expert Modus',
+    def: false,
     change: function(val)
     {
       updateDetailDialogs();
