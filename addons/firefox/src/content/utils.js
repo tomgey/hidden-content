@@ -1,3 +1,7 @@
+EXPORTED_SYMBOLS = [
+  "utils"
+];
+
 var utils = {
 
   /**
@@ -5,6 +9,12 @@ var utils = {
    */
   imgToBase64: function(url, fallback_text, cb_done)
   {
+    if( url && url.startsWith('data:image/png;base64') )
+    {
+      cb_done(url);
+      return;
+    }
+
     var img = new Image();
     img.src = url;
 
@@ -187,8 +197,7 @@ var utils = {
       return;
 
     send({
-      'task': 'CONCEPT-UPDATE',
-      'cmd': 'new',
+      'task': 'CONCEPT-NEW',
       'id': name
     });
 
@@ -201,8 +210,7 @@ var utils = {
   addRelation: function(nodes, scope)
   {
     send({
-      'task': 'CONCEPT-LINK-UPDATE',
-      'cmd': 'new',
+      'task': 'CONCEPT-LINK-NEW',
       'nodes': [...nodes]
     });
 

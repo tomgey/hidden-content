@@ -4,13 +4,7 @@ var filtered_nodes = [],
 var filter = '';
 var try_connect = false;
 
-function getBaseDomainFromHost(host)
-{
-  if( !host )
-    return 'localhost';
-
-  return host.replace('www.', '');
-}
+var app_id = Math.random().toString(36).substring(7);
 
 var concept_graph =
   new ConceptGraph()
@@ -220,19 +214,26 @@ function start(check = true)
 
 function stop()
 {
-  try_connect = false;
-
   if( links_socket )
   {
     links_socket.close();
     links_socket = null;
   }
+
+  if( !try_connect )
+    send({
+      task: 'GET',
+      id: '/concepts/all'
+    });
 }
 
 function send(data)
 {
   if( !try_connect )
+  {
+    localStorage.setItem('concept-graph.server-message', JSON.stringify(data));
     return;
+  }
 
   try
   {
@@ -1022,6 +1023,7 @@ d3.select(window)
   // Page load hook
   .on('load', function()
   {
+    d3.select('#id-field').html(app_id);
     d3.select('#drawer-settings')
       .selectAll('div')
       .data(settings_menu_entries)
@@ -1160,6 +1162,16 @@ d3.select(window)
   })
   .on('beforeunload', function(){
     abortAllLinks();
+  })
+  .on('storage', function() {
+    if( d3.event.key !== "concept-graph.server-message" )
+      return;
+
+    console.log(app_id, 'storageEvent', d3.event.key, d3.event.newValue);
+
+    var msg = JSON.parse(d3.event.newValue);
+    if( !concept_graph.handleMessage(msg) )
+      console.log('Failed to handle message', d3.event.newValue);
   });
 
 //------------------------------

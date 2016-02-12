@@ -1,3 +1,17 @@
+EXPORTED_SYMBOLS = [
+  "ConceptGraph",
+  "Concept",
+  "Relation"
+];
+
+if( Components && Components.utils )
+{
+  if( typeof(console) == 'undefined' )
+    Components.utils.import("resource://gre/modules/devtools/Console.jsm");
+  if( typeof(utils) == 'undefined' )
+    Components.utils.import("chrome://hidden-content/content/utils.js");
+}
+
 function ConceptGraph()
 {
   /** Event handlers for graph changes */
@@ -97,7 +111,10 @@ ConceptGraph.prototype.on = function(type, cb)
  */
 ConceptGraph.prototype.addConcept = function(cfg, send_msg = true)
 {
-  var id = cfg.id;
+  var id = cfg.id.trim()
+                 .toLowerCase()
+                 .replace(':', '_'); // colon is reserved for link ids
+
   if( this.concepts.has(id) )
   {
     if( send_msg )
@@ -105,18 +122,19 @@ ConceptGraph.prototype.addConcept = function(cfg, send_msg = true)
     return false;
   }
 
+  cfg.name = (cfg.name || cfg.id).trim();
+  cfg.id = id;
+
   var concept = new Concept(cfg);
 
   this.concepts.set(id, concept);
   this._callHandler('concept-new', id, concept);
 
   if( send_msg )
-    send({
-      'task': 'CONCEPT-UPDATE',
-      'cmd': 'new',
-      'id': id,
-      'name': cfg.name
-    });
+  {
+    cfg.task = 'CONCEPT-NEW';
+    send(cfg);
+  }
 
   return true;
 }
@@ -153,7 +171,6 @@ ConceptGraph.prototype.updateConcept = function(new_cfg, send_msg = true)
   if( send_msg )
   {
     new_cfg['task'] = 'CONCEPT-UPDATE';
-    new_cfg['cmd']  = 'update';
     send(new_cfg);
   }
   
@@ -181,8 +198,7 @@ ConceptGraph.prototype.removeConcept = function(id, send_msg = true)
 
   if( send_msg )
     send({
-      'task': 'CONCEPT-UPDATE',
-      'cmd': 'delete',
+      'task': 'CONCEPT-DELETE',
       'id': id
     });
 
@@ -226,8 +242,7 @@ ConceptGraph.prototype.addRelation = function(cfg, send_msg = true)
 
   if( send_msg )
     send({
-      'task': 'CONCEPT-LINK-UPDATE',
-      'cmd': 'new',
+      'task': 'CONCEPT-LINK-NEW',
       'nodes': cfg.nodes
     });
 
@@ -268,7 +283,6 @@ ConceptGraph.prototype.updateRelation = function(new_cfg, send_msg = true)
   if( send_msg )
   {
     new_cfg['task'] = 'CONCEPT-LINK-UPDATE';
-    new_cfg['cmd']  = 'update';
     send(new_cfg);
   }
 
@@ -289,8 +303,7 @@ ConceptGraph.prototype.removeRelation = function(id, send_event = true)
 
   if( send_event )
     send({
-      'task': 'CONCEPT-LINK-UPDATE',
-      'cmd': 'delete',
+      'task': 'CONCEPT-LINK-DELETE',
       'id': id
     });
 
@@ -645,9 +658,15 @@ ConceptGraph.prototype.getRelationForConcepts = function(id1, id2)
                                        : id2 + ':' + id1 );
 }
 
+ConceptGraph.prototype.clear = function()
+{
+  this.concepts.clear();
+  this.relations.clear();
+  this.selection.clear();
+}
+
 ConceptGraph.prototype.handleMessage = function(msg)
 {
-  console.log('ConceptGraph message:', msg);
   if( msg.task == 'CONCEPT-NEW' )
   {
     delete msg.task;
@@ -680,6 +699,21 @@ ConceptGraph.prototype.handleMessage = function(msg)
   else if( msg.task == 'CONCEPT-LINK-DELETE' )
   {
     this.removeRelation(msg.id, false);
+    return true;
+  }
+  else if(  msg.task == 'CONCEPT-UPDATE-REFS'
+         || msg.task == 'CONCEPT-LINK-UPDATE-REFS' )
+  {
+    if( msg.cmd == 'add' )
+      this.addReference(msg.id, msg.ref, false);
+    else if( msg.cmd == 'delete' )
+      this.removeReference(msg.id, msg.url, false);
+    else
+    {
+      console.log('Unknown ref update cmd', msg)
+      return false;
+    }
+
     return true;
   }
   else if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
@@ -731,4 +765,28 @@ ConceptGraph.prototype._callHandler = function(type, ...args)
 ConceptGraph.prototype._isRelationId = function(id)
 {
   return id && id.indexOf(':') >= 0;
+}
+
+function getBaseDomainFromHost(host)
+{
+  if( !host )
+    return 'localhost';
+
+  if( Components && Components.classes )
+  {
+    try
+    {
+      var eTLDService =
+        Components.classes["@mozilla.org/network/effective-tld-service;1"]
+                  .getService(Components.interfaces.nsIEffectiveTLDService);
+      return eTLDService.getBaseDomainFromHost(host);
+      // suffix: eTLDService.getPublicSuffixFromHost(host));
+    }
+    catch(e)
+    {
+      console.log('Failed to get BaseDomain', host, e);
+    }
+  }
+
+  return host.replace('www.', '');
 }

@@ -149,7 +149,7 @@ var UI = {
     if( event.target != button )
       return;
 
-    if( status != 'active' )
+    if( status != 'active' && !browser_server.active )
       start();
     else
       UI.Panel.show(button);

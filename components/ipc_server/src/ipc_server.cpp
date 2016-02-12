@@ -154,12 +154,20 @@ namespace LinksRouting
       std::bind(&IPCServer::onLinkAbort, this, _1, _2, _3);
     _msg_handlers["CMD"] =
       std::bind(&IPCServer::onClientCmd, this, _1, _2, _3);
+    _msg_handlers["CONCEPT-NEW"] =
+      std::bind(&IPCServer::onConceptNew, this, _1, _2);
     _msg_handlers["CONCEPT-UPDATE"] =
       std::bind(&IPCServer::onConceptUpdate, this, _1, _2);
+    _msg_handlers["CONCEPT-DELETE"] =
+      std::bind(&IPCServer::onConceptDelete, this, _1, _2);
     _msg_handlers["CONCEPT-UPDATE-REFS"] =
       std::bind(&IPCServer::onConceptUpdateRefs, this, _1, _2);
+    _msg_handlers["CONCEPT-LINK-NEW"] =
+      std::bind(&IPCServer::onConceptLinkNew, this, _1, _2);
     _msg_handlers["CONCEPT-LINK-UPDATE"] =
       std::bind(&IPCServer::onConceptLinkUpdate, this, _1, _2);
+    _msg_handlers["CONCEPT-LINK-DELETE"] =
+      std::bind(&IPCServer::onConceptLinkDelete, this, _1, _2);
     _msg_handlers["CONCEPT-LINK-UPDATE-REFS"] =
       std::bind(&IPCServer::onConceptLinkUpdateRefs, this, _1, _2);
     _msg_handlers["CONCEPT-SELECTION-UPDATE"] =
@@ -1261,111 +1269,105 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  //    'task': 'CONCEPT-UPDATE',
-  //    'cmd': 'new' | 'update' | 'delete',
-  //    'id': sel,
-  //    'name': name, // (optional)
-  //    'src-url': url,
-  //    'src-icon': img_data
-  void IPCServer::onConceptUpdate(ClientRef client, QJsonObject const& msg)
+  //    'task': 'CONCEPT-NEW',
+  //    'id':   <concept-id>,
+  //    'name': <concept-name> // (optional)
+  //    <any optional addional object properties>
+  void IPCServer::onConceptNew(ClientRef client, QJsonObject const& msg)
   {
-    QString const cmd = from_json<QString>(msg.value("cmd"));
-    if( cmd == "new" )
+    auto insert_pair = getConcept(msg, true, "create concept");
+    if( insert_pair.first == _concept_nodes.end() )
+      return;
+
+    auto it = insert_pair.first;
+    QString const id = it->value("id").toString();
+    QString const name = msg.contains("name")
+                       ? from_json<QString>(msg.value("name")).trimmed()
+                       : from_json<QString>(msg.value("id")).trimmed();
+
+    if( !insert_pair.second )
     {
-      auto insert_pair = getConcept(msg, true, "create concept");
-      if( insert_pair.first == _concept_nodes.end() )
-        return;
-
-      auto it = insert_pair.first;
-      QString const id = it->value("id").toString();
-      QString const name = msg.contains("name")
-                         ? from_json<QString>(msg.value("name")).trimmed()
-                         : from_json<QString>(msg.value("id")).trimmed();
-
-      if( !insert_pair.second )
-      {
-        qWarning() << "Concept" << name << "with id" << id << "already exists.";
-        return;
-      }
-      qDebug() << "add concept:" << name << "with id" << id;
-
-      QJsonObject msg_ret(msg);
-      msg_ret.remove("task");
-      msg_ret.remove("cmd");
-      msg_ret["id"] = id;
-      msg_ret["name"] = name;
-
-      it.value() = msg_ret.toVariantMap();
-
-      msg_ret["task"] = "CONCEPT-NEW";
-      distributeMessage(msg_ret);
-
+      qWarning() << "Concept" << name << "with id" << id << "already exists.";
       return;
     }
-    else if( cmd == "update" )
+    qDebug() << "add concept:" << name << "with id" << id;
+
+    QJsonObject msg_ret(msg);
+    msg_ret.remove("task");
+    msg_ret["id"] = id;
+    msg_ret["name"] = name;
+
+    it.value() = msg_ret.toVariantMap();
+
+    msg_ret["task"] = "CONCEPT-NEW";
+    distributeMessage(msg_ret);
+  }
+
+  //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-UPDATE',
+  //    'id':   <concpet-id>,
+  //    <new values for all properties that should be changed>
+  void IPCServer::onConceptUpdate(ClientRef client, QJsonObject const& msg)
+  {
+    auto insert_pair = getConcept(msg, false, "update concept");
+    if( insert_pair.first == _concept_nodes.end() )
+      return;
+
+    const QStringList ignore_props{
+      "id",
+      "task"
+    };
+    auto& props = *insert_pair.first;
+
+    bool changed = false;
+    for(auto it = msg.begin(); it != msg.end(); ++it)
     {
-      auto insert_pair = getConcept(msg, false, "update concept");
-      if( insert_pair.first == _concept_nodes.end() )
-        return;
+      if( ignore_props.contains(it.key()) )
+        continue;
 
-      const QStringList ignore_props{
-        "id",
-        "task",
-        "cmd"
-      };
-      auto& props = *insert_pair.first;
+      QString const val = from_json<QString>(it.value()).trimmed(),
+                    old_val = props.value(it.key()).toString();
 
-      bool changed = false;
-      for(auto it = msg.begin(); it != msg.end(); ++it)
+      if( val == old_val )
       {
-        if( ignore_props.contains(it.key()) )
-          continue;
-
-        QString const val = from_json<QString>(it.value()).trimmed(),
-                      old_val = props.value(it.key()).toString();
-
-        if( val == old_val )
-        {
-          qDebug() << "Ignoring unchanged value of" << it.key();
-          continue;
-        }
-
-        changed = true;
-        props[it.key()] = val;
-
-        qDebug() << "Changing property" << it.key() << "of concept"
-                 << props.value("name")
-                 << "from" << old_val
-                 << "to" << val;
+        qDebug() << "Ignoring unchanged value of" << it.key();
+        continue;
       }
 
-      if( !changed )
-        return;
+      changed = true;
+      props[it.key()] = val;
 
-      QJsonObject msg_ret = QJsonObject::fromVariantMap(props);
-      msg_ret["task"] = "CONCEPT-UPDATE";
-
-      distributeMessage(msg_ret);
+      qDebug() << "Changing property" << it.key() << "of concept"
+               << props.value("name")
+               << "from" << old_val
+               << "to" << val;
     }
-    else if( cmd == "delete" )
-    {
-      auto insert_pair = getConcept(msg, false, "delete concept");
-      if( insert_pair.first == _concept_nodes.end() )
-        return;
 
-      auto it = insert_pair.first;
-      QString const id = it->value("id").toString();
+    if( !changed )
+      return;
 
-      qDebug() << "remove concept:" << it->value("name") << "with id" << id;
-      _concept_nodes.erase(it);
+    QJsonObject msg_ret = QJsonObject::fromVariantMap(props);
+    msg_ret["task"] = "CONCEPT-UPDATE";
 
-      distributeMessage(QJsonObject({
-        {"task", "CONCEPT-DELETE"},
-        {"id", id}
-      }));
-    }
-    else
-      qWarning() << "Unknown cmd" << msg;
+    distributeMessage(msg_ret);
+  }
+
+  //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-DELETE',
+  //    'id':   <concept-id>
+  void IPCServer::onConceptDelete(ClientRef client, QJsonObject const& msg)
+  {
+    auto insert_pair = getConcept(msg, false, "delete concept");
+    if( insert_pair.first == _concept_nodes.end() )
+      return;
+
+    auto it = insert_pair.first;
+    QString const id = it->value("id").toString();
+
+    qDebug() << "remove concept:" << it->value("name") << "with id" << id;
+    _concept_nodes.erase(it);
+
+    distributeMessage(msg);
   }
 
   //----------------------------------------------------------------------------
@@ -1392,98 +1394,104 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-LINK-NEW',
+  //    'nodes': [<node ids>]
+  //    'id': <node id>:<node id> (optional instead of 'nodes', sorted
+  //                               alphabetically ascending)
+  void IPCServer::onConceptLinkNew(ClientRef client, QJsonObject const& msg)
+  {
+    QString const cmd = from_json<QString>(msg.value("cmd"));
+    auto insert_pair = getConceptLink(msg, true, "create concept link");
+    if( insert_pair.first == _concept_links.end() )
+      return;
+
+    auto node_ids = insert_pair.first.key();
+    if( !insert_pair.second )
+    {
+      qWarning() << "Concept link" << node_ids << "already exists.";
+      return;
+    }
+    qDebug() << "add concept link:" << node_ids;
+
+    distributeMessage(QJsonObject({
+      {"task", "CONCEPT-LINK-NEW"},
+      {"nodes", to_json(node_ids.split(':'))}
+    }));
+  }
+
+  //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-LINK-UPDATE',
-  //    'cmd': 'new',
   //    'nodes': [<node ids>]
   //    'id': <node id>:<node id> (optional instead of 'nodes', sorted
   //                               alphabetically ascending)
   void IPCServer::onConceptLinkUpdate(ClientRef client, QJsonObject const& msg)
   {
-    QString const cmd = from_json<QString>(msg.value("cmd"));
-    if( cmd == "new" )
-    {
-      auto insert_pair = getConceptLink(msg, true, "create concept link");
-      if( insert_pair.first == _concept_links.end() )
-        return;
-
-      auto node_ids = insert_pair.first.key();
-      if( !insert_pair.second )
-      {
-        qWarning() << "Concept link" << node_ids << "already exists.";
-        return;
-      }
-      qDebug() << "add concept link:" << node_ids;
-
-      distributeMessage(QJsonObject({
-        {"task", "CONCEPT-LINK-NEW"},
-        {"nodes", to_json(node_ids.split(':'))}
-      }));
+    auto insert_pair = getConceptLink(msg, false, "update concept link");
+    if( insert_pair.first == _concept_links.end() )
       return;
-    }
-    else if( cmd == "update" )
+
+    const QStringList ignore_props{
+      "id",
+      "nodes",
+      "task"
+    };
+    auto& props = *insert_pair.first;
+
+    bool changed = false;
+    for(auto it = msg.begin(); it != msg.end(); ++it)
     {
-      auto insert_pair = getConceptLink(msg, false, "update concept link");
-      if( insert_pair.first == _concept_links.end() )
-        return;
+      if( ignore_props.contains(it.key()) )
+        continue;
 
-      const QStringList ignore_props{
-        "id",
-        "nodes",
-        "task",
-        "cmd"
-      };
-      auto& props = *insert_pair.first;
+      QString const val = from_json<QString>(it.value()).trimmed(),
+                    old_val = props.value(it.key()).toString();
 
-      bool changed = false;
-      for(auto it = msg.begin(); it != msg.end(); ++it)
+      if( val == old_val )
       {
-        if( ignore_props.contains(it.key()) )
-          continue;
-
-        QString const val = from_json<QString>(it.value()).trimmed(),
-                      old_val = props.value(it.key()).toString();
-
-        if( val == old_val )
-        {
-          qDebug() << "Ignoring unchanged value of" << it.key();
-          continue;
-        }
-
-        changed = true;
-        props[it.key()] = val;
-
-        qDebug() << "Changing property" << it.key() << "of concept link"
-                 << insert_pair.first.key()
-                 << "from" << old_val
-                 << "to" << val;
+        qDebug() << "Ignoring unchanged value of" << it.key();
+        continue;
       }
 
-      if( !changed )
-        return;
+      changed = true;
+      props[it.key()] = val;
 
-      QJsonObject msg_ret = QJsonObject::fromVariantMap(props);
-      msg_ret["task"] = "CONCEPT-LINK-UPDATE";
-      msg_ret["nodes"] = to_json(insert_pair.first.key().split(':'));
-
-      distributeMessage(msg_ret);
+      qDebug() << "Changing property" << it.key() << "of concept link"
+               << insert_pair.first.key()
+               << "from" << old_val
+               << "to" << val;
     }
-    else if( cmd == "delete" )
-    {
-      auto insert_pair = getConceptLink(msg, false, "delete concept link");
-      if( insert_pair.first == _concept_links.end() )
-        return;
 
-      auto it = insert_pair.first;
-      auto node_ids = it.key();
+    if( !changed )
+      return;
 
-      qDebug() << "remove concept link:" << node_ids;
-      _concept_links.erase(it);
+    QJsonObject msg_ret = QJsonObject::fromVariantMap(props);
+    msg_ret["task"] = "CONCEPT-LINK-UPDATE";
+    msg_ret["id"] = insert_pair.first.key();
 
-      distributeMessage(QJsonObject({
-        {"task", "CONCEPT-LINK-DELETE"},
-        {"id", it.key()}
-      }));
-    }
+    distributeMessage(msg_ret);
+  }
+
+  //----------------------------------------------------------------------------
+  //    'task': 'CONCEPT-LINK-DELETE',
+  //    'nodes': [<node ids>]
+  //    'id': <node id>:<node id> (optional instead of 'nodes', sorted
+  //                               alphabetically ascending)
+  void IPCServer::onConceptLinkDelete(ClientRef client, QJsonObject const& msg)
+  {
+    auto insert_pair = getConceptLink(msg, false, "delete concept link");
+    if( insert_pair.first == _concept_links.end() )
+      return;
+
+    auto it = insert_pair.first;
+    auto node_ids = it.key();
+
+    qDebug() << "remove concept link:" << node_ids;
+    _concept_links.erase(it);
+
+    distributeMessage(QJsonObject({
+      {"task", "CONCEPT-LINK-DELETE"},
+      {"id", it.key()}
+    }));
   }
 
   //----------------------------------------------------------------------------

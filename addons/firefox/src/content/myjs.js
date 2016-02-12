@@ -19,17 +19,6 @@ function getPid()
   return parseInt(lock_file.target.split('+')[1]);
 }
 
-function getBaseDomainFromHost(host)
-{
-  if( !host )
-    return "localhost";
-
-  var eTLDService = Cc["@mozilla.org/network/effective-tld-service;1"]
-                      .getService(Ci.nsIEffectiveTLDService);
-  return eTLDService.getBaseDomainFromHost(host);
-  // suffix: eTLDService.getPublicSuffixFromHost(host));
-}
-
 function getContentUrl(_location)
 {
   var location = _location || content.location;
@@ -93,6 +82,7 @@ var tile_timeout = false;
 var do_report = true;
 
 var concept_graph = new ConceptGraph();
+Cu.import("resource://hidden-content/BrowserServer.js");
 
 var prefs = Cc["@mozilla.org/fuel/application;1"]
               .getService(Ci.fuelIApplication)
@@ -196,7 +186,16 @@ function send(data)
   try
   {
     if( !links_socket )
-      throw "No socket available!";
+    {
+      var msg_json = JSON.stringify(data);
+      console.log('No links server -> Send to BrowserServer:', msg_json);
+
+      browser_server.onStorageChange({
+        'key': 'concept-graph.server-message',
+        'newValue': msg_json
+      });
+      return;
+    }
 
     if( links_socket.readyState != 1 )
     {
@@ -422,7 +421,7 @@ function onPageLoad(event)
     location.hash = location.hash.substr(0, hcd_pos);
 
     var pos;
-    var data = JSON.parse(hcd);
+    var data = JSON.parse(decodeURIComponent(hcd));
     if( data )
     {
       var scroll = data['scroll'];
@@ -453,6 +452,7 @@ function onPageLoad(event)
       if( typeof(color) === 'string' )
         $('vislink-sync-src').style.color = color;
     }
+  }
 
     var msg = {
       task: "REGISTER",
@@ -465,7 +465,6 @@ function onPageLoad(event)
       msg["src-id"] = src_id;
 
     ctrlSend(msg, true);
-  }
 
   if( !src_id )
     src_id = session_store.getTabValue(tab, "hcd/src-id");
@@ -716,8 +715,8 @@ function onDocumentClick(e)
 
 function onTabDblClick(e)
 {
-//  if( e.ctrlKey )
-//    return _websocketDrag(e);
+  if( e.ctrlKey )
+    return _websocketDrag(e);
 }
 
 function onGlobalWheel(e)
@@ -747,9 +746,10 @@ function onGlobalWheel(e)
 
 function onContextMenu()
 {
-  var links_active = links_socket && links_socket.readyState == WebSocket.OPEN;
+  var links_active = (links_socket && links_socket.readyState == WebSocket.OPEN);
 
-  gContextMenu.showItem('context-concepts-label', !links_active);
+  gContextMenu.showItem('context-concepts-label', !links_active
+                                               && !browser_server.active);
   if( !links_active )
     d3.select('#context-concepts-label')
       .attr('label', "Missing server for concepts!")
@@ -757,7 +757,8 @@ function onContextMenu()
 
   gContextMenu.showItem('context-keyword-link',
                         links_active && gContextMenu.isContentSelected);
-  gContextMenu.showItem('context-concepts-action', links_active);
+  gContextMenu.showItem('context-concepts-action', links_active
+                                                || browser_server.active);
   gContextMenu.showItem('context-sep-concepts', true);
 }
 
@@ -777,8 +778,7 @@ function onConceptNodeNew(el, event)
     return;
 
   send({
-    'task': 'CONCEPT-UPDATE',
-    'cmd': 'new',
+    'task': 'CONCEPT-NEW',
     'id': name
   });
 
@@ -799,6 +799,7 @@ window.addEventListener("load", function window_load()
   gBrowser.addEventListener("beforeunload", onUnload, true);
   //gBrowser.addEventListener("mousedown", onDocumentClick, true);
   gBrowser.addEventListener("click", onTabDblClick, true);
+  gBrowser.addEventListener("storage", onStorageChange, true, true);
 
   var container = gBrowser.tabContainer;
   container.addEventListener("TabSelect", onTabChange, false);
@@ -826,6 +827,9 @@ window.addEventListener("load", function window_load()
 
 //<tabbrowser id="content"/>
   $('content').appendChild(b);
+
+  concept_graph.clear();
+  concept_graph.handleMessage(browser_server.getConceptGraphState());
 });
 
 /**
@@ -905,6 +909,16 @@ function start(match_title = false, src_id = 0, check = true)
     window.addEventListener('resize', resize, false);
 //    window.addEventListener("DOMContentLoaded", windowChanged, false);
   }
+}
+
+//------------------------------------------------------------------------------
+function onStorageChange(event)
+{
+  if( event.key !== "concept-graph.server-message" )
+    return;
+
+  concept_graph.handleMessage(JSON.parse(event.newValue));
+  browser_server.onStorageChange.call(browser_server, event);
 }
 
 //------------------------------------------------------------------------------
@@ -1275,6 +1289,7 @@ function sendMsgRegister(match_title, src_id, click_pos)
     msg['src-id'] = src_id;
   send(msg);
 
+  concept_graph.clear(); // replace with new state from server
   send({
     task: 'GET',
     id: '/concepts/all'

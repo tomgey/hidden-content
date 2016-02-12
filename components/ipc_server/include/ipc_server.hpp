@@ -179,10 +179,16 @@ namespace LinksRouting
       void updateRefs( QVariantMap& props,
                        QJsonObject const& msg );
 
+      void onConceptNew(ClientRef, QJsonObject const& msg);
       void onConceptUpdate(ClientRef, QJsonObject const& msg);
+      void onConceptDelete(ClientRef, QJsonObject const& msg);
       void onConceptUpdateRefs(ClientRef, QJsonObject const& msg);
+
+      void onConceptLinkNew(ClientRef, QJsonObject const& msg);
       void onConceptLinkUpdate(ClientRef, QJsonObject const& msg);
+      void onConceptLinkDelete(ClientRef, QJsonObject const& msg);
       void onConceptLinkUpdateRefs(ClientRef, QJsonObject const& msg);
+
       void onConceptSelectionUpdate(ClientRef, QJsonObject const& msg);
 
       void onValueGet(ClientRef, QJsonObject const& msg);
