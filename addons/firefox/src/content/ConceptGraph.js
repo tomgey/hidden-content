@@ -704,10 +704,12 @@ ConceptGraph.prototype.handleMessage = function(msg)
   else if(  msg.task == 'CONCEPT-UPDATE-REFS'
          || msg.task == 'CONCEPT-LINK-UPDATE-REFS' )
   {
+    var id = msg.id || msg.nodes.join(':');
+
     if( msg.cmd == 'add' )
-      this.addReference(msg.id, msg.ref, false);
+      this.addReference(id, msg.ref, false);
     else if( msg.cmd == 'delete' )
-      this.removeReference(msg.id, msg.url, false);
+      this.removeReference(id, msg.url, false);
     else
     {
       console.log('Unknown ref update cmd', msg)
