@@ -75,8 +75,8 @@ function $(id)
  */
 function getViewport()
 {
-  var posX = mozInnerScreenX - screenX,
-      posY = mozInnerScreenY - screenY;
+  var posX = window.mozInnerScreenX ? mozInnerScreenX - screenX : 0,
+      posY = window.mozInnerScreenY ? mozInnerScreenY - screenY : 0;
   var bb = $('graph-drawing-area').getBoundingClientRect();
 
   return [
@@ -1197,7 +1197,7 @@ d3.select(window)
   // Page load hook
   .on('load', function()
   {
-    d3.select('#id-field').html(app_id);
+    d3.select('#id-box span').html(app_id);
     d3.select('#drawer-settings')
       .selectAll('div')
       .data(settings_menu_entries)

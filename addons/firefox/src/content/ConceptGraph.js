@@ -4,7 +4,7 @@ EXPORTED_SYMBOLS = [
   "Relation"
 ];
 
-if( Components && Components.utils )
+if( typeof Components != 'undefined' && Components.utils )
 {
   if( typeof(console) == 'undefined' )
     Components.utils.import("resource://gre/modules/devtools/Console.jsm");
