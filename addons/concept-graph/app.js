@@ -182,6 +182,17 @@ function start(check = true)
       else
         console.log("Got unknown data: " + event.data);
     }
+    else if( msg.task == 'GET-FOUND' )
+    {
+      if( msg.id == '/desktop/size' )
+      {
+        var [w, h] = msg.val;
+        localStorage.setItem('desktop.width', w);
+        localStorage.setItem('desktop.height', h);
+      }
+      else
+        console.log("Received unknown value: " + event.data);
+    }
     else if( msg.task == 'OPENED-URLS-UPDATE' )
     {
       active_urls = new Map();
@@ -273,6 +284,10 @@ function sendMsgRegister()
   send({
     task: 'GET',
     id: '/concepts/all'
+  });
+  send({
+    task: 'GET',
+    id: '/desktop/size'
   });
 }
 
@@ -1126,6 +1141,53 @@ var zoom =
     });
 svg.call(zoom);
 
+function updateSettingInput(id)
+{
+  var d = null;
+  for(var entry of settings_menu_entries)
+  {
+    if( entry.id == id )
+    {
+      d = entry;
+      break;
+    }
+  }
+
+  if( !d )
+  {
+    console.warn('Unknown setting id: ' + id);
+    return false;
+  }
+
+  var css_id = d.id.replace('.', '_');
+  var self = d3.select('#setting-' + css_id);
+
+  var val = localStorage.getItem(d.id) || d.def || false;
+  var id_prefix = 'setting-' + (d.type || 'string') + '-';
+
+  switch( d.type )
+  {
+    case 'bool':
+    {
+      val = val.toString() == 'true';
+      self.select('input')
+          .property('checked', val ? true : null);
+      break;
+    }
+    case 'integer':
+    case 'string':
+    default:
+    {
+      self.select('input')
+          .attr('value', val);
+      break;
+    }
+  }
+
+  d.change(val);
+  return true;
+}
+
 d3.select(window)
   .on('keydown', keydown)
   .on('resize', resize)
@@ -1338,14 +1400,16 @@ d3.select(window)
     abortAllLinks();
   })
   .on('storage', function() {
-    if( d3.event.key !== "concept-graph.server-message" )
-      return;
+    if( d3.event.key == "concept-graph.server-message" )
+    {
+      //console.log(app_id, 'storageEvent', d3.event.key, d3.event.newValue);
 
-    console.log(app_id, 'storageEvent', d3.event.key, d3.event.newValue);
-
-    var msg = JSON.parse(d3.event.newValue);
-    if( !concept_graph.handleMessage(msg) )
-      console.log('Failed to handle message', d3.event.newValue);
+      var msg = JSON.parse(d3.event.newValue);
+      if( !concept_graph.handleMessage(msg) )
+        console.log('Failed to handle message', d3.event.newValue);
+    }
+    else
+      updateSettingInput(d3.event.key);
   });
 
 //------------------------------
@@ -1394,9 +1458,9 @@ var settings_menu_entries = [
       d3.selectAll( '#setting-server_ping-address,'
                   + '#setting-server_websocket-address' )
         .style('display', val ? 'inline' : 'none');
-      d3.selectAll( '#setting-desktop_width,'
-                  + '#setting-desktop_height' )
-        .style('display', val ? 'none' : 'inline');
+      d3.selectAll( '#setting-desktop_width input,'
+                  + '#setting-desktop_height input' )
+        .property('disabled', val ? true : false);
 
       try_connect = val;
       if( val )

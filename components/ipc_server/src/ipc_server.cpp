@@ -1598,6 +1598,10 @@ namespace LinksRouting
       for(auto it = concept_graph.begin(); it != concept_graph.end(); ++it)
         msg_ret[it.key()] = it.value();
     }
+    else if( id == "/desktop/size" )
+    {
+      msg_ret["val"] = to_json(desktopRect().bottomRight().toQSize());
+    }
     else
     {
       std::string val_std;
