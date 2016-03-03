@@ -361,6 +361,12 @@ function checkRequestQueue()
 }
 
 var svg = d3.select('svg');
+var graph_bb = {
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 100
+};
 
 function nodeSize(node)
 {
@@ -422,7 +428,8 @@ var force = d3.layout.force()
       return -10 * Math.min(400, Math.pow(Math.max(nodeSize(node)[0], nodeSize(node)[1]), 2));
     })
     .friction(0.6)
-    .on('tick', tick);
+    .on('tick', onForceTick)
+    .on('end', onForceEnd);
 
 // define arrow markers for graph links
 svg.append('svg:defs').append('svg:marker')
@@ -447,8 +454,11 @@ svg.append('svg:defs').append('svg:marker')
     .attr('d', 'M10,-5L0,0L10,5')
     .attr('fill', '#000');
 
-var links_group = svg.append('svg:g'),
-    nodes_group = svg.append('svg:g');
+var zoom_pan_group = svg.append('svg:g'),
+    svg_bg = zoom_pan_group.append('svg:rect')
+                           .attr('class', 'bg');
+    links_group = zoom_pan_group.append('svg:g'),
+    nodes_group = zoom_pan_group.append('svg:g');
 
 // handles to link and node element groups
 var link_groups = null,
@@ -456,21 +466,28 @@ var link_groups = null,
 
 var drag_rect =
   svg.append('svg:rect')
-       .attr('class', 'drag-rect');
+     .attr('class', 'drag-rect');
+
+var scroll_x =
+  svg.append('svg:line')
+     .attr('class', 'scrollbar');
+var scroll_y =
+  svg.append('svg:line')
+     .attr('class', 'scrollbar');
 
 // update force layout (called automatically each iteration)
-function tick()
+function onForceTick()
 {
   [w, h] = force.size();
   node_groups.attr('transform', function(d)
   {
     // Keep nodes within visible region
-    [node_w, node_h] = nodeSize(d);
-    node_w += 5;
-    node_h += 10;
-
-    d.x = Math.max(node_w, Math.min(d.x, w - node_w));
-    d.y = Math.max(node_h, Math.min(d.y, h - node_h - 20));
+//    [node_w, node_h] = nodeSize(d);
+//    node_w += 5;
+//    node_h += 10;
+//
+//    d.x = Math.max(node_w, Math.min(d.x, w - node_w));
+//    d.y = Math.max(node_h, Math.min(d.y, h - node_h - 20));
 
     return 'translate(' + d.x + ',' + d.y + ')';
   });
@@ -514,10 +531,42 @@ function tick()
       .attr('y', d.center[1] + 4);
   });
 
-  if( force.alpha() < 0.031 || !force.nodes().length )
+  if( force.alpha() < 0.04 || !force.nodes().length )
     force.stop();
 
   updateLinksThrottled();
+}
+
+function onForceEnd()
+{
+  var bb = null;
+  node_groups.each(function(node)
+  {
+    var [node_w, node_h] = nodeSize(node),
+        dx = node_w + 3,
+        dy = node_h + 5;
+
+    var node_bb = [node.x - dx, node.y - dy, node.x + dx, node.y + dy];
+    if( !bb )
+      bb = node_bb;
+    else
+    {
+      if( node_bb[0] <= bb[0] ) bb[0] = node_bb[0];
+      if( node_bb[1] <= bb[1] ) bb[1] = node_bb[1];
+      if( node_bb[2] >= bb[2] ) bb[2] = node_bb[2];
+      if( node_bb[3] >= bb[3] ) bb[3] = node_bb[3];
+    }
+  });
+
+  if( bb )
+  {
+    graph_bb.x = bb[0];
+    graph_bb.y = bb[1];
+    graph_bb.width = bb[2] - bb[0];
+    graph_bb.height = bb[3] - bb[1];
+
+    updateDrawArea();
+  }
 }
 
 // force layout finished updating
@@ -533,6 +582,12 @@ function resize()
   var width  = parseInt(svg.style('width'), 10),
       height = parseInt(svg.style('height'), 10);
   force.size([width, height]).resume();
+
+  var content_area = d3.select('#content-area').node();
+  svg.attr('width', content_area.clientWidth)
+     .attr('height', content_area.clientHeight - 1); // somehow using the exact
+                                                     // size destroys the
+                                                     // layout?!
 
   send({
     'task': 'RESIZE',
@@ -945,6 +1000,12 @@ d3.select('#button-add-concept').on('click', addConceptWithDialog);
 svg
   .on('mousedown', function(d)
   {
+    if( d3.event.shiftKey )
+      return;
+    else
+      // drag only with shift
+      d3.event.stopImmediatePropagation();
+
     if( d3.event.target.tagName != 'svg' )
       return;
 
@@ -957,7 +1018,113 @@ svg
              .attr('y', drag_start_pos[1])
              .attr('width', 0)
              .attr('height', 0);
+  })
+  .on('wheel', function()
+  {
+    if( !d3.event.shiftKey )
+      // Zoom only with shift
+      d3.event.stopImmediatePropagation();
   });
+
+function updateDrawArea(arg)
+{
+  var force_limits = false;
+  if( typeof arg == 'object' )
+  {
+    var force_limits = true,
+        [tx, ty] = d3.event.translate,
+        scale = d3.event.scale;
+  }
+  else
+  {
+    var force_limits = typeof arg == 'undefined' ? false : !!arg,
+        [tx, ty] = zoom.translate(),
+        scale = zoom.scale();
+  }
+
+  var graph_pad = 100,
+      bg_pad = 15,
+      scroll_pad = 2;
+
+  var graph_x = scale * graph_bb.x - graph_pad,
+      graph_y = scale * graph_bb.y - graph_pad,
+      graph_width = scale * graph_bb.width + 2 * graph_pad,
+      graph_height = scale * graph_bb.height + 2 * graph_pad,
+      vp_width = svg.attr('width'),
+      vp_height = svg.attr('height');
+
+  if( graph_width < vp_width )
+  // no horizontal overflow -> center
+  {
+    tx = (vp_width - graph_width) / 2 - graph_x;
+    scroll_x.style('display', 'none');
+  }
+  // Scrollbar/Position indicator
+  else
+  {
+    var max_scroll = graph_width - vp_width;
+
+    if( force_limits )
+      tx = Math.min(-graph_x, Math.max(tx, -(graph_x + max_scroll)));
+
+    var bar_size = Math.max(20, (vp_width - 2 * scroll_pad) * vp_width / graph_width);
+    var fac_x = -(graph_x + tx) / max_scroll,
+        pos_x = scroll_pad + fac_x * (vp_width - bar_size - 2 * scroll_pad);
+
+    scroll_x.attr('x1', pos_x )
+            .attr('y1', scroll_pad)
+            .attr('x2', pos_x + bar_size)
+            .attr('y2', scroll_pad)
+            .style('display', 'inline');
+  }
+
+  if( graph_height < vp_height )
+  // no vertical overflow -> center
+  {
+    ty = (vp_height - graph_height) / 2 - graph_y;
+    scroll_y.style('display', 'none');
+  }
+  else
+  // Scrollbar/Position indicator
+  {
+    var max_scroll = graph_height - vp_height;
+
+    if( force_limits )
+      ty = Math.min(-graph_y, Math.max(ty, -(graph_y + max_scroll)));
+
+    var bar_size = Math.max(20, (vp_height - 2 * scroll_pad) * vp_height / graph_height);
+    var fac_y = -(graph_y + ty) / max_scroll,
+        pos_y = scroll_pad + fac_y * (vp_height - bar_size - 2 * scroll_pad);
+
+    scroll_y.attr('x1', scroll_pad)
+            .attr('y1', pos_y)
+            .attr('x2', scroll_pad)
+            .attr('y2', pos_y + bar_size)
+            .style('display', 'inline');
+  }
+
+  if( force_limits )
+    zoom.translate([tx, ty]);
+
+  zoom_pan_group.attr(
+    "transform",
+    "translate(" + [tx, ty] + ") scale(" + scale + ")"
+  );
+
+  svg_bg.attr('x', graph_bb.x - graph_pad + bg_pad)
+        .attr('y', graph_bb.y - graph_pad + bg_pad)
+        .attr('width', graph_bb.width + 2 * (graph_pad - bg_pad))
+        .attr('height', graph_bb.height + 2 * (graph_pad - bg_pad));
+}
+
+var zoom =
+  d3.behavior.zoom()
+    .scaleExtent([0.1, 1])
+    .on("zoom", function()
+    {
+      updateDrawArea(d3.event);
+    });
+svg.call(zoom);
 
 d3.select(window)
   .on('keydown', keydown)
@@ -980,6 +1147,13 @@ d3.select(window)
              .attr('y', y1)
              .attr('width', x2 - x1)
              .attr('height', y2 - y1);
+
+    var [dx, dy] = zoom.translate(),
+        scale = zoom.scale();
+    x1 = (x1 - dx) / scale;
+    x2 = (x2 - dx) / scale;
+    y1 = (y1 - dy) / scale;
+    y2 = (y2 - dy) / scale;
 
     var selection = new Set(drag_start_selection);
 
