@@ -714,80 +714,94 @@ function restart(update_layout = true)
   node_groups.selectAll('g.ref')
     .remove();
 
-  var ref_icons =
-    node_groups
-      .selectAll('g.ref')
-      .data(function(d)
-      {
-        if( !d.refs )
-          return [];
-
-        var refs = [];
-        for(var url in d.refs)
-          refs[ refs.length ] = {
-            url: url,
-            data: d.refs[url]
-          };
-
-        var num_cols = Math.min(4, refs.length);
-        var pad = 4, w = 16, h = 16;
-        var x = -num_cols / 2 * w - (num_cols - 1) / 2 * pad,
-            y = 24;
-
-        for(var i = 0; i < refs.length; ++i)
+  node_groups.each(function(node_data)
+  {
+    var node = d3.select(this);
+    var ref_icons =
+      node
+        .selectAll('g.ref')
+        .data(function(d)
         {
-          var col = i % num_cols;
-          refs[i]['x'] = x + (i % num_cols) * (w + pad);
-          refs[i]['y'] = y + Math.floor(i / num_cols) * (h + pad);
-        }
-        return refs;
-      });
+          if( !d.refs )
+            return [];
 
-  var ref_enter =
-    ref_icons.enter()
-      .append('g')
-      .classed('ref', true)
-      .classed('ref-open', function(d) { return active_urls.has(d.url); })
-      .on('mousedown', function()
-      {
-        d3.event.stopPropagation();
-      });
+          var refs = [];
+          for(var url in d.refs)
+            refs[ refs.length ] = {
+              url: url,
+              data: d.refs[url]
+            };
 
-  var open_url_options =
-    'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
+          var num_cols = Math.min(4, refs.length);
+          var pad = 4, w = 16, h = 16;
+          var x = -num_cols / 2 * w - (num_cols - 1) / 2 * pad,
+              y = 24;
 
-  ref_enter
-    .append('image')
-    .attr('width', 16)
-    .attr('height', 16)
-    .on('click', function(d)
-     {
-       if( active_urls.has(d.url) )
-         send({
-           task: 'WM',
-           cmd: 'activate-window',
-           url: d.url
-         });
-       else
-         window.open(
-           d.url,
-           '_blank',
-           open_url_options + ',width=1000,height=800'
-         );
-     });
-  ref_enter
-    .append('circle')
-    .classed('ref-highlight', true)
-    .attr('r', 10);
+          for(var i = 0; i < refs.length; ++i)
+          {
+            var col = i % num_cols;
+            refs[i]['x'] = x + (i % num_cols) * (w + pad);
+            refs[i]['y'] = y + Math.floor(i / num_cols) * (h + pad);
+          }
+          return refs;
+        });
 
-  ref_enter.selectAll('image')
-    .attr('xlink:href', function(d) { return d.data.icon; })
-    .attr('title', function(d) { return d.url; })
-    .attr('x', function(d) { return d.x; })
-    .attr('y', function(d) { return d.y; });
-  ref_enter.selectAll('circle')
-    .attr('cx', function(d) { return d.x + 8; })
-    .attr('cy', function(d) { return d.y + 8; });
+    var ref_enter =
+      ref_icons.enter()
+        .append('g')
+        .classed('ref', true)
+        .classed('ref-open', function(d) { return active_urls.has(d.url); })
+        .on('mousedown', function()
+        {
+          d3.event.stopPropagation();
+        });
+
+    var open_url_options =
+      'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
+
+    ref_enter
+      .append('image')
+      .attr('width', 16)
+      .attr('height', 16)
+      .on('click', function(d)
+       {
+         if( active_urls.has(d.url) )
+           send({
+             task: 'WM',
+             cmd: 'activate-window',
+             url: d.url
+           });
+         else
+         {
+           var graph_bb = getViewport();
+           var l = 20,
+               t = 20,
+               w = 1000,
+               h = 800;
+           window.open(
+             d.url,
+             '_blank',
+             open_url_options + ',left=' + l
+                              + ',top=' + t
+                              + ',width=' + w
+                              + ',height=' + h
+           );
+         }
+       });
+    ref_enter
+      .append('circle')
+      .classed('ref-highlight', true)
+      .attr('r', 10);
+
+    ref_enter.selectAll('image')
+      .attr('xlink:href', function(d) { return d.data.icon; })
+      .attr('title', function(d) { return d.url; })
+      .attr('x', function(d) { return d.x; })
+      .attr('y', function(d) { return d.y; });
+    ref_enter.selectAll('circle')
+      .attr('cx', function(d) { return d.x + 8; })
+      .attr('cy', function(d) { return d.y + 8; });
+  });
 
   if( update_layout )
   {
