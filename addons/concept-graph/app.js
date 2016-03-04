@@ -12,10 +12,17 @@ var concept_graph =
   {
     console.log("New concept: " + id, node);
 
+    var [tx, ty] = zoom.translate(),
+        scale = zoom.scale(),
+        vp_width = svg.attr('width'),
+        vp_height = svg.attr('height'),
+        center_x = -tx + vp_width / scale,
+        center_y = -ty + vp_height / scale;
+
     if( node.x == undefined )
-      node.x = force.size()[0] / 2 + (Math.random() - 0.5) * 100;
+      node.x = center_x + (Math.random() - 0.5) * 100;
     if( node.y == undefined )
-      node.y = force.size()[1] / 2 + (Math.random() - 0.5) * 100;
+      node.y = center_y + (Math.random() - 0.5) * 100;
 
     if( queue_timeout )
       clearTimeout(queue_timeout);
@@ -546,7 +553,7 @@ function onForceTick()
       .attr('y', d.center[1] + 4);
   });
 
-  if( force.alpha() < 0.04 || !force.nodes().length )
+  if( force.alpha() < 0.04 || force.nodes().length < 2 )
     force.stop();
 
   updateLinksThrottled();
@@ -1023,7 +1030,7 @@ function addConceptWithDialog()
     });
   });
 }
-d3.select('#button-add-concept').on('click', addConceptWithDialog);
+//d3.select('#button-add-concept').on('click', addConceptWithDialog);
 
 // app starts here
 svg
@@ -1057,7 +1064,6 @@ svg
 
 function updateDrawArea(arg)
 {
-  var force_limits = false;
   if( typeof arg == 'object' )
   {
     var force_limits = true,
@@ -1132,9 +1138,7 @@ function updateDrawArea(arg)
             .style('display', 'inline');
   }
 
-  if( force_limits )
-    zoom.translate([tx, ty]);
-
+  zoom.translate([tx, ty]);
   zoom_pan_group.attr(
     "transform",
     "translate(" + [tx, ty] + ") scale(" + scale + ")"
@@ -1224,12 +1228,13 @@ d3.select(window)
              .attr('width', x2 - x1)
              .attr('height', y2 - y1);
 
-    var [dx, dy] = zoom.translate(),
+    var [tx, ty] = zoom.translate(),
         scale = zoom.scale();
-    x1 = (x1 - dx) / scale;
-    x2 = (x2 - dx) / scale;
-    y1 = (y1 - dy) / scale;
-    y2 = (y2 - dy) / scale;
+
+    x1 = (x1 - tx) / scale;
+    x2 = (x2 - tx) / scale;
+    y1 = (y1 - ty) / scale;
+    y2 = (y2 - ty) / scale;
 
     var selection = new Set(drag_start_selection);
 
@@ -1402,6 +1407,7 @@ d3.select(window)
 
     restart();
     start();
+    updateDrawArea(true);
   })
   .on('visibilitychange', function() {
     if( document.hidden )
