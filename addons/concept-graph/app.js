@@ -578,6 +578,17 @@ function onForceEnd()
       if( node_bb[2] >= bb[2] ) bb[2] = node_bb[2];
       if( node_bb[3] >= bb[3] ) bb[3] = node_bb[3];
     }
+
+    if( node.fixed && node.moved )
+    {
+      concept_graph.updateConcept({
+        id: node.id,
+        x: node.x, px: node.x,
+        y: node.y, py: node.y,
+        fixed: true
+      }, true, true);
+      node.moved = false;
+    }
   });
 
   if( bb )
@@ -693,6 +704,7 @@ function restart(update_layout = true)
             node.px = (node.x += d3.event.dx);
             node.py = (node.y += d3.event.dy);
             node.fixed = true;
+            node.moved = true;
           }
         }
         force.resume();

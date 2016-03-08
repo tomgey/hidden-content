@@ -142,7 +142,9 @@ ConceptGraph.prototype.addConcept = function(cfg, send_msg = true)
 /**
  * Update concept information
  */
-ConceptGraph.prototype.updateConcept = function(new_cfg, send_msg = true)
+ConceptGraph.prototype.updateConcept = function( new_cfg,
+                                                 send_msg = true,
+                                                 force = false )
 {
   var concept = this.concepts.get(new_cfg.id);
   if( !concept )
@@ -163,17 +165,18 @@ ConceptGraph.prototype.updateConcept = function(new_cfg, send_msg = true)
     changed = true;
   }
 
-  if( !changed )
+  if( !changed && !force )
     return false;
 
-  this._callHandler('concept-update', concept.id, concept);
+  if( changed )
+    this._callHandler('concept-update', concept.id, concept);
 
   if( send_msg )
   {
     new_cfg['task'] = 'CONCEPT-UPDATE';
     send(new_cfg);
   }
-  
+
   return true;
 }
 
