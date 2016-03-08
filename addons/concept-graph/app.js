@@ -1020,21 +1020,26 @@ d3.select('#dlg-concept-name').on('submit', function() {
   }
 });
 
-function addConceptWithDialog()
+function addConceptWithDialog(cfg)
 {
+  var cfg = cfg || {};
   dlgConceptName.show(function(name){
     var name = name.trim();
     concept_graph.addConcept({
       name: name,
-      id: name.toLowerCase()
+      id: name.toLowerCase(),
+      x: cfg.x,
+      y: cfg.y,
+      fixed: typeof x != undefined
     });
-  });
+  },
+  cfg.name);
 }
 //d3.select('#button-add-concept').on('click', addConceptWithDialog);
 
 // app starts here
 svg
-  .on('mousedown', function(d)
+  .on('mousedown', function()
   {
     if( d3.event.shiftKey )
       return;
@@ -1043,6 +1048,9 @@ svg
       d3.event.stopImmediatePropagation();
 
     if( d3.event.target.tagName != 'svg' )
+      return;
+
+    if( d3.event.button != 0 ) // only LMB
       return;
 
     if( !d3.event.ctrlKey )
@@ -1060,6 +1068,20 @@ svg
     if( !d3.event.shiftKey )
       // Zoom only with shift
       d3.event.stopImmediatePropagation();
+  })
+  .on('mouseup', function()
+  {
+    if( d3.event.button != 1 ) // only MMB
+      return;
+
+    var [tx, ty] = zoom.translate(),
+        scale = zoom.scale(),
+        [x, y] = d3.mouse(this);
+
+    x = (x - tx) / scale;
+    y = (y - ty) / scale;
+
+    addConceptWithDialog({'x': x, 'y': y});
   });
 
 function updateDrawArea(arg)
