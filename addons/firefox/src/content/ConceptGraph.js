@@ -343,13 +343,15 @@ ConceptGraph.prototype.addReference = function(id, cfg, send_event = true)
   ref.selections = ref.selections || [];
   ref.selections.push(ranges);
 
-  var base_domain = getBaseDomainFromHost(cfg.host || ref.title);
+  var icon_text = url.startsWith('file://')
+                ? url.substr(url.lastIndexOf('/') + 1, 3).split('.')[0]
+                : getBaseDomainFromHost(cfg.host || ref.title)[0].toUpperCase();
   var self = this;
   var is_relation = self._isRelationId(id);
 
   utils.imgToBase64(
     cfg.icon,
-    base_domain[0].toUpperCase(),
+    icon_text,
     function(img_data)
     {
       ref.icon = img_data;

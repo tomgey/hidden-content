@@ -752,9 +752,9 @@ function restart(update_layout = true)
             };
 
           var num_cols = Math.min(4, refs.length);
-          var pad = 4, w = 16, h = 16;
+          var pad = 5, w = 18, h = 18;
           var x = -num_cols / 2 * w - (num_cols - 1) / 2 * pad,
-              y = 24;
+              y = 25;
 
           for(var i = 0; i < refs.length; ++i)
           {
@@ -780,8 +780,8 @@ function restart(update_layout = true)
 
     ref_enter
       .append('image')
-      .attr('width', 16)
-      .attr('height', 16)
+      .attr('width', 18)
+      .attr('height', 18)
       .on('click', function(d)
        {
          if( active_urls.has(d.url) )
@@ -810,7 +810,7 @@ function restart(update_layout = true)
     ref_enter
       .append('circle')
       .classed('ref-highlight', true)
-      .attr('r', 10);
+      .attr('r', 11);
 
     ref_enter.selectAll('image')
       .attr('xlink:href', function(d) { return d.data.icon; })
@@ -818,8 +818,8 @@ function restart(update_layout = true)
       .attr('x', function(d) { return d.x; })
       .attr('y', function(d) { return d.y; });
     ref_enter.selectAll('circle')
-      .attr('cx', function(d) { return d.x + 8; })
-      .attr('cy', function(d) { return d.y + 8; });
+      .attr('cx', function(d) { return d.x + 9; })
+      .attr('cy', function(d) { return d.y + 9; });
   });
 
   if( update_layout )

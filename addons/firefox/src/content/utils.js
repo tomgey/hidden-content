@@ -18,8 +18,8 @@ var utils = {
     var img = new Image();
     img.src = url;
 
-    var w = 16,
-        h = 16;
+    var w = 18,
+        h = 18;
     var canvas =
       document.createElementNS("http://www.w3.org/1999/xhtml", "html:canvas");
     canvas.width = w;
@@ -40,7 +40,8 @@ var utils = {
     {
       ctx.fillStyle = "#fee";
       ctx.fillRect(0, 0, w, h);
-      ctx.font = "14px Sans-serif";
+      ctx.fontFamily = "Sans-serif";
+      ctx.fontSize = fallback_text.length == 1 ? "14px" : "9px";
       ctx.fontWeight = "bold";
       ctx.fillStyle = "#333";
       ctx.textAlign = "center";
