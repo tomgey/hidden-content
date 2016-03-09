@@ -899,7 +899,7 @@ namespace LinksRouting
   {
     QTcpSocket* client = qobject_cast<QTcpSocket*>(sender());
 
-    qDebug() << client->readAll();
+    //qDebug() << client->readAll();
     QString response(
       "HTTP/1.0 200 OK\r\n"
       "Access-Control-Allow-Origin: *\r\n"
@@ -1325,8 +1325,10 @@ namespace LinksRouting
       if( ignore_props.contains(it.key()) )
         continue;
 
-      QString const val = from_json<QString>(it.value()).trimmed(),
-                    old_val = props.value(it.key()).toString();
+      QVariant val = it.value().toVariant(),
+               old_val = props.value(it.key());
+      if( val.type() == QVariant::String )
+        val = val.toString().trimmed();
 
       if( val == old_val )
       {
@@ -1443,8 +1445,10 @@ namespace LinksRouting
       if( ignore_props.contains(it.key()) )
         continue;
 
-      QString const val = from_json<QString>(it.value()).trimmed(),
-                    old_val = props.value(it.key()).toString();
+      QVariant val = it.value().toVariant(),
+               old_val = props.value(it.key());
+      if( val.type() == QVariant::String )
+        val = val.toString().trimmed();
 
       if( val == old_val )
       {
@@ -1992,7 +1996,7 @@ namespace LinksRouting
     if( !need_update )
       return;
 
-    LOG_INFO("Windows changed -> trigger reroute");
+    //LOG_INFO("Windows changed -> trigger reroute");
     dirtyLinks();
   }
 

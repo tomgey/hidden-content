@@ -381,6 +381,7 @@ namespace LinksRouting
       {
         _regions = regions;
 
+#ifdef WINDOW_MONITOR_LOG_REGION_CHANGES
         LOG_INFO("Trigger reroute...");
 
         for( auto reg = regions.begin(); reg != regions.end(); ++reg )
@@ -391,7 +392,7 @@ namespace LinksRouting
                     << ", reg = " << reg->region
                     << std::endl;
         }
-
+#endif
         _cb_regions_changed( WindowRegions(regions) );
       }
       _timeout -= 1;

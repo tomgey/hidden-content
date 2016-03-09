@@ -79,3 +79,12 @@ Increase maximum shared memory segment size:
 
     $ # Permanent change:
     $ echo "kernel.shmmax=67108864" >/etc/sysctl.d/90-shared-memory.conf
+
+# Concept Graph
+
+## Desktop Search
+
+Install recoll:
+
+    $ sudo add-apt-repository ppa:recoll-backports/recoll-1.15-on
+    $ sudo apt-get install recoll python-recoll

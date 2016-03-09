@@ -59,7 +59,10 @@ template<>
 QString from_json<QString>( const QJsonValue& val,
                             const QString& def )
 {
-  return val.toString(def);
+  if( val.isUndefined() )
+    return def;
+
+  return val.toVariant().toString();
 }
 
 //----------------------------------------------------------------------------
