@@ -101,7 +101,7 @@ var UI = {
     },
     _onAddReference: function(button)
     {
-      utils.addReference(this.getSelectionIdArray(), $('ref-scope').value);
+      utils.addReferenceToSelection(this.getSelectionIdArray(), $('ref-scope').value);
       this._panel.node().hidePopup();
     },
     _onCreateRelation: function(button)

@@ -20,9 +20,9 @@ var concept_graph =
         center_y = -ty + vp_height / scale;
 
     if( node.x == undefined )
-      node.x = center_x + (Math.random() - 0.5) * 100;
+      node.px = node.x = center_x + (Math.random() - 0.5) * 100;
     if( node.y == undefined )
-      node.y = center_y + (Math.random() - 0.5) * 100;
+      node.px = node.y = center_y + (Math.random() - 0.5) * 100;
 
     if( queue_timeout )
       clearTimeout(queue_timeout);
@@ -712,7 +712,7 @@ function restart(update_layout = true)
     );
 
   nodes_enter.append('svg:ellipse')
-    .call(applyMouseSelectionHandler);
+    .call(applyMouseSelectionHandler, true);
 
   nodes_enter
     .append('text')
@@ -905,7 +905,7 @@ function abortAllLinks()
     abortLink(id);
 }
 
-function applyMouseSelectionHandler(sel)
+function applyMouseSelectionHandler(sel, drop_class_parent = false)
 {
   sel
     .on('mousedown', function(d)
@@ -931,6 +931,47 @@ function applyMouseSelectionHandler(sel)
         return;
 
       concept_graph.updateSelection(d3.event.ctrlKey ? 'toggle' : 'set', d.id);
+    })
+    .on('dragover', function()
+    {
+      d3.event.preventDefault();
+      d3.event.stopPropagation();
+    })
+    .on('dragenter', function()
+    {
+      d3.select(drop_class_parent ? this.parentNode : this)
+        .classed('drag-over', true);
+    })
+    .on('dragleave', function()
+    {
+      d3.select(drop_class_parent ? this.parentNode : this)
+        .classed('drag-over', false);
+    })
+    .on('drop', function(d)
+    {
+      d3.select(drop_class_parent ? this.parentNode : this)
+        .classed('drag-over', false);
+
+      d3.event.preventDefault();
+      d3.event.stopPropagation();
+
+      var dt = d3.event.dataTransfer;
+      try
+      {
+        var data = JSON.parse(dt.getData("text/plain")),
+            url = Object.keys(data.refs)[0],
+            ref = data.refs[url];
+
+        ref.url = url;
+        ref.ranges = ref.selections[0];
+        delete ref.selections;
+
+        concept_graph.addReference(d.id, ref);
+      }
+      catch(e)
+      {
+        console.log('concept: invalid drop data', e, dt);
+      }
     });
 }
 
@@ -1035,19 +1076,28 @@ d3.select('#dlg-concept-name').on('submit', function() {
 function addConceptWithDialog(cfg)
 {
   var cfg = cfg || {};
+  cfg.fixed = typeof cfg.x != undefined;
+
   dlgConceptName.show(function(name){
     var name = name.trim();
-    concept_graph.addConcept({
-      name: name,
-      id: name.toLowerCase(),
-      x: cfg.x,
-      y: cfg.y,
-      fixed: typeof x != undefined
-    });
+    cfg.name = name;
+    cfg.id = name.toLowerCase();
+    concept_graph.addConcept(cfg);
   },
   cfg.name);
 }
 //d3.select('#button-add-concept').on('click', addConceptWithDialog);
+
+function screenToSVGPos(pos)
+{
+  var [tx, ty] = zoom.translate(),
+      scale = zoom.scale();
+
+  return [
+    (pos[0] - tx) / scale,
+    (pos[1] - ty) / scale
+  ];
+}
 
 // app starts here
 svg
@@ -1081,19 +1131,45 @@ svg
       // Zoom only with shift
       d3.event.stopImmediatePropagation();
   })
+  .on('dragover', function()
+  {
+    d3.event.preventDefault();
+    d3.select(this).classed('drag-over', true);
+  })
+  .on('dragleave', function()
+  {
+    d3.select(this).classed('drag-over', false);
+  })
+  .on('drop', function()
+  {
+    d3.select(this).classed('drag-over', false);
+    d3.event.preventDefault();
+
+    var dt = d3.event.dataTransfer;
+    try
+    {
+      var new_concept = JSON.parse(dt.getData("text/plain")),
+          pos = screenToSVGPos(d3.mouse(this));
+      new_concept.x = pos[0];
+      new_concept.y = pos[1];
+
+      addConceptWithDialog(new_concept);
+    }
+    catch(e)
+    {
+      console.log('svg: invalid drop data', e, dt);
+    }
+  })
   .on('mouseup', function()
   {
     if( d3.event.button != 1 ) // only MMB
       return;
 
-    var [tx, ty] = zoom.translate(),
-        scale = zoom.scale(),
-        [x, y] = d3.mouse(this);
-
-    x = (x - tx) / scale;
-    y = (y - ty) / scale;
-
-    addConceptWithDialog({'x': x, 'y': y});
+    var pos = screenToSVGPos(d3.mouse(this));
+    addConceptWithDialog({
+      'x': pos[0],
+      'y': pos[1]
+    });
   });
 
 function updateDrawArea(arg)

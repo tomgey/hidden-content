@@ -7,6 +7,7 @@ var ctrl_socket = null;
 var ctrl_queue = null;
 var status = '';
 var status_sync = '';
+var favicon = null;
 
 function getPid()
 {
@@ -363,6 +364,14 @@ function onUrlChange(url, tab, reason)
  */
 function onPageLoad(event)
 {
+  utils.getFavicon({
+      host: content.location.hostname,
+      url: getContentUrl(),
+      icon: typeof(gBrowser) !== 'undefined' ? gBrowser.getIcon() : null,
+    },
+    function(img_data) { console.log('update favicon..', img_data); favicon = img_data; }
+  );
+
   updateConcepts();
   setStatusSync("no-src");
 
@@ -734,15 +743,37 @@ function onGlobalWheel(e)
   });
 }
 
-/*function onDragStart(e)
+function onDragStart(e)
 {
-  return _websocketDrag(e);
+//  return _websocketDrag(e);
 
   var dt = e.dataTransfer;
-  if( tab )
-    dt.mozSetDataAt(TAB_DROP_TYPE, tab, 0);
-  dt.mozSetDataAt("text/plain", JSON.stringify(_getCurrentTabData()), 0);
-}*/
+//  if( tab )
+//    dt.mozSetDataAt(TAB_DROP_TYPE, tab, 0);
+
+  var sel = content.getSelection();
+  var name = sel.toString().replace(/\s{2,}/g, ' ')
+                           .replace(/[^a-zA-Z0-9\s]/g, '')
+                           .trim();
+  if( !name.length || name.length > 48 || name.split(' ').length > 5 )
+    name = content.document.title;
+
+  var data = {
+    name: name,
+    refs: {}
+  };
+
+  var cfg = {
+    url: getContentUrl(),
+    host: content.location.hostname,
+    title: content.document.title,
+    icon: favicon,
+    ranges: utils.getContentSelection()
+  };
+
+  utils.addReference(data, cfg);
+  dt.setData("text/plain", JSON.stringify(data));
+}
 
 function onContextMenu()
 {
@@ -782,7 +813,7 @@ function onConceptNodeNew(el, event)
     'id': name
   });
 
-  utils.addReference(name.toLowerCase(), 'selection');
+  utils.addReferenceToSelection(name.toLowerCase(), 'selection');
 }
 
 function onConceptAddRef(el, event)
@@ -806,7 +837,7 @@ window.addEventListener("load", function window_load()
 
   // Drag tabs from address bar/identity icon
   var ibox = $("identity-box");
-//  ibox.addEventListener('dragstart', onDragStart, false);
+  ibox.addEventListener('dragstart', onDragStart, false);
   document.addEventListener('click', onTabDblClick, true);
 
   // Global mousewheel handler (for semantic zoom/level of detail)

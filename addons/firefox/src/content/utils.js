@@ -5,13 +5,14 @@ EXPORTED_SYMBOLS = [
 var utils = {
 
   /**
-   * 
+   *
    */
   imgToBase64: function(url, fallback_text, cb_done)
   {
     if( url && url.startsWith('data:image/png;base64') )
     {
-      cb_done(url);
+      if( cb_done )
+        cb_done(url);
       return;
     }
 
@@ -28,7 +29,8 @@ var utils = {
     var cb_wrapper = function()
     {
       var data = canvas.toDataURL("image/png");
-      cb_done( data /*.replace(/^data:image\/(png|jpg);base64,/, "")*/ );
+      if( cb_done )
+        cb_done( data /*.replace(/^data:image\/(png|jpg);base64,/, "")*/ );
     };
 
     img.onload = function ()
@@ -50,6 +52,53 @@ var utils = {
 
       cb_wrapper();
     }
+  },
+
+  /**
+   *
+   */
+  getFavicon: function(cfg, cb)
+  {
+    var icon_text = cfg.url.startsWith('file://')
+                  ? cfg.url.substr(cfg.url.lastIndexOf('/') + 1, 3).split('.')[0]
+                  : getBaseDomainFromHost(cfg.host || cfg.title)[0].toUpperCase();
+
+    utils.imgToBase64(cfg.icon, icon_text, cb);
+  },
+
+  /**
+   *
+   */
+  addReference: function(el, cfg, cb)
+  {
+    var url = cfg.url;
+    if( typeof(url) !== 'string' || !url.length )
+    {
+      console.log('Missing/invalid url', cfg);
+      return false;
+    }
+
+    el.refs = el.refs || {};
+    var ref = el.refs[url] = el.refs[url] || {};
+
+    if( cfg.title ) ref.title = cfg.title; else cfg.title = ref.title;
+    if( cfg.icon  ) ref.icon  = cfg.icon;
+
+    var ranges = cfg.ranges;
+    if( !cfg.ranges || !cfg.ranges.length )
+      ranges = [{type: 'document'}];
+
+    ref.selections = ref.selections || [];
+    ref.selections.push(ranges);
+
+    utils.getFavicon(cfg, function(img_data)
+    {
+      ref.icon = img_data;
+      if( cb )
+        cb(ref, ranges);
+    });
+
+    return true;
   },
 
   /**
@@ -111,7 +160,12 @@ var utils = {
     for(var i = 0; i < sel.rangeCount; i++)
     {
       var range = sel.getRangeAt(i);
-      if( !range.isCollapsed )
+      if( !range.isCollapsed
+          && (  range.startContainer != range.endContainer
+             || range.startOffset != range.endOffset
+             )
+        )
+      {
         ranges.push({
           'type': 'dom-range',
           'start-node': utils.getXPathForElement(range.startContainer, body),
@@ -119,15 +173,16 @@ var utils = {
           'end-node': utils.getXPathForElement(range.endContainer, body),
           'end-offset': range.endOffset
         });
+      }
     }
 
     return ranges;
   },
-  
+
   /**
    * Add references to either the selected content parts or the whole document.
    */
-  addReference: function(ids, scope, url)
+  addReferenceToSelection: function(ids, scope, url)
   {
     if( scope == 'all' )
       var ranges = [{type: 'document'}];

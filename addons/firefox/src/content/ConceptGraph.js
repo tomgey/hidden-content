@@ -324,58 +324,30 @@ ConceptGraph.prototype.addReference = function(id, cfg, send_event = true)
     console.log('Unknown element id', id);
     return false;
   }
-  
-  var url = cfg.url;
-  if( typeof(url) !== 'string' || !url.length )
-  {
-    console.log('Missing/invalid url', cfg);
-    return false;
-  }
 
-  el.refs = el.refs || {};
-  var ref = el.refs[url] = el.refs[url] || {};
-
-  if( cfg.title ) ref.title = cfg.title;
-  if( cfg.icon  ) ref.icon  = cfg.icon;
-
-  var ranges = cfg.ranges || [{type: 'document'}];
-
-  ref.selections = ref.selections || [];
-  ref.selections.push(ranges);
-
-  var icon_text = url.startsWith('file://')
-                ? url.substr(url.lastIndexOf('/') + 1, 3).split('.')[0]
-                : getBaseDomainFromHost(cfg.host || ref.title)[0].toUpperCase();
   var self = this;
   var is_relation = self._isRelationId(id);
 
-  utils.imgToBase64(
-    cfg.icon,
-    icon_text,
-    function(img_data)
-    {
-      ref.icon = img_data;
-      self._callHandler( is_relation ? 'relation-update' : 'concept-update',
-                         id, el );
+  return utils.addReference(el, cfg, function(ref, ranges)
+  {
+    self._callHandler( is_relation ? 'relation-update' : 'concept-update',
+                       id, el );
 
-      if( !send_event )
-        return;
+    if( !send_event )
+      return;
 
-      cfg.selections = [ranges];
-      cfg.icon = img_data;
+    cfg.selections = [ranges];
+    cfg.icon = ref.icon;
 
-      var msg = {
-        task: is_relation ? 'CONCEPT-LINK-UPDATE-REFS' : 'CONCEPT-UPDATE-REFS',
-        id: id,
-        cmd: 'add',
-        ref: cfg
-      };
+    var msg = {
+      task: is_relation ? 'CONCEPT-LINK-UPDATE-REFS' : 'CONCEPT-UPDATE-REFS',
+      id: id,
+      cmd: 'add',
+      ref: cfg
+    };
 
-      send(msg);
-    }
-  );
-
-  return true;
+    send(msg);
+  });
 }
 
 /**

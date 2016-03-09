@@ -305,6 +305,13 @@ svg .bg {
   fill: #eee;
 }
 
+.drag-over .bg {
+  stroke-width: 4px;
+  stroke: red;
+  stroke-dasharray: none;
+  fill: #ecc;
+}
+
 .link > path:not(.click-proxy) {
   pointer-events: none;
 }
@@ -334,6 +341,13 @@ svg .bg {
   stroke-dasharray:10,8;
 }
 
+.link.drag-over > path,
+.link.drag-over > rect {
+  stroke-width: 4px;
+  stroke: red;
+  stroke-dasharray: none;
+}
+
 .link.hidden > path {
   stroke-width: 0;
 }
@@ -358,6 +372,12 @@ svg .bg {
   stroke-width: 4px;
   stroke: red;
   stroke-dasharray:10,8;
+}
+
+.node.drag-over ellipse {
+  stroke-width: 4px;
+  stroke: red;
+  stroke-dasharray: none;
 }
 
 circle.ref-highlight {
