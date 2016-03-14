@@ -936,7 +936,7 @@ function start(match_title = false, src_id = 0, check = true)
   if( register(match_title, src_id) )
   {
 //    window.addEventListener('unload', stopVisLinks, false);
-//    window.addEventListener("DOMAttrModified", attrModified, false);
+    window.addEventListener("DOMAttrModified", attrModified, false);
     window.addEventListener('resize', resize, false);
 //    window.addEventListener("DOMContentLoaded", windowChanged, false);
   }
@@ -1578,6 +1578,16 @@ function handleTileRequest()
 //------------------------------------------------------------------------------
 function attrModified(e)
 {
+  if( e.attrName == 'screenY' )
+    send({
+      'task': 'MOVE',
+      'geom': [
+        window.screenX, window.screenY,
+        window.outerWidth, window.outerHeight
+      ]
+    });
+
+  return;
   if( e.attrName.lastIndexOf('treestyletab', 0) === 0 )
     return;
   if( [ 'actiontype', 'afterselected', 'align',
@@ -1611,7 +1621,11 @@ function resize()
   send({
     'task': 'RESIZE',
     'viewport': getViewport(),
-    'scroll-region': [reg.x, reg.y, reg.width, reg.height]
+    'scroll-region': [reg.x, reg.y, reg.width, reg.height],
+    'geom': [
+      window.screenX, window.screenY,
+      window.outerWidth, window.outerHeight
+    ]
   });
 
   for(var route_id in active_routes)

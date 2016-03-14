@@ -13,8 +13,10 @@
 #include "JSON.hpp"
 #include "common/PreviewWindow.hpp"
 
+#include <QGuiApplication>
 #include <QHostInfo>
 #include <QMutex>
+#include <QScreen>
 #include <QWebSocket>
 
 #include <algorithm>
@@ -25,7 +27,8 @@
 
 namespace LinksRouting
 {
-  const QString SAVE_FILE_EXT = "concept-local.json";
+  const QString SAVE_FILE_EXT = "concept-local.json",
+                LOG_FILE_EXT = "concept-log.json";
 
   QJsonArray to_json(ClientWeakList const& clients)
   {
@@ -296,6 +299,31 @@ namespace LinksRouting
     int port = 4487,
         port_status = 4486;
 
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
+    if( dir.isEmpty() )
+      qWarning() << "Could not get writable location for saving logfile.";
+    else
+    {
+      _log_file.setFileName( dir + "/"
+                           + QHostInfo::localHostName()
+                           + "-"
+                           + dateTimeString()
+                           + "." + LOG_FILE_EXT
+                           );
+      if( !_log_file.open(QIODevice::WriteOnly | QIODevice::Text) )
+        qWarning() << "Failed top open logfile" << _log_file.fileName();
+      else
+      {
+        _log_file.write("[");
+        QJsonObject msg = {
+          {"type", "LOG_START"},
+          {"host", QHostInfo::localHostName()},
+          {"desktop-rect", to_json(desktopRect().toQRect())}
+        };
+        logWrite(msg);
+      }
+    }
+
     _server = new QWebSocketServer(
       QStringLiteral("Hidden Content Server"),
       QWebSocketServer::NonSecureMode,
@@ -507,6 +535,15 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  Rect IPCServer::desktopRect() const
+  {
+    if( !_subscribe_desktop_rect || !_subscribe_desktop_rect->_data )
+      return QGuiApplication::primaryScreen()->availableVirtualGeometry();
+    else
+      return *_subscribe_desktop_rect->_data;
+  }
+
+  //----------------------------------------------------------------------------
   IPCServer::PopupIterator
   IPCServer::addPopup( const ClientInfo& client_info,
                        const SlotType::TextPopup::Popup& popup )
@@ -676,7 +713,7 @@ namespace LinksRouting
       _save_state_file = dir + "/"
                         + QHostInfo::localHostName()
                         + "-"
-                        + QString::number(QDateTime::currentMSecsSinceEpoch())
+                        + dateTimeString()
                         + "." + SAVE_FILE_EXT;
 
     }
@@ -780,7 +817,12 @@ namespace LinksRouting
         if( msg_handler == _msg_handlers.end() )
           LOG_WARN("Unknown message type: " << task.toStdString());
         else
+        {
           msg_handler->second(client_info, msg, data);
+
+          msg["msg-sender-wid"] = qint64(client_info->getWindowInfo().id);
+          logWrite(msg);
+        }
       }
     }
     catch(std::runtime_error& ex)
@@ -2999,6 +3041,21 @@ namespace LinksRouting
     msg["task"] = "GET-FOUND";
 
     distributeMessage(msg);
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::logWrite(QJsonObject& msg)
+  {
+    msg["msg-stamp"] = dateTimeString();
+
+    _log_file.write(QJsonDocument(msg).toJson(QJsonDocument::Compact) + ",\n");
+    _log_file.flush();
+  }
+
+  //----------------------------------------------------------------------------
+  QString IPCServer::dateTimeString()
+  {
+    return QDateTime::currentDateTime().toString(Qt::ISODate);
   }
 
   //----------------------------------------------------------------------------

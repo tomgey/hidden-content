@@ -71,7 +71,7 @@ namespace LinksRouting
       int getPreviewHeight() const { return _preview_height; }
       bool getPreviewAutoWidth() const { return _preview_auto_width; }
       bool getOutsideSeeThrough() const;
-      Rect desktopRect() const { return *_subscribe_desktop_rect->_data; }
+      Rect desktopRect() const;
 
       template<class Container>
       Container clientList() const
@@ -275,6 +275,11 @@ namespace LinksRouting
       /** Load concept graph from json object. (existing graph is deleted) */
       void loadConceptGraphFromJson(const QJsonObject& graph);
 
+      /** Write to the session logfile */
+      void logWrite(QJsonObject& msg);
+
+      static QString dateTimeString();
+
     private:
 
       QWebSocketServer   *_server;
@@ -302,7 +307,9 @@ namespace LinksRouting
       StringSet         _concept_selection; //!< Selected concepts and relations
 
       PropertyObjectMap _concept_layout; //!< Node layout (in the browser
-                                         //   concept graph
+                                         //   concept graph)
+
+      QFile             _log_file;
 
       slot_t<std::vector<Rect>>::type _slot_regions;
 
