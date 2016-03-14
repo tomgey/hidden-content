@@ -48,7 +48,7 @@ var utils = {
       ctx.fillStyle = "#333";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(fallback_text, w/2, h/2);
+      ctx.fillText(fallback_text, w/2, h/2 + 1);
 
       cb_wrapper();
     }
@@ -59,9 +59,12 @@ var utils = {
    */
   getFavicon: function(cfg, cb)
   {
-    var icon_text = cfg.url.startsWith('file://')
-                  ? cfg.url.substr(cfg.url.lastIndexOf('/') + 1, 3).split('.')[0]
-                  : getBaseDomainFromHost(cfg.host || cfg.title)[0].toUpperCase();
+    var icon_text =
+      cfg.url.startsWith('file://')
+      ? cfg.url.substr(cfg.url.lastIndexOf('/') + 1)
+               .split('.')[0]
+               .substr(-3)
+      : getBaseDomainFromHost(cfg.host || cfg.title)[0].toUpperCase();
 
     utils.imgToBase64(cfg.icon, icon_text, cb);
   },
@@ -189,22 +192,17 @@ var utils = {
     else
       var ranges = utils.getContentSelection();
 
-    var base_domain = getBaseDomainFromHost(content.location.hostname);
-    var url = url || getContentUrl();
-    var title = content.document.title;
-    var icon = typeof(gBrowser) !== 'undefined' ? gBrowser.getIcon() : null;
+    var ref = {
+      title: content.document.title,
+      url: url || getContentUrl(),
+      host: content.location.hostname,
+      icon: typeof(gBrowser) !== 'undefined' ? gBrowser.getIcon() : null,
+      selections: [ranges]
+    };
 
-    utils.imgToBase64(
-      icon,
-      base_domain[0].toUpperCase(),
-      function(img_data)
+    utils.getFavicon(ref, function(img_data)
       {
-       var ref = {
-          'title': title,
-          'url': url,
-          'icon': img_data,
-          'selections': [ranges]
-        };
+        ref.icon = img_data;
 
         for(var i = 0; i < ids.length; i++)
         {
@@ -225,8 +223,7 @@ var utils = {
 
           send(msg);
         }
-      }
-    );
+      });
   },
 
   /**
@@ -257,7 +254,7 @@ var utils = {
       'id': name
     });
 
-    utils.addReference([name.toLowerCase()], scope || 'selection');
+    utils.addReferenceToSelection([name.toLowerCase()], scope || 'selection');
   },
 
   /**
@@ -270,6 +267,6 @@ var utils = {
       'nodes': [...nodes]
     });
 
-    utils.addReference([nodes], scope);
+    utils.addReferenceToSelection([nodes], scope);
   }
 };

@@ -23,7 +23,12 @@ function getPid()
 function getContentUrl(_location)
 {
   var location = _location || content.location;
-  return decodeURIComponent(location.origin + location.pathname);
+  if( location.hostname.length )
+    var path = location.origin + location.pathname;
+  else
+    var path = location.href;
+
+  return decodeURIComponent(path);
 }
 
 function $(id)
