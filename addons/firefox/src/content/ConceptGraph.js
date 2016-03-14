@@ -213,6 +213,8 @@ ConceptGraph.prototype.removeConcept = function(id, send_msg = true)
  */
 ConceptGraph.prototype.addRelation = function(cfg, send_msg = true)
 {
+  cfg.nodes.sort(); // ensure ids are sorted alphabetically
+
   var first = this.concepts.get(cfg.nodes[0]),
       second = this.concepts.get(cfg.nodes[1]);
 
@@ -230,7 +232,7 @@ ConceptGraph.prototype.addRelation = function(cfg, send_msg = true)
   var id = cfg.nodes.join(':');
   if( this.relations.has(id) )
   {
-    if( send_msg)
+    if( send_msg )
       console.warn("addRelation: already exists: " + id);
     return false;
   }
