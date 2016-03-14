@@ -1494,7 +1494,7 @@ namespace LinksRouting
 
     distributeMessage(QJsonObject({
       {"task", "CONCEPT-LINK-DELETE"},
-      {"id", it.key()}
+      {"id", node_ids}
     }));
   }
 
