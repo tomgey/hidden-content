@@ -371,15 +371,16 @@ function handleRequest(msg)
 
 function circlePoints(pos)
 {
-  var r = 10;
+  var r = 10 * zoom.scale(),
+      p = svgToScreenPos([pos.x, pos.y]);
   var cnt = 10;
 
   var points = new Array(cnt + 1);
   var step = 2 * Math.PI / cnt;
 
   for(var i = 0; i < cnt; i += 1)
-    points[i] = [ pos.x + r * Math.cos(i * step),
-                  pos.y + r * Math.sin(i * step) ];
+    points[i] = [ p[0] + r * Math.cos(i * step),
+                  p[1] + r * Math.sin(i * step) ];
   points[cnt] = {rel: true};
 
   return points;
@@ -1118,6 +1119,17 @@ function screenToSVGPos(pos)
   return [
     (pos[0] - tx) / scale,
     (pos[1] - ty) / scale
+  ];
+}
+
+function svgToScreenPos(pos)
+{
+  var [tx, ty] = zoom.translate(),
+      scale = zoom.scale();
+
+  return [
+    tx + pos[0] * scale,
+    ty + pos[1] * scale
   ];
 }
 
