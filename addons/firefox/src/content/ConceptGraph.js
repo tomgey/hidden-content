@@ -707,7 +707,7 @@ ConceptGraph.prototype.handleMessage = function(msg)
     for(var id in msg.concepts)
       this.addConcept(msg.concepts[id], false);
 
-    if( msg.layout )
+    if( msg.layout && false )
     {
       for(var id in msg.layout)
       {
@@ -730,6 +730,35 @@ ConceptGraph.prototype.handleMessage = function(msg)
     return true;
   }
   return false;
+}
+
+/**
+ * Send all concepts, relations, etc. to the server
+ */
+ConceptGraph.prototype.pushStateToServer = function()
+{
+  for(var [id, concept] of this.concepts)
+  {
+    var msg = Object.assign({}, concept);
+    for(var key of ['px', 'py', 'index', 'weight', 'moved'])
+      delete msg[key];
+
+    msg.task = 'CONCEPT-NEW';
+    send(msg);
+  }
+  for(var [id, relation] of this.relations)
+  {
+    var msg = Object.assign({}, relation);
+    for(var key of ['source', 'target', 'p1', 'p2', 'center', 'label_width'])
+      delete msg[key];
+
+    msg.task = 'CONCEPT-LINK-NEW';
+    send(msg);
+  }
+  send({
+    'task': 'CONCEPT-SELECTION-UPDATE',
+    'selection': [...this.selection]
+  });
 }
 
 /** Internal callback handler */

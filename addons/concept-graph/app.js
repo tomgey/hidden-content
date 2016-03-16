@@ -20,9 +20,18 @@ var concept_graph =
         center_y = -ty + vp_height / scale;
 
     if( node.x == undefined )
-      node.px = node.x = center_x + (Math.random() - 0.5) * 100;
+    {
+      node.x = center_x + (Math.random() - 0.5) * 100;
+      node.moved = true;
+    }
     if( node.y == undefined )
-      node.px = node.y = center_y + (Math.random() - 0.5) * 100;
+    {
+      node.y = center_y + (Math.random() - 0.5) * 100;
+      node.moved = true;
+    }
+
+    node.px = node.x;
+    node.py = node.y;
 
     if( queue_timeout )
       clearTimeout(queue_timeout);
@@ -164,7 +173,16 @@ function start(check = true)
   {
     var msg = JSON.parse(event.data);
     if( concept_graph.handleMessage(msg) )
+    {
+      if( msg.task == 'GET-FOUND' && msg.id == '/concepts/all' )
+      {
+        // Setup layout and trigger all attached actions (eg. resize draw area)
+        force.start();
+        force.tick();
+        force.stop();
+      }
       return;
+    }
     else if( msg.task == 'GET' )
     {
       if( msg.id == '/state/all' )
@@ -511,6 +529,9 @@ function onForceTick()
 //    d.x = Math.max(node_w, Math.min(d.x, w - node_w));
 //    d.y = Math.max(node_h, Math.min(d.y, h - node_h - 20));
 
+    if( Math.pow(d.px - d.x, 2) + Math.pow(d.py - d.y, 2) >= 1 )
+      d.moved = true;
+
     return 'translate(' + d.x + ',' + d.y + ')';
   });
 
@@ -579,13 +600,13 @@ function onForceEnd()
       if( node_bb[3] >= bb[3] ) bb[3] = node_bb[3];
     }
 
-    if( node.fixed && node.moved )
+    if( node.moved )
     {
       concept_graph.updateConcept({
         id: node.id,
-        x: node.x, px: node.x,
-        y: node.y, py: node.y,
-        fixed: true
+        x: node.x,
+        y: node.y,
+        fixed: node.fixed
       }, true, true);
       node.moved = false;
     }
@@ -1076,7 +1097,8 @@ d3.select('#dlg-concept-name').on('submit', function() {
 function addConceptWithDialog(cfg)
 {
   var cfg = cfg || {};
-  cfg.fixed = typeof cfg.x != undefined;
+  cfg.fixed = cfg.x !== undefined;
+  console.log(typeof cfg.x, cfg);
 
   dlgConceptName.show(function(name){
     var name = name.trim();
@@ -1692,5 +1714,15 @@ var user_actions = [
       }
       force.resume();
     }
+  },
+  { label: 'Sync to server',
+    shortcuts: [],
+    isEnabled: function()
+    {
+      return links_socket
+          && concept_graph.concepts.size
+          && localBool('expert-mode');
+    },
+    action: function() { concept_graph.pushStateToServer(); }
   }
 ];

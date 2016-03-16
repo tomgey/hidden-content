@@ -310,6 +310,7 @@ namespace LinksRouting
                                          //   concept graph)
 
       QFile             _log_file;
+      clock::time_point _last_autosave;
 
       slot_t<std::vector<Rect>>::type _slot_regions;
 
@@ -360,7 +361,8 @@ namespace LinksRouting
                     _debug_full_preview_path;
       QImage        _full_preview_img;
       int           _preview_width,
-                    _preview_height;
+                    _preview_height,
+                    _autosave_interval;
       bool          _preview_auto_width,
                     _outside_see_through;
 

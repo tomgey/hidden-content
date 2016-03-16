@@ -97,6 +97,16 @@ namespace LinksRouting
     clamp<T>(val += step, min, max);
   }
 
+  bool getDataSaveDir(QString& dir)
+  {
+    dir = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
+    if( !dir.isEmpty() )
+      return true;
+
+    qWarning() << "Could not get writable location.";
+    return false;
+  }
+
   class IPCServer::TileHandler:
     public SlotType::TileHandler
   {
@@ -141,7 +151,8 @@ namespace LinksRouting
     _window_monitor(std::bind(&IPCServer::regionsChanged, this, _1)),
     _mutex_slot_links(mutex),
     _cond_data_ready(cond_data),
-    _dirty_flags(0)
+    _dirty_flags(0),
+    _last_autosave(clock::now())
   {
     assert(_mutex_slot_links);
     assert(_mutex_slot_links->isRecursive());
@@ -150,6 +161,7 @@ namespace LinksRouting
     registerArg("DebugFullPreview", _debug_full_preview_path);
     registerArg("PreviewWidth", _preview_width = 800);
     registerArg("PreviewHeight", _preview_height = 400);
+    registerArg("AutoSaveInterval", _autosave_interval = 60);
     registerArg("PreviewAutoWidth", _preview_auto_width = true);
     registerArg("OutsideSeeThrough", _outside_see_through = true);
 
@@ -299,10 +311,8 @@ namespace LinksRouting
     int port = 4487,
         port_status = 4486;
 
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
-    if( dir.isEmpty() )
-      qWarning() << "Could not get writable location for saving logfile.";
-    else
+    QString dir;
+    if( getDataSaveDir(dir) )
     {
       _log_file.setFileName( dir + "/"
                            + QHostInfo::localHostName()
@@ -430,6 +440,25 @@ namespace LinksRouting
     ).count();
     double dt = dur_us / 1000000.;
     last_time = now;
+
+    auto last_save =
+      std::chrono::duration_cast<std::chrono::seconds>(now - _last_autosave);
+    if( last_save.count() >= _autosave_interval )
+    {
+      QString save_path;
+      if( getDataSaveDir(save_path) )
+      {
+        save_path += "/" + QHostInfo::localHostName()
+                      + "-"
+                      + dateTimeString()
+                      + "." + SAVE_FILE_EXT;
+        saveState(save_path);
+
+        _last_autosave = now;
+      }
+      else
+        qWarning() << "Can not get location for auto save!";
+    };
 
     auto updatePopup = [&](SlotType::AnimatedPopup& popup) -> uint32_t
     {
@@ -706,9 +735,9 @@ namespace LinksRouting
 
     if( _save_state_file.isEmpty() )
     {
-      QString dir = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
-      if( dir.isEmpty() )
-        qWarning() << "Could not get writable location for saving state.";
+      QString dir;
+      if( !getDataSaveDir(dir) )
+        return;
 
       _save_state_file = dir + "/"
                         + QHostInfo::localHostName()
@@ -1449,7 +1478,8 @@ namespace LinksRouting
     if( insert_pair.first == _concept_links.end() )
       return;
 
-    auto node_ids = insert_pair.first.key();
+    auto it = insert_pair.first;
+    const QString node_ids = it.key();
     if( !insert_pair.second )
     {
       qWarning() << "Concept link" << node_ids << "already exists.";
@@ -1457,10 +1487,15 @@ namespace LinksRouting
     }
     qDebug() << "add concept link:" << node_ids;
 
-    distributeMessage(QJsonObject({
-      {"task", "CONCEPT-LINK-NEW"},
-      {"nodes", to_json(node_ids.split(':'))}
-    }));
+    QJsonObject msg_ret(msg);
+    msg_ret.remove("task");
+    msg_ret["nodes"] = to_json(node_ids.split(':'));
+
+    it.value() = msg_ret.toVariantMap();
+
+    msg_ret["task"] = "CONCEPT-LINK-NEW";
+    msg_ret["id"] = node_ids;
+    distributeMessage(msg_ret);
   }
 
   //----------------------------------------------------------------------------

@@ -155,6 +155,17 @@
                      size="4" maxlength="4"
                      onchange="onChangeSetting(this, 'Float');" />
           </row>
+          <row>
+            <label value="Autosave Interval (s)" control="QtWebsocketServer:AutoSaveInterval"/>
+            <textbox id="QtWebsocketServer:AutoSaveInterval"
+                     type="number"
+                     value="60"
+                     min="30"
+                     max="3600"
+                     increment="10"
+                     size="4" maxlength="4"
+                     onchange="onChangeSetting(this, 'Integer');" />
+          </row>
 
         </rows>
       </grid>
