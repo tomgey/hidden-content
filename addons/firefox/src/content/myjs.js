@@ -59,7 +59,6 @@ function getOrCreateDrawFrame(doc, clear)
   }
   else if( clear )
   {
-    console.log("clear frame");
     removeAllChildren(draw_frame);
   }
 
@@ -560,7 +559,7 @@ function onLoad(e)
     return;
 
   var pid = getPid();
-  var info_str = "(url=" + view.location.href
+  var info_str = "(url=" + location.href
                + ", pid=" + pid + ")";
 
   try
@@ -1959,8 +1958,7 @@ function findBoundingBox(doc, obj)
  */
 function updateConcepts()
 {
-  console.log("Update concepts...");
-
+  return; // Disabled for now...
   var concept_area = $('document-concepts');
   removeAllChildren(concept_area);
 
