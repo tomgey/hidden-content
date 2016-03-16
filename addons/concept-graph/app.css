@@ -111,6 +111,16 @@ span.action-shortcut {
   margin: 0.5em;
 }
 
+.card-concept-details .concept-color {
+  display: flex;
+}
+
+.card-concept-details .concept-color > a {
+  width: 20px;
+  height: 20px;
+  margin: 2px;
+}
+
 .card-concept-details .mdl-textfield {
   padding: 0.2em;
   width: auto;

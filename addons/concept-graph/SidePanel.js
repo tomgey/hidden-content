@@ -135,6 +135,23 @@ var SidePanel = {
       {
         updateConceptColor(this.value);
       });
+    var colors =
+      card.select('.concept-color')
+          .selectAll('a')
+          // http://colorbrewer2.org/?type=qualitative&scheme=Dark2&n=8
+          .data(['#1b9e77','#d95f02','#7570b3','#e7298a','#66a61e','#e6ab02','#a6761d','#666666'])
+          .on('click', function(d)
+          {
+            updateConceptColor(d);
+            concept_graph.updateConcept({
+              id: SidePanel._active_concept.id,
+              'color': d
+            });
+          });
+
+    colors.enter()
+      .append('a')
+      .style('background-color', function(d) { return d; });
 
     card.select('.user-data').property('value', concept['user-data'] || '');
     card.select('.raw-data').text(JSON.stringify(concept, null, 1));

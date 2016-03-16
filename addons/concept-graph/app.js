@@ -39,13 +39,15 @@ var concept_graph =
 
     restart();
     updateDetailDialogs();
+
+    concept_graph.updateSelection('set', id, false);
   })
   .on('concept-update', function(id, concept)
   {
     restart();
 
-    if( SidePanel._active_concept && SidePanel._active_concept.id == id )
-      SidePanel._active_concept = null;
+    var card = SidePanel._cards.concept;
+    card.select('.user-data').property('value', concept['user-data']);
 
     updateDetailDialogs();
 
@@ -62,9 +64,22 @@ var concept_graph =
     if( type == 'concept' )
       abortLink('link://concept/' + id);
   })
+  .on('relation-new', function(id)
+  {
+    concept_graph.updateSelection('set', id, false);
+    restart(true);
+    updateDetailDialogs();
+  })
+  .on('relation-update', function(id, rel)
+  {
+    var card = SidePanel._cards.relation;
+    card.select('.user-data').property('value', rel['user-data']);
+    card.select('.label').property('value', rel['label']);
+
+    restart(true);
+    updateDetailDialogs();
+  })
   .on([ 'concept-delete',
-        'relation-new',
-        'relation-update',
         'relation-delete',
         'selection-change' ], function(id, rel, type)
   {
