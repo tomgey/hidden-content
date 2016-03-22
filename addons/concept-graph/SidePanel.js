@@ -232,18 +232,40 @@ var SidePanel = {
     li.append('a')
       .attr('class', 'ref-img mdl-badge')
       .attr('data-badge', function(d) { return active_urls.get(d.url); })
+      .on('click', function(d) { SidePanel._onRefClick(d.url, type, id); })
       .append('img')
         .attr('src', function(d){ return d.icon; });
     li.append('a')
       .attr('class', 'ref-url')
       .attr('target', '_blank')
       .attr('href', function(d){ return d.url; })
-      .text(function(d){ return d.title || d.url; });
+      .text(function(d){ return d.title || d.url; })
+      .on('click', function(d) { SidePanel._onRefClick(d.url, type, id); });
     li.append('button')
       .attr('class', 'concept-ref-delete mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect')
       .on('click', function(d){ concept_graph.removeReference(id, d.url); })
         .append('i')
         .attr('class', 'material-icons')
         .text('delete');
+  },
+  _onRefClick: function(url, type, id)
+  {
+    d3.event.preventDefault();
+
+    if( type == 'concept' )
+    {
+      var concept = concept_graph.getConceptById(id),
+          pos = [concept.x, concept.y];
+      sendInitiateForNode(concept);
+    }
+    else
+    {
+      var rel = concept_graph.getRelationById(id),
+          pos = rel.center;
+      console.log('rel', rel);
+      sendInitiateForNode(rel);
+    }
+
+    openURL(url, svgToScreenPos(pos));
   }
 };

@@ -341,7 +341,7 @@ function handleRequest(msg)
   var c = 'link://concept/';
   if( msg.id.startsWith(c) )
   {
-    var node = concept_graph.getConceptById( msg.id.substring(c.length) );
+    var node = concept_graph.getById( msg.id.substring(c.length) );
     if( !node )
       return false; // Try again (eg. if new nodes arrive)
   }
@@ -354,7 +354,7 @@ function handleRequest(msg)
 
   active_links.add(msg.id);
 
-  var do_circle = localStorage.getItem('link-circle') == 'true';
+  var do_circle = true; //localStorage.getItem('link-circle') == 'true';
   var bbs = [];
   node_groups
     .filter(function(d){ return d.id == node.id; })
@@ -366,11 +366,14 @@ function handleRequest(msg)
               x: node.x + d.x + 8,
               y: node.y + d.y + 8
             })
-          : [[ node.x + d.x + 8,
-               node.y + d.y + 16
-            ]]
+          : [svgToScreenPos([ node.x + d.x + 8,
+                              node.y + d.y + 16 ])
+            ]
         );
     });
+
+  if( node.center )
+    bbs.push([svgToScreenPos(node.center)]);
 
   bbs.push({"ref": "viewport"});
   send({
@@ -812,37 +815,14 @@ function restart(update_layout = true)
           d3.event.stopPropagation();
         });
 
-    var open_url_options =
-      'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
-
     ref_enter
       .append('image')
       .attr('width', 18)
       .attr('height', 18)
       .on('click', function(d)
        {
-         if( active_urls.has(d.url) )
-           send({
-             task: 'WM',
-             cmd: 'activate-window',
-             url: d.url
-           });
-         else
-         {
-           var graph_bb = getViewport();
-           var l = 20,
-               t = 20,
-               w = 1000,
-               h = 800;
-           window.open(
-             d.url,
-             '_blank',
-             open_url_options + ',left=' + l
-                              + ',top=' + t
-                              + ',width=' + w
-                              + ',height=' + h
-           );
-         }
+         openURL(d.url, svgToScreenPos([node_data.x, node_data.y]));
+         sendInitiateForNode(node_data);
        });
     ref_enter
       .append('circle')
@@ -864,6 +844,45 @@ function restart(update_layout = true)
     // set the graph in motion
     resize();
     force.start();
+  }
+}
+
+function openURL(url, screen_pos)
+{
+  var open_url_options =
+    'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
+
+  if( active_urls.has(url) )
+  {
+    send({
+      task: 'WM',
+      cmd: 'activate-window',
+      url: url
+    });
+  }
+  else
+  {
+    var graph_bb = getViewport(),
+        dx = screen_pos[0] - svg.attr('width') / 2,
+        dy = screen_pos[1] - svg.attr('height') / 2,
+        dlen = Math.sqrt(dx * dx + dy * dy),
+        new_len = graph_bb[2] / 1.8 + 600,
+        fac = new_len / dlen,
+        new_x = screenX + graph_bb[0] + graph_bb[2] / 2 + fac * dx,
+        new_y = screenY + graph_bb[1] + graph_bb[3] / 2 + fac * dy;
+
+    var l = new_x - 500,
+        t = new_y - 500,
+        w = 1000,
+        h = 800;
+    window.open(
+      url,
+      '_blank',
+      open_url_options + ',left=' + l
+                       + ',top=' + t
+                       + ',width=' + w
+                       + ',height=' + h
+    );
   }
 }
 
