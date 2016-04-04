@@ -136,8 +136,8 @@ namespace LinksRouting
 
       QRect          _desktop_rect;
       WindowInfos    _regions,
-		             _last_regions;
-	  int            _timeout;
+                     _last_regions;
+      int            _timeout;
       QTimer         _timer;
       RegionsCallback _cb_regions_changed;
 

@@ -2960,6 +2960,7 @@ namespace LinksRouting
 
       QJsonObject client_state;
       client_state["client-id"] = client.second->id();
+      client_state["window-id"] = qint64(client.second->getWindowInfo().id);
       client_state["data"] = client.second->stateData();
       client_state["region"] = to_json(client.second->getWindowInfo().region);
       client_data.append(client_state);
@@ -2968,6 +2969,22 @@ namespace LinksRouting
     QJsonObject msg_state;
     msg_state["clients"] = client_data;
     msg_state["screen"] = to_json(desktopRect().bottomRight().toQSize());
+
+    QJsonArray opened_windows;
+    for(auto const& w: _window_monitor.getWindows())
+    {
+      opened_windows << QJsonObject{
+        {"window-id", qint64(w.id)},
+        {"minimized", w.minimized},
+        {"covered", w.covered},
+        {"pid", qint64(w.pid)},
+        {"data", {
+          {"title", w.title}
+        }},
+        {"region", to_json(w.region)}
+      };
+    }
+    msg_state["windows"] = opened_windows;
 
     QJsonArray links;
     for(auto const& link: *_slot_links->_data)
