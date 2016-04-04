@@ -940,8 +940,18 @@ namespace LinksRouting
       return;
     }
 
-    urlDec( client->second->url() );
+    auto& client_info = client->second;
+
+    urlDec( client_info->url() );
     sendUrlUpdate();
+
+    QJsonObject msg{
+      {"task", "UNREGISTER"},
+      {"msg-sender-wid", qint64(client_info->getWindowInfo().id)},
+      {"client-id", client_info->id()}
+    };
+    distributeMessage(msg, client_info);
+    logWrite(msg);
 
     _clients.erase(client);
     socket->deleteLater();
@@ -970,7 +980,8 @@ namespace LinksRouting
   {
     QTcpSocket* client = qobject_cast<QTcpSocket*>(sender());
 
-    //qDebug() << client->readAll();
+    QByteArray data = client->readAll(); // clear read queue
+    //qDebug() << data;
     QString response(
       "HTTP/1.0 200 OK\r\n"
       "Access-Control-Allow-Origin: *\r\n"
