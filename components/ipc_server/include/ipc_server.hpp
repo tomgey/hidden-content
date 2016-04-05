@@ -309,6 +309,8 @@ namespace LinksRouting
       PropertyObjectMap _concept_layout; //!< Node layout (in the browser
                                          //   concept graph)
 
+      QString           _session_start_stamp,
+                        _session_state_dir;
       QFile             _log_file;
       clock::time_point _last_autosave;
 

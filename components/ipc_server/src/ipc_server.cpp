@@ -97,16 +97,6 @@ namespace LinksRouting
     clamp<T>(val += step, min, max);
   }
 
-  bool getDataSaveDir(QString& dir)
-  {
-    dir = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
-    if( !dir.isEmpty() )
-      return true;
-
-    qWarning() << "Could not get writable location.";
-    return false;
-  }
-
   class IPCServer::TileHandler:
     public SlotType::TileHandler
   {
@@ -311,28 +301,44 @@ namespace LinksRouting
     int port = 4487,
         port_status = 4486;
 
-    QString dir;
-    if( getDataSaveDir(dir) )
+    _session_start_stamp = dateTimeString();
+    _session_state_dir =
+      QStandardPaths::writableLocation(QStandardPaths::DataLocation);
+
+    if( _session_state_dir.isEmpty() )
+      qFatal("Unable to get writable location for the session data.");
+
+    _session_state_dir += "/" + QHostInfo::localHostName()
+                        + "-" + _session_start_stamp;
+    _log_file.setFileName( _session_state_dir
+                         + "/" + QHostInfo::localHostName()
+                         + "-" + _session_start_stamp
+                         + "." + LOG_FILE_EXT );
+
+    QFileInfo file_info(_log_file);
+    QDir file_dir = file_info.absoluteDir();
+    if( !file_dir.exists() && !QDir("/").mkpath(file_dir.absolutePath()) )
     {
-      _log_file.setFileName( dir + "/"
-                           + QHostInfo::localHostName()
-                           + "-"
-                           + dateTimeString()
-                           + "." + LOG_FILE_EXT
-                           );
-      if( !_log_file.open(QIODevice::WriteOnly | QIODevice::Text) )
-        qWarning() << "Failed top open logfile" << _log_file.fileName();
-      else
-      {
-        _log_file.write("[");
-        QJsonObject msg = {
-          {"type", "LOG_START"},
-          {"host", QHostInfo::localHostName()},
-          {"desktop-rect", to_json(desktopRect().toQRect())}
-        };
-        logWrite(msg);
-      }
+      std::string session_dir =
+        file_dir.absolutePath().toLocal8Bit().constData();
+      qFatal("Unable to create session directory: '%s'", session_dir.c_str());
     }
+
+    if( !_log_file.open(QIODevice::WriteOnly | QIODevice::Text) )
+    {
+      std::string file_name = _log_file.fileName().toLocal8Bit().constData();
+      qFatal("Failed top open logfile: '%s'", file_name.c_str());
+    }
+
+    qDebug() << "Opened logfile:" << _log_file.fileName();
+
+    _log_file.write("[");
+    QJsonObject msg = {
+      {"type", "LOG_START"},
+      {"host", QHostInfo::localHostName()},
+      {"desktop-rect", to_json(desktopRect().toQRect())}
+    };
+    logWrite(msg);
 
     _server = new QWebSocketServer(
       QStringLiteral("Hidden Content Server"),
@@ -341,10 +347,12 @@ namespace LinksRouting
     );
     if( !_server->listen(QHostAddress::Any, port) )
     {
-      LOG_ERROR("Failed to start WebSocket server on port " << port << ": "
-                << _server->errorString() );
-      return;
+      std::string error_str = _server->errorString().toLocal8Bit().constData();
+      qFatal( "Failed to start WebSocket server on port %d: '%s'",
+              port,
+              error_str.c_str() );
     }
+
     LOG_INFO("WebSocket server listening on port " << port);
     connect( _server, &QWebSocketServer::newConnection,
              this, &IPCServer::onClientConnection );
@@ -352,9 +360,11 @@ namespace LinksRouting
     _status_server = new QTcpServer(this);
     if( !_status_server->listen(QHostAddress::Any, port_status) )
     {
-      LOG_ERROR("Failed to start status server on port " << port_status << ": "
-                << _status_server->errorString() );
-      return;
+      std::string error_str =
+        _status_server->errorString().toLocal8Bit().constData();
+      qFatal( "Failed to start status server on port %d: '%s'",
+              port_status,
+              error_str.c_str() );
     }
     LOG_INFO("Status server listening on port " << port_status);
     connect( _status_server, &QTcpServer::newConnection,
@@ -445,14 +455,12 @@ namespace LinksRouting
       std::chrono::duration_cast<std::chrono::seconds>(now - _last_autosave);
     if( last_save.count() >= _autosave_interval )
     {
-      QString save_path;
-      if( getDataSaveDir(save_path) )
+      if( !_session_state_dir.isEmpty() )
       {
-        save_path += "/" + QHostInfo::localHostName()
-                      + "-"
-                      + dateTimeString()
-                      + "." + SAVE_FILE_EXT;
-        saveState(save_path);
+        saveState( _session_state_dir
+                 + "/" + QHostInfo::localHostName()
+                 + "-" + dateTimeString()
+                 + "." + SAVE_FILE_EXT );
 
         _last_autosave = now;
       }
@@ -735,16 +743,13 @@ namespace LinksRouting
 
     if( _save_state_file.isEmpty() )
     {
-      QString dir;
-      if( !getDataSaveDir(dir) )
+      if( _session_state_dir.isEmpty() )
         return;
 
-      _save_state_file = dir + "/"
-                        + QHostInfo::localHostName()
-                        + "-"
-                        + dateTimeString()
-                        + "." + SAVE_FILE_EXT;
-
+      _save_state_file = _session_state_dir
+                       + "/" + QHostInfo::localHostName()
+                       + "-" + dateTimeString()
+                       + "." + SAVE_FILE_EXT;
     }
 
     qDebug() << "Going to save state to" << _save_state_file;
@@ -2976,10 +2981,10 @@ namespace LinksRouting
       opened_windows << QJsonObject{
         {"window-id", qint64(w.id)},
         {"minimized", w.minimized},
-        {"covered", w.covered},
         {"pid", qint64(w.pid)},
-        {"data", {
-          {"title", w.title}
+        {"data", QJsonObject{
+          {"title", w.title},
+          {"executable", QxtWindowSystem::executablePath(w.pid)}
         }},
         {"region", to_json(w.region)}
       };

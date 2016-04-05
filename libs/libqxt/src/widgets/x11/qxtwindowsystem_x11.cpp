@@ -29,6 +29,7 @@
 ** <http://libqxt.org>  <foundation@libqxt.org>
 *****************************************************************************/
 
+#include <QFile>
 #include <QLibrary>
 #include <QX11Info>
 #include <X11/Xatom.h>
@@ -382,6 +383,12 @@ uint32_t QxtWindowSystem::applicationPID(WId window)
   XFree(prop_data);
 
   return win_pid;
+}
+
+//------------------------------------------------------------------------------
+QString QxtWindowSystem::executablePath(uint32_t pid)
+{
+  return QFile::symLinkTarget( QString("/proc/%1/exe").arg(pid) );
 }
 
 //------------------------------------------------------------------------------

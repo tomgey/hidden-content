@@ -55,6 +55,7 @@ public:
     static QStringList windowTitles();
     static QRect windowGeometry(WId window);
     static uint32_t applicationPID(WId window);
+    static QString executablePath(uint32_t pid);
 
     static void setWindowProperty( WId window,
                                    QString const& key,
