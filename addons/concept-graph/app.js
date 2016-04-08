@@ -821,7 +821,7 @@ function restart(update_layout = true)
       .attr('height', 18)
       .on('click', function(d)
        {
-         openURL(d.url, svgToScreenPos([node_data.x, node_data.y]));
+         openURLorFocus(d.url, svgToScreenPos([node_data.x, node_data.y]));
          sendInitiateForNode(node_data);
        });
     ref_enter
@@ -847,11 +847,23 @@ function restart(update_layout = true)
   }
 }
 
-function openURL(url, screen_pos)
+function openURL(url, region)
 {
   var open_url_options =
     'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
 
+  window.open(
+    url,
+    '_blank',
+    open_url_options + ',left=' + region[0]
+                     + ',top=' + region[1]
+                     + ',width=' + region[2]
+                     + ',height=' + region[3]
+    );
+}
+
+function openURLorFocus(url, screen_pos)
+{
   if( active_urls.has(url) )
   {
     send({
@@ -875,14 +887,7 @@ function openURL(url, screen_pos)
         t = new_y - 500,
         w = 1000,
         h = 800;
-    window.open(
-      url,
-      '_blank',
-      open_url_options + ',left=' + l
-                       + ',top=' + t
-                       + ',width=' + w
-                       + ',height=' + h
-    );
+    openURL(url, [l, t, w, h]);
   }
 }
 
