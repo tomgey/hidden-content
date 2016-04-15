@@ -21,6 +21,7 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   ClientInfo::ClientInfo(QWebSocket* socket, IPCServer* ipc_server, WId wid):
     socket(socket),
+    _pid(0),
     _dirty(~0),
     _ipc_server(ipc_server),
     _window_info(wid),
@@ -77,9 +78,61 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  void ClientInfo::setType(const QString& type)
+  {
+    _type = type;
+    _dirty |= MATCH;
+  }
+
+  //----------------------------------------------------------------------------
+  const QString& ClientInfo::type() const
+  {
+    return _type;
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::setTitle(const QString& title)
+  {
+    _title = title;
+    _dirty |= MATCH;
+  }
+
+  //----------------------------------------------------------------------------
+  const QString& ClientInfo::title() const
+  {
+    return _title;
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::setProcessId(uint32_t pid)
+  {
+    _pid = pid;
+    _dirty |= MATCH;
+  }
+
+  //----------------------------------------------------------------------------
+  uint32_t ClientInfo::processId() const
+  {
+    return _pid;
+  }
+
+  //----------------------------------------------------------------------------
   void ClientInfo::setUrl(const QUrl& url)
   {
     _url = url;
+  }
+
+  //----------------------------------------------------------------------------
+  void ClientInfo::setReportedGeometry(const QRect& geom)
+  {
+    _geom = geom;
+    _dirty |= MATCH;
+  }
+
+  //----------------------------------------------------------------------------
+  const QRect& ClientInfo::reportedGeometry() const
+  {
+    return _geom;
   }
 
   //----------------------------------------------------------------------------
@@ -115,10 +168,16 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   void ClientInfo::parseView(const QJsonObject& msg)
   {
-    if( msg.contains("viewport") )
+    bool has_viewport = msg.contains("viewport"),
+         has_scroll_region = msg.contains("scroll-region");
+
+    if( !has_viewport && !has_scroll_region )
+      return;
+
+    if( has_viewport )
       viewport = from_json<QRect>(msg.value("viewport"));
 
-    if( msg.contains("scroll-region") )
+    if( has_scroll_region )
       scroll_region = from_json<QRect>(msg.value("scroll-region"));
     else
       // If no scroll-region is given assume only content within viewport is
@@ -276,8 +335,114 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  bool ClientInfo::updateWindowInfo(const WindowRegions& windows)
+  {
+    if( _window_info.isValid() && !(_dirty & MATCH) )
+      return true;
+
+    WindowInfoIterators possible_windows;
+    if( processId() )
+      // Only further check windows matching the given process id
+      possible_windows = windows.find_all(processId(), "");
+    else
+      // Get all windows for further checks
+      possible_windows = windows.find_all("");
+
+    auto checkMatchOne = [&]( WindowInfoIterators const& w_its,
+                              QString const& reason )
+    {
+      if( w_its.size() != 1 )
+        return false;
+
+      _dirty &= ~MATCH;
+
+      WindowInfo const& winfo = *w_its.front();
+      if( winfo.id == _window_info.id )
+      {
+        qDebug() << "Not updating already correct match";
+        return true;
+      }
+
+      qDebug() << "Found one remaining matching window by" << reason
+                                                           << winfo.title;
+
+      if( _window_info.isValid() )
+        qDebug() << "Replace with new match";
+
+      _window_info = winfo;
+      _dirty |= WINDOW;
+
+      return true;
+    };
+
+    if( checkMatchOne(possible_windows, "process id") )
+      return true;
+
+    bool is_firefox = type() == "Firefox";
+    const QRect& geom = reportedGeometry();
+    qDebug() << "check match region and/or title" << geom << title();
+
+    QString clean_title = title();
+    clean_title.remove(QRegExp("\\W")); // remove non alpha-numeric characters
+
+    WindowInfoIterators matching_windows;
+    for(auto w: possible_windows)
+    {
+      if(    w->region.x() != geom.x()
+          || w->region.y() != geom.y()
+          || w->region.width() != geom.width()
+             // ignore title bar of maximized windows, because
+             // they are integrated into the global menubar
+          || std::abs(w->region.height() - geom.height()) > 30 )
+      {
+        qDebug() << " - region mismatch" << w->region << w->title;
+        continue;
+      }
+
+      qDebug() << " - region match" << w->region << w->title;
+
+      if( is_firefox && !w->title.contains("Mozilla Firefox")
+                     && !w->title.contains("Aurora") )
+      {
+        qDebug() << " - region not a Firefox window";
+        continue;
+      }
+
+      QString clean_window_title = w->title;
+      clean_window_title.remove(QRegExp("\\W"));
+
+      if( !clean_window_title.startsWith(clean_title) )
+      {
+        qDebug() << " - title missmatch" << clean_window_title << clean_title;
+        continue;
+      }
+
+      qDebug() << " - match";
+      matching_windows.push_back(w);
+    }
+
+    if( matching_windows.size() > 1 )
+    {
+      qDebug() << "Found multiple matching windows -> selecting the top one";
+      matching_windows.front() = matching_windows.back();
+      matching_windows.resize(1);
+    }
+
+    // TODO handle cases where multiple clients match the same window
+    //      recheck other matches if some match changes?
+
+    return checkMatchOne(matching_windows, "geometry/title");
+  }
+
+  //----------------------------------------------------------------------------
   bool ClientInfo::update(const WindowRegions& windows)
   {
+    if( !updateWindowInfo(windows) )
+    {
+      qDebug() << "Failed to get a matching window info.";
+      return false;
+    }
+
     auto window_info = windows.find(_window_info.id);
     if( window_info == windows.end() )
       return false;

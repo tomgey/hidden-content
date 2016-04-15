@@ -61,6 +61,23 @@ namespace LinksRouting
     void setId(const QString& id);
     const QString& id() const;
 
+    void setType(const QString& type);
+    const QString& type() const;
+
+    void setTitle(const QString& title);
+    const QString& title() const;
+
+    void setProcessId(uint32_t pid);
+    uint32_t processId() const;
+
+    /** Set/Get window geometry as reported by the client
+     *
+     * @note It can be used eg to match the window but does not necessarily need
+     *       to represent the real geometry.
+     */
+    void setReportedGeometry(const QRect& geom);
+    const QRect& reportedGeometry() const;
+
     void setUrl(const QUrl& url);
     const QUrl& url() const;
 
@@ -85,6 +102,12 @@ namespace LinksRouting
       const QJsonObject& msg,
       LinkDescription::NodePtr node = nullptr
     );
+
+    /**
+     * Check if the currently assigned window info still matches and find
+     * the real (a better) one if not.
+     */
+    bool updateWindowInfo(const WindowRegions& windows);
 
     /**
      *
@@ -159,7 +182,8 @@ namespace LinksRouting
         REGIONS         = WINDOW << 1,
         VISIBLITY       = REGIONS << 1,
         SCROLL_POS      = VISIBLITY << 1,
-        SCROLL_SIZE     = SCROLL_POS << 1
+        SCROLL_SIZE     = SCROLL_POS << 1,
+        MATCH           = SCROLL_SIZE << 1
       };
 
       /**
@@ -201,10 +225,19 @@ namespace LinksRouting
         RIGHT
       };
 
-      QString                       _id; //!< unique identifier (eg. used for
-                                         //   save/restore)
-      QUrl                          _url; //!< URL of currently displayed
-                                          //   content/document
+      QString                       _id,   //!< unique identifier (eg. used for
+                                           //   save/restore/sync)
+                                    _type, //!< Identifier for the type of
+                                           //   application
+                                    _title;//<! Window title (as reported by
+                                           //   the client)
+      uint32_t                      _pid;  //<! Process id as reported by the
+                                           //   client (use for window matching)
+      QRect                         _geom; //<! Window geometry (as reported by
+                                           //   the client)
+      QUrl                          _url;  //!< URL of currently displayed
+                                           //   content/document
+
       QJsonObject                   _state_data; //!< data to save/restore state
       QSet<QString>                 _cmds; //!< Supported commands
 

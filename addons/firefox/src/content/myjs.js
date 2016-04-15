@@ -301,6 +301,21 @@ function updateScale()
 }
 
 /**
+ * Get geometry of browser window (including window decoration)
+ */
+function getWindowGeometry()
+{
+  var title_and_tool_bar_height = window.mozInnerScreenY - window.screenY,
+      tool_bar_height = window.outerHeight - window.innerHeight,
+      title_bar_height = title_and_tool_bar_height - tool_bar_height;
+
+  return [
+    window.screenX, window.screenY,
+    window.outerWidth, window.outerHeight + title_bar_height
+  ];
+}
+
+/**
  * Get the document region relative to the application window
  *
  * @param ref "rel" or "abs"
@@ -331,12 +346,12 @@ function getViewport(ref = "rel")
 function getScrollRegion()
 {
   var doc = content.document;
-  return {
-    x: -content.scrollX, // coordinates relative to
-    y: -content.scrollY, // top left corner of viewport
-    width: doc.documentElement.scrollWidth,
-    height: doc.documentElement.scrollHeight
-  };
+  return [
+    -content.scrollX, // coordinates relative to
+    -content.scrollY, // top left corner of viewport
+    doc.documentElement.scrollWidth,
+    doc.documentElement.scrollHeight
+  ];
 }
 
 /**
@@ -356,6 +371,7 @@ function onUrlChange(url, tab, reason)
     'task': 'SYNC',
     'type': 'URL',
     'url': url,
+    'title': document.title,
     'tab-id': session_store.getTabValue(tab, "hcd/tab-id"),
     'reason': reason
   };
@@ -373,7 +389,7 @@ function onPageLoad(event)
       url: getContentUrl(),
       icon: typeof(gBrowser) !== 'undefined' ? gBrowser.getIcon() : null,
     },
-    function(img_data) { console.log('update favicon..', img_data); favicon = img_data; }
+    function(img_data) { favicon = img_data; }
   );
 
   updateConcepts();
@@ -418,7 +434,7 @@ function onPageLoad(event)
 
   suspend_autostart = false;
   if( !stopped )
-    setTimeout(resize, 200);
+    setTimeout(onGeometryChange, 200, event, 'pageload', {title: doc.title});
   else if( getPref("auto-connect") )
     setTimeout(start, 0, true, src_id);
 
@@ -678,7 +694,7 @@ function _getCurrentTabData(e)
 
   var data = {
     "url": browser.currentURI.spec,
-    "scroll": [-scroll.x, -scroll.y],
+    "scroll": [-scroll[0], -scroll[1]],
     "elements-scroll": scrollables,
     "view": getViewport("abs"),
     "tab-id": doc._hcd_tab_id,
@@ -941,7 +957,7 @@ function start(match_title = false, src_id = 0, check = true)
   {
 //    window.addEventListener('unload', stopVisLinks, false);
     window.addEventListener("DOMAttrModified", attrModified, false);
-    window.addEventListener('resize', resize, false);
+//    window.addEventListener('resize', resize, false);
 //    window.addEventListener("DOMContentLoaded", windowChanged, false);
   }
 }
@@ -1148,7 +1164,8 @@ function reportVisLinks(id, found, refs)
     };
   }
 
-  var content_url = getContentUrl();
+  var content_url = getContentUrl(),
+      view = content.document.defaultView;
 
   for(var url in refs)
   {
@@ -1157,7 +1174,7 @@ function reportVisLinks(id, found, refs)
 
     var selections = refs[url]['selections'];
     for(var sel of selections)
-      appendBBsFromSelection(bbs, sel, vp_origin);
+      appendBBsFromSelection(bbs, sel, [view.scrollX, view.scrollY], {ref: 'scroll'});
   }
 
   var msg = {
@@ -1198,18 +1215,18 @@ function onScrollImpl()
     'task': 'SYNC',
     'type': 'SCROLL',
     'item': 'CONTENT',
-    'pos': [scroll.x, scroll.y],
+    'pos': [scroll[0], scroll[1]],
     'pos-rel': [0, 0],
     'tab-id': content.document._hcd_tab_id
   };
 
-  var scroll_w = scroll.width - view[2];
+  var scroll_w = scroll[2] - view[2];
   if( scroll_w > 1 )
-    msg['pos-rel'][0] = scroll.x / scroll_w;
+    msg['pos-rel'][0] = scroll[0] / scroll_w;
 
-  var scroll_h = scroll.height - view[3];
+  var scroll_h = scroll[3] - view[3];
   if( scroll_h > 1 )
-    msg['pos-rel'][1] = scroll.y / scroll_h;
+    msg['pos-rel'][1] = scroll[1] / scroll_h;
 
   send(msg);
   ctrlSend(msg);
@@ -1269,7 +1286,7 @@ function stop()
 //	setStatus('');
 //	window.removeEventListener('unload', stopVisLinks, false);
   window.removeEventListener("DOMAttrModified", attrModified, false);
-  window.removeEventListener('resize', resize, false);
+//  window.removeEventListener('resize', resize, false);
 
   if( links_socket )
   {
@@ -1299,19 +1316,15 @@ function sendMsgRegister(match_title, src_id, click_pos)
   if( src_id )
     cmds.push('scroll');
 
-  var reg = getScrollRegion();
   var msg = {
     'task': 'REGISTER',
     'type': "Firefox",
     'pid': getPid(),
     'cmds': cmds,
     'viewport': getViewport(),
-    'scroll-region': [reg.x, reg.y, reg.width, reg.height],
+    'scroll-region': getScrollRegion(),
     "client-id": client_id,
-    'geom': [
-      window.screenX, window.screenY,
-      window.outerWidth, window.outerHeight
-    ],
+    'geom': getWindowGeometry(),
     'url': getContentUrl()
   };
 
@@ -1579,18 +1592,41 @@ function handleTileRequest()
   tile_timeout = true;
 }
 
+var last_size_change = 0,
+    last_pos_change = 0;
 //------------------------------------------------------------------------------
 function attrModified(e)
 {
-  if( e.attrName == 'screenY' )
-    send({
-      'task': 'MOVE',
-      'geom': [
-        window.screenX, window.screenY,
-        window.outerWidth, window.outerHeight
-      ]
-    });
+  switch( e.attrName )
+  {
+    case 'sizemode':
+      onGeometryChange(e, 'sizemode'); // TODO add maximized state?
+      return;
+    case 'height':
+    case 'width':
+    {
+      let new_time = Date.now();
+      if( new_time - last_size_change < 50 )
+        return; // Don't send double events for change of width and height at
+                // the same time
 
+      onGeometryChange(e, 'resize');
+      last_size_change = new_time;
+      return;
+    }
+    case 'screenX':
+    case 'screenY':
+    {
+      let new_time = Date.now();
+      if( new_time - last_pos_change < 50 )
+        return; // Don't send double events for change of screenX and screenY at
+                // the same time
+
+      onGeometryChange(e, 'move');
+      last_pos_change = new_time;
+      return;
+    }
+  }
   return;
   if( e.attrName.lastIndexOf('treestyletab', 0) === 0 )
     return;
@@ -1619,21 +1655,34 @@ function attrModified(e)
 }
 
 //------------------------------------------------------------------------------
-function resize()
+function onGeometryChange(event, type, user_data)
 {
-  var reg = getScrollRegion();
-  send({
-    'task': 'RESIZE',
-    'viewport': getViewport(),
-    'scroll-region': [reg.x, reg.y, reg.width, reg.height],
-    'geom': [
-      window.screenX, window.screenY,
-      window.outerWidth, window.outerHeight
-    ]
-  });
+  console.log('change', user_data);
+//  if( event && event.eventPhase != Event.AT_TARGET )
+//    return;
 
-  for(var route_id in active_routes)
-    reportVisLinks(route_id, true)
+  var msg = {
+    'task': 'RESIZE',
+    'geom': getWindowGeometry()
+  };
+
+  for(var k in user_data)
+    msg[k] = user_data[k];
+  
+  console.log(msg);
+
+  if( type != 'move' )
+  {
+    msg['viewport'] = getViewport();
+    msg['scroll-region'] = getScrollRegion();
+  }
+  send(msg);
+
+  if( type != 'move' )
+  {
+    for(var route_id in active_routes)
+      reportVisLinks(route_id, true)
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -1699,7 +1748,7 @@ function searchAreaTitles(doc, id)
 /**
  *
  */
-function appendBBsFromRange(bbs, range, offset)
+function appendBBsFromRange(bbs, range, offset, region_cfg)
 {
   var rects = [range.getBoundingClientRect()];//range.getClientRects();
   for(var i = 0; i < rects.length; ++i)
@@ -1711,7 +1760,7 @@ function appendBBsFromRange(bbs, range, offset)
       var r = Math.round(offset[0] + scale * (bb.right + 1));
       var t = Math.round(offset[1] + scale * (bb.top - 1));
       var b = Math.round(offset[1] + scale * (bb.bottom));
-      bbs.push([[l, t], [r, t], [r, b], [l, b]]);
+      bbs.push([[l, t], [r, t], [r, b], [l, b], region_cfg]);
     }
   }
 }
@@ -1720,7 +1769,7 @@ function appendBBsFromRange(bbs, range, offset)
  *
  * @param sel   Array of ranges
  */
-function appendBBsFromSelection(bbs, sel, offset)
+function appendBBsFromSelection(bbs, sel, offset, def_region_cfg)
 {
   var body = content.document.body;
   var sel_bbs = [];
@@ -1734,16 +1783,18 @@ function appendBBsFromSelection(bbs, sel, offset)
 
       coords.push(cfg);
       bbs.push(coords);
-      continue;
     }
-    var node_start = utils.getElementForXPath(range['start-node'], body),
-        node_end = utils.getElementForXPath(range['end-node'], body);
+    else
+    {
+      var node_start = utils.getElementForXPath(range['start-node'], body),
+          node_end = utils.getElementForXPath(range['end-node'], body);
 
-    var range_obj = content.document.createRange();
-    range_obj.setStart(node_start, range['start-offset']);
-    range_obj.setEnd(node_end, range['end-offset']);
+      var range_obj = content.document.createRange();
+      range_obj.setStart(node_start, range['start-offset']);
+      range_obj.setEnd(node_end, range['end-offset']);
 
-    appendBBsFromRange(sel_bbs, range_obj, offset);
+      appendBBsFromRange(sel_bbs, range_obj, offset, def_region_cfg);
+    }
   }
   if( !sel_bbs.length )
     return;
@@ -1771,7 +1822,7 @@ function appendBBsFromSelection(bbs, sel, offset)
     b = Math.max(b, b_i);
   }
 
-  bbs.push([[l, t], [r, t], [r, b], [l, b]]);
+  bbs.push([[l, t], [r, t], [r, b], [l, b], def_region_cfg]);
 }
 
 //------------------------------------------------------------------------------
@@ -1798,7 +1849,8 @@ function searchDocument(doc, id)
     return getRegionViewport();
 
   updateScale();
-  var bbs = new Array();
+  var bbs = new Array(),
+      view = doc.defaultView;
 
   var id_regex = id.replace(/[\s-._]+/g, "[\\s-._]+");
   var textnodes = doc.evaluate("//body//*/text()", doc, null,  XPathResult.ANY_TYPE, null);
@@ -1813,7 +1865,7 @@ function searchDocument(doc, id)
       var range = document.createRange();
       range.setStart(node, m.index);
       range.setEnd(node, m.index + m[0].length);
-      appendBBsFromRange(bbs, range, vp_origin);
+      appendBBsFromRange(bbs, range, [view.scrollX, view.scrollY], {ref: 'scroll'});
     }
   }
 

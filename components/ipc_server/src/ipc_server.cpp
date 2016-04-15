@@ -1002,64 +1002,42 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   void IPCServer::onClientRegister(ClientRef client, QJsonObject const& msg)
   {
-    const QString title = from_json<QString>(msg.value("title"));
+    client->setId( from_json<QString>(msg.value("client-id")) );
+    client->setType( from_json<QString>(msg.value("type")) );
+    client->setTitle( from_json<QString>(msg.value("title")) );
+    client->setProcessId( from_json<uint32_t>(msg.value("pid")) );
+    client->setReportedGeometry( from_json<QRect>( msg.value("geom")) );
+
+    if( client->id().isEmpty() )
+      LOG_WARN("REGISTER: Missing or empty 'client-id'.");
+    if( client->type().isEmpty() )
+      LOG_WARN("REGISTER: Missing or empty 'type'.");
+    if( client->title().isEmpty() )
+      LOG_WARN("REGISTER: Missing or empty 'title'.");
+
+    // Identify window
+
     const WindowRegions& windows = _window_monitor.getWindows();
-
-    // Identify window and get its id
-
-    WId wid = 0;
     if( msg.contains("wid") )
     {
       LOG_DEBUG("Use window id from message.");
-      wid = from_json<quintptr>(msg.value("wid"));
+      client->setWindowId( from_json<quintptr>(msg.value("wid")) );
     }
-    else if(    msg.contains("pos")
-             || msg.contains("pid")
-             || !title.isEmpty() )
+    else if( msg.contains("pos") )
     {
-      if( msg.contains("pos") )
-        wid = windows.windowIdAt( from_json<QPoint>(msg.value("pos")) );
-      else
-      {
-        WindowInfoIterators possible_windows;
-        if( msg.contains("pid") )
-          possible_windows = windows.find_all(
-            from_json<uint32_t>(msg.value("pid")),
-            title
-          );
-        else
-          possible_windows = windows.find_all(title);
+      LOG_DEBUG("Get window at click position");
 
-        LOG_DEBUG("Found " << possible_windows.size() << " matches");
-
-        if( !possible_windows.empty() )
-        {
-          QRect geom = from_json<QRect>( msg.value("geom"),
-                                         possible_windows.front()->region );
-
-          for(auto w: possible_windows)
-          {
-            if(    w->region.x() == geom.x()
-                && w->region.y() == geom.y()
-                && w->region.width() == geom.width()
-                   // ignore title bar of maximized windows, because
-                   // they are integrated into the global menubar
-                && std::abs(w->region.height() - geom.height()) < 30 )
-            {
-              LOG_DEBUG(" - region match");
-              wid = w->id;
-            }
-            else
-              LOG_DEBUG(" - region mismatch " << to_string(w->region));
-          }
-        }
-      }
+      QPoint click_pos = from_json<QPoint>(msg.value("pos"));
+      client->setWindowId( windows.windowIdAt(click_pos) );
+    }
+    else
+    {
+      LOG_DEBUG("Try matching window with given hints");
+      client->updateWindowInfo(windows);
     }
 
-    if( wid )
-      client->setWindowId(wid);
-    else
-      LOG_DEBUG("Can not get window id for client.");
+    if( !client->getWindowInfo().isValid() )
+      LOG_DEBUG("Can not get matching window info for client.");
 
     // Supported commands
 
@@ -1068,13 +1046,6 @@ namespace LinksRouting
       for(QJsonValue cmd: msg.value("cmds").toArray())
         client->addCommand( from_json<QString>(cmd) );
     }
-
-    // Unique client identifier
-
-    if( !msg.contains("client-id") )
-      LOG_WARN("REGISTER: Missing 'client-id'.");
-    else
-      client->setId( from_json<QString>(msg.value("client-id")) );
 
     QUrl url = from_json<QUrl>(msg.value("url"));
     if( !url.isValid() )
@@ -1118,9 +1089,18 @@ namespace LinksRouting
   void IPCServer::onClientResize(ClientRef client, QJsonObject const& msg)
   {
     QMutexLocker lock_links(_mutex_slot_links);
+    const auto windows = _window_monitor.getWindows();
+
+    QString title = from_json<QString>(msg.value("title"));
+    if( !title.isEmpty() )
+      client->setTitle(title);
+
+    QRect geom = from_json<QRect>(msg.value("geom"));
+    if( !geom.isEmpty() )
+      client->setReportedGeometry(geom);
 
     client->parseView(msg);
-    client->update(_window_monitor.getWindows());
+    client->update(windows);
   }
 
   //----------------------------------------------------------------------------
@@ -1164,6 +1144,10 @@ namespace LinksRouting
     }
     else
       qWarning() << "Unknown SYNC message." << msg;
+
+    QString title = from_json<QString>(msg.value("title"));
+    if( !title.isEmpty() )
+      client->setTitle(title);
   }
 
   //----------------------------------------------------------------------------
