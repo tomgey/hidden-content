@@ -151,6 +151,6 @@ if (typeof String.prototype.utf8Decode == 'undefined') {
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  */
-if (typeof console == 'undefined') var console = { log: function() {} }; // console.log stub
+//if (typeof console == 'undefined') var console = { log: function() {} }; // console.log stub
 if (typeof module != 'undefined' && module.exports) module.exports = Sha1; // CommonJs export
 if (typeof define == 'function' && define.amd) define([], function() { return Sha1; }); // AMD

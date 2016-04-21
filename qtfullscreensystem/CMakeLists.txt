@@ -33,6 +33,7 @@ set( RUNTIME_FILES
 set (ADDITIONAL_INCLUDE_DIRS
 )
 set (ADDITIONAL_LIBS
+  glsl
 )
 
 # dependencies & build

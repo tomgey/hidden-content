@@ -44,5 +44,6 @@ ADD_LIBRARY(qxt STATIC
   ${HEADER_FILES}
 )
 target_link_libraries(qxt
+  X11
   ${USED_QT_MODULES}
 )
