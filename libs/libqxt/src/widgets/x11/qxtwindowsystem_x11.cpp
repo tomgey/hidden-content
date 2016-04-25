@@ -37,6 +37,22 @@
 
 #include <iostream>
 
+QString utf8StripEscape(QString const& str)
+{
+  QString clean_str;
+
+  for(int i = 0; i < str.length(); ++i)
+  {
+    if( str.at(i) == 0x1b )
+      i += 2;
+    else
+      clean_str.push_back(str.at(i));
+  }
+
+  return clean_str;
+}
+
+//------------------------------------------------------------------------------
 static Atom getXAtom(const char* name)
 {
   return XInternAtom(QX11Info::display(), name, False);
@@ -254,12 +270,12 @@ WId QxtWindowSystem::windowAt(const QPoint& pos)
 //------------------------------------------------------------------------------
 QString QxtWindowSystem::windowTitle(WId window)
 {
-    init();
+  init();
 
-    QString title = getWindowProperty(window, "_NET_WM_NAME");
+  QString title = utf8StripEscape(getWindowProperty(window, "_NET_WM_NAME"));
 
-    // Some windows only have _NET_WM_NAME set...
-    {
+  // Some windows only have _NET_WM_NAME set...
+  {
 //      static Atom wm_name =
 //        XInternAtom(QX11Info::display(), "_NET_WM_NAME", False);
 //
@@ -279,25 +295,29 @@ QString QxtWindowSystem::windowTitle(WId window)
 //      if( data )
 //        XFree(data);
 
-      if( !title.isEmpty() )
-        return title;
-    }
+    if( !title.isEmpty() )
+      return title;
+  }
 
-    XTextProperty prop;
-    if( XGetWMName(QX11Info::display(), window, &prop) )
-      title = QString::fromLocal8Bit( reinterpret_cast<char*>(prop.value),
-                                      prop.nitems );
+  XTextProperty prop;
+  if( XGetWMName(QX11Info::display(), window, &prop) )
+  {
+    title = utf8StripEscape(
+      QString::fromUtf8( reinterpret_cast<char*>(prop.value),
+                         prop.nitems * prop.format / 8 )
+    );
+  }
 
-    if( title.isEmpty() )
-    {
-      char* str = 0;
-      if (XFetchName(QX11Info::display(), window, &str))
-          title = QString::fromUtf8(str);
-      if (str)
-          XFree(str);
-    }
+  if( title.isEmpty() )
+  {
+    char* str = 0;
+    if( XFetchName(QX11Info::display(), window, &str) )
+      title = utf8StripEscape(QString::fromUtf8(str));
+    if( str )
+      XFree(str);
+  }
 
-    return title;
+  return title;
 }
 
 //------------------------------------------------------------------------------
@@ -440,7 +460,7 @@ QString QxtWindowSystem::getWindowProperty(WId window, QString const& key)
     return "";
 
   QString val = QString::fromLocal8Bit( reinterpret_cast<char*>(prop_data),
-                                         prop_count );
+                                        prop_count * format / 8 );
 
   XFree(prop_data);
 

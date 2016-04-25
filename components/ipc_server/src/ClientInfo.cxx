@@ -18,6 +18,33 @@ namespace LinksRouting
 
   static ClientInfo* a300_client = 0;
 
+  /**
+   * Get a cleaned string (remove special characters, unify umlauts, etc.)
+   */
+  QString cleanedString(QString const& str)
+  {
+    QString clean_str;
+    for(int i = 0; i < str.length(); ++i)
+    {
+      QChar const& c = str.at(i).toLower();
+      // TODO handle umlaute, etc. UTF-8/umlaute/whatever are not correctly
+      //      reported by the xlib)
+/*      if( c == 228 ) // ä
+        clean_str.push_back("ae");
+      else if( c == 246 ) // ö
+        clean_str.push_back("oe");
+      else if( c == 252 ) // ü
+        clean_str.push_back("ue");
+      else if( c == 223 ) // ß
+        clean_str.push_back("sz");
+      else*/ if(    ('a' <= c.unicode() && c.unicode() <= 'z')
+               || ('0' <= c.unicode() && c.unicode() <= '9')
+               || QString("@:").contains(c) )
+        clean_str.push_back(c);
+    }
+    return clean_str;
+  }
+
   //----------------------------------------------------------------------------
   ClientInfo::ClientInfo(QWebSocket* socket, IPCServer* ipc_server, WId wid):
     socket(socket),
@@ -380,10 +407,9 @@ namespace LinksRouting
 
     bool is_firefox = type() == "Firefox";
     const QRect& geom = reportedGeometry();
-    qDebug() << "check match region and/or title" << geom << title();
 
-    QString clean_title = title();
-    clean_title.remove(QRegExp("\\W")); // remove non alpha-numeric characters
+    QString clean_title = cleanedString(title());
+    qDebug() << "check match region and/or title" << geom << title() << clean_title;
 
     WindowInfoIterators matching_windows;
     for(auto w: possible_windows)
@@ -408,8 +434,8 @@ namespace LinksRouting
         continue;
       }
 
-      QString clean_window_title = w->title;
-      clean_window_title.remove(QRegExp("\\W"));
+      QString clean_window_title = cleanedString(w->title);
+      qDebug() << "-" << w->title << "clean" << clean_window_title;
 
       if( !clean_window_title.startsWith(clean_title) )
       {
