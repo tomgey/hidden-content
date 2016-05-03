@@ -99,6 +99,8 @@ namespace qtfullscreensystem
       // Rendering
       // ----------
 
+      bool _disable_rendering;
+
       QOffscreenSurface                         _offscreen_surface;
       QOpenGLContext                            _gl_ctx;
       std::unique_ptr<QOpenGLFramebufferObject> _fbo;

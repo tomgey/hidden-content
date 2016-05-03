@@ -11,6 +11,7 @@
 #include "PreviewWindow.hpp"
 #include "Window.hpp"
 
+#include <QCommandLineParser>
 #include <QDesktopWidget>
 #include <QElapsedTimer>
 #include <QScreen>
@@ -124,14 +125,30 @@ namespace qtfullscreensystem
     // Setup component system
     //--------------------------------
 
-    if( argc != 2 )
-      qFatal("Usage: %s <config>", argv[0]);
+    QCommandLineParser parser;
+    parser.addHelpOption();
+    parser.addPositionalArgument(
+     "config",
+     QCoreApplication::translate("main", "Path to config file.")
+    );
+    parser.addOptions({
+      { "disable-rendering",
+        QCoreApplication::translate("main", "Disable rendering/visual links.") }
+    });
+    parser.process(*this);
 
-    assert(argc == 2 && argv && argv[1]);
+    QStringList pos_args = parser.positionalArguments();
+    if( pos_args.size() != 1 )
+    {
+      qDebug() << "Missing config file!";
+      parser.showHelp();
+    }
+
+    _disable_rendering = parser.isSet("disable-rendering");
 
 //    publishSlots(_core.getSlotCollector());
 
-    if( !_config.initFrom(argv[1]) )
+    if( !_config.initFrom(pos_args[0].toStdString()) )
       qFatal("Failed to read config");
     _user_config.initFrom( to_string(user_config) );
 
@@ -139,44 +156,53 @@ namespace qtfullscreensystem
     _core.attachComponent(&_config);
     _core.attachComponent(&_user_config);
     _core.attachComponent(&_server);
-    _core.attachComponent(&_routing_cpu);
-    _core.attachComponent(&_routing_cpu_dijkstra);
-    _core.attachComponent(&_routing_dummy);
+
+    if( !_disable_rendering )
+    {
+      _core.attachComponent(&_routing_cpu);
+      _core.attachComponent(&_routing_cpu_dijkstra);
+      _core.attachComponent(&_routing_dummy);
 #ifdef USE_GPU_ROUTING
-    _core.attachComponent(&_cost_analysis);
-    _core.attachComponent(&_routing_gpu);
+      _core.attachComponent(&_cost_analysis);
+      _core.attachComponent(&_routing_gpu);
 #endif
-    _core.attachComponent(&_renderer);
+      _core.attachComponent(&_renderer);
+    }
 
     _core.attachComponent(this);
 //    registerArg("DebugDesktopImage", _debug_desktop_image);
 //    registerArg("DumpScreenshot", _dump_screenshot = 0);
 
-    QSurfaceFormat fmt;
-    fmt.setRenderableType(QSurfaceFormat::RenderableType::OpenGL);
-    fmt.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
-    fmt.setAlphaBufferSize(8);
-
-    _gl_ctx.setFormat(fmt);
-    if( !_gl_ctx.create() )
-      qFatal("Failed to create OpenGL context.");
-    if( !_gl_ctx.format().hasAlpha() )
-      qFatal("Failed to enable alpha blending.");
-
-    _offscreen_surface.setFormat(fmt);
-    _offscreen_surface.setScreen( QGuiApplication::primaryScreen() );
-    _offscreen_surface.create();
-
-    for(QScreen* s: QGuiApplication::screens())
+    if( !_disable_rendering )
     {
-      auto w = std::make_shared<RenderWindow>(s->availableGeometry());
-      w->setImage(&_fbo_image);
-      w->show();
-      _windows.push_back(w);
+      QSurfaceFormat fmt;
+      fmt.setRenderableType(QSurfaceFormat::RenderableType::OpenGL);
+      fmt.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
+      fmt.setAlphaBufferSize(8);
 
-      auto mw = std::make_shared<RenderWindow>(s->availableGeometry());
-      mw->show();
-      _mask_windows.push_back(mw);
+      _gl_ctx.setFormat(fmt);
+      if( !_gl_ctx.create() )
+        qFatal("Failed to create OpenGL context.");
+      if( !_gl_ctx.format().hasAlpha() )
+        qFatal("Failed to enable alpha blending.");
+
+      _offscreen_surface.setFormat(fmt);
+      _offscreen_surface.setScreen( QGuiApplication::primaryScreen() );
+      _offscreen_surface.create();
+
+      qDebug() << "offscreen" << _offscreen_surface.size();
+
+      for(QScreen* s: QGuiApplication::screens())
+      {
+        auto w = std::make_shared<RenderWindow>(s->availableGeometry());
+        w->setImage(&_fbo_image);
+        w->show();
+        _windows.push_back(w);
+
+        auto mw = std::make_shared<RenderWindow>(s->availableGeometry());
+        mw->show();
+        _mask_windows.push_back(mw);
+      }
     }
 
     _core.init();
@@ -216,6 +242,9 @@ namespace qtfullscreensystem
   //----------------------------------------------------------------------------
   void Application::subscribeSlots(LR::SlotSubscriber& slot_subscriber)
   {
+    if( _disable_rendering )
+      return;
+
     _subscribe_links =
       slot_subscriber.getSlot<LR::SlotType::Image>("/rendered-links");
     _subscribe_xray_fbo =
@@ -250,6 +279,13 @@ namespace qtfullscreensystem
   //----------------------------------------------------------------------------
   void Application::update()
   {
+    if( _disable_rendering )
+    {
+      _core.process( Component::Config
+                   | Component::DataServer );
+      return;
+    }
+
     int pass = 1;
     uint32_t _flags = LINKS_DIRTY | RENDER_DIRTY;
 
