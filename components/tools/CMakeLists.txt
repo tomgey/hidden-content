@@ -25,6 +25,7 @@ set(SOURCE_FILES
   JSONParser.cxx
   JSON.cxx
   linkdescription.cpp
+  LinkRenderer.cxx
   NodeRenderer.cxx
   PartitionHelper.cxx
   qt_helper.cxx

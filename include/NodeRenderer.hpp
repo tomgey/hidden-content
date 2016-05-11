@@ -39,6 +39,13 @@ namespace LinksRouting
                         int pass = 0,
                         bool do_transform = true );
 
+      bool wouldRenderNodes( const Rect& bbox,
+                             const LinkDescription::nodes_t& nodes,
+                             HyperEdgeQueue* hedges_open = nullptr,
+                             HyperEdgeSet* hedges_done = nullptr,
+                             bool render_all = false,
+                             bool do_transform = true );
+
       bool renderRect( const Rect& rect,
                        int margin = 2,
                        unsigned int tex = 0,

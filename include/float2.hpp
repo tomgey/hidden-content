@@ -266,8 +266,11 @@ struct Rect
   float2 bottomRight() const { return float2(r(), b()); }
 
   void expand(const float2& p);
+  void translate(const float2& d);
+
   bool contains(float x, float y, float margin = 0.f) const;
   bool contains(const float2& pos, float margin = 0.f) const;
+  bool intersects(const Rect& r) const;
 
   std::string toString(bool round = false) const;
 

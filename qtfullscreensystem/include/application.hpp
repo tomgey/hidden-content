@@ -11,6 +11,7 @@
 
 #include "Shader.hpp"
 #include "Window.hpp"
+#include "GLWindow.hpp"
 
 #include "staticcore.h"
 #include "xmlconfig.h"
@@ -99,7 +100,8 @@ namespace qtfullscreensystem
       // Rendering
       // ----------
 
-      bool _disable_rendering;
+      bool _disable_rendering,
+           _use_renderer_per_screen;
 
       QOffscreenSurface                         _offscreen_surface;
       QOpenGLContext                            _gl_ctx;
@@ -109,6 +111,7 @@ namespace qtfullscreensystem
 
       std::vector<WindowRef>    _windows;
       std::vector<WindowRef>    _mask_windows;
+      std::vector<GLWindowRef>  _render_windows;
 
       // Locks/Mutex
       QMutex            _mutex_slot_links;

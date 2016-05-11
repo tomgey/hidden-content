@@ -53,6 +53,12 @@ void Rect::expand(const float2& p)
 }
 
 //------------------------------------------------------------------------------
+void Rect::translate(const float2& d)
+{
+  pos += d;
+}
+
+//------------------------------------------------------------------------------
 bool Rect::contains(float x, float y, float margin) const
 {
   return x >= pos.x - margin && x <= pos.x + size.x + margin
@@ -63,6 +69,13 @@ bool Rect::contains(float x, float y, float margin) const
 bool Rect::contains(const float2& pos, float margin) const
 {
   return contains(pos.x, pos.y, margin);
+}
+
+//------------------------------------------------------------------------------
+bool Rect::intersects(const Rect& other) const
+{
+  return !(  other.r() < l() || r() < other.l()
+          || other.b() < t() || b() < other.t() );
 }
 
 //------------------------------------------------------------------------------

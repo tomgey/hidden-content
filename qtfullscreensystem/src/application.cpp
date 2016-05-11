@@ -9,6 +9,7 @@
 #include "application.hpp"
 #include "qt_helper.hxx"
 #include "PreviewWindow.hpp"
+#include "GLWindow.hpp"
 #include "Window.hpp"
 
 #include <QCommandLineParser>
@@ -135,6 +136,10 @@ namespace qtfullscreensystem
       { "disable-rendering",
         QCoreApplication::translate("main", "Disable rendering/visual links.") }
     });
+    parser.addOptions({
+      { "renderer-per-screen",
+        QCoreApplication::translate("main", "Enable independent rendering for each screen.") }
+    });
     parser.process(*this);
 
     QStringList pos_args = parser.positionalArguments();
@@ -145,6 +150,7 @@ namespace qtfullscreensystem
     }
 
     _disable_rendering = parser.isSet("disable-rendering");
+    _use_renderer_per_screen = parser.isSet("renderer-per-screen");
 
 //    publishSlots(_core.getSlotCollector());
 
@@ -166,7 +172,8 @@ namespace qtfullscreensystem
       _core.attachComponent(&_cost_analysis);
       _core.attachComponent(&_routing_gpu);
 #endif
-      _core.attachComponent(&_renderer);
+      if( !_use_renderer_per_screen )
+        _core.attachComponent(&_renderer);
     }
 
     _core.attachComponent(this);
@@ -175,33 +182,45 @@ namespace qtfullscreensystem
 
     if( !_disable_rendering )
     {
-      QSurfaceFormat fmt;
-      fmt.setRenderableType(QSurfaceFormat::RenderableType::OpenGL);
-      fmt.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
-      fmt.setAlphaBufferSize(8);
-
-      _gl_ctx.setFormat(fmt);
-      if( !_gl_ctx.create() )
-        qFatal("Failed to create OpenGL context.");
-      if( !_gl_ctx.format().hasAlpha() )
-        qFatal("Failed to enable alpha blending.");
-
-      _offscreen_surface.setFormat(fmt);
-      _offscreen_surface.setScreen( QGuiApplication::primaryScreen() );
-      _offscreen_surface.create();
-
-      qDebug() << "offscreen" << _offscreen_surface.size();
-
-      for(QScreen* s: QGuiApplication::screens())
+      if( !_use_renderer_per_screen )
       {
-        auto w = std::make_shared<RenderWindow>(s->availableGeometry());
-        w->setImage(&_fbo_image);
-        w->show();
-        _windows.push_back(w);
+        QSurfaceFormat fmt;
+        fmt.setRenderableType(QSurfaceFormat::RenderableType::OpenGL);
+        fmt.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
+        fmt.setAlphaBufferSize(8);
 
-        auto mw = std::make_shared<RenderWindow>(s->availableGeometry());
-        mw->show();
-        _mask_windows.push_back(mw);
+        _gl_ctx.setFormat(fmt);
+        if( !_gl_ctx.create() )
+          qFatal("Failed to create OpenGL context.");
+        if( !_gl_ctx.format().hasAlpha() )
+          qFatal("Failed to enable alpha blending.");
+
+        _offscreen_surface.setFormat(fmt);
+        _offscreen_surface.setScreen( QGuiApplication::primaryScreen() );
+        _offscreen_surface.create();
+
+        qDebug() << "offscreen" << _offscreen_surface.size();
+
+        for(QScreen* s: QGuiApplication::screens())
+        {
+          auto w = std::make_shared<RenderWindow>(s->availableGeometry());
+          w->setImage(&_fbo_image);
+          w->show();
+          _windows.push_back(w);
+
+          auto mw = std::make_shared<RenderWindow>(s->availableGeometry());
+          mw->show();
+          _mask_windows.push_back(mw);
+        }
+      }
+      else
+      {
+        for(QScreen* s: QGuiApplication::screens())
+        {
+          auto w = std::make_shared<GLWindow>(s->availableGeometry());
+          w->show();
+          _render_windows.push_back(w);
+        }
       }
     }
 
@@ -245,10 +264,6 @@ namespace qtfullscreensystem
     if( _disable_rendering )
       return;
 
-    _subscribe_links =
-      slot_subscriber.getSlot<LR::SlotType::Image>("/rendered-links");
-    _subscribe_xray_fbo =
-      slot_subscriber.getSlot<LR::SlotType::Image>("/rendered-xray");
 #ifdef USE_GPU_ROUTING
     _subscribe_costmap =
       slot_subscriber.getSlot<LR::SlotType::Image>("/costmap");
@@ -257,6 +272,17 @@ namespace qtfullscreensystem
       slot_subscriber.getSlot<LR::LinkDescription::LinkList>("/links");
     _subscribe_outlines =
       slot_subscriber.getSlot<LR::SlotType::CoveredOutline>("/covered-outlines");
+
+    for(auto& w: _render_windows)
+      w->subscribeSlots(slot_subscriber);
+
+    if( _use_renderer_per_screen )
+      return;
+
+    _subscribe_links =
+      slot_subscriber.getSlot<LR::SlotType::Image>("/rendered-links");
+    _subscribe_xray_fbo =
+      slot_subscriber.getSlot<LR::SlotType::Image>("/rendered-xray");
 
     for(auto& w: _windows)
       w->subscribeSlots(slot_subscriber);
@@ -283,6 +309,17 @@ namespace qtfullscreensystem
     {
       _core.process( Component::Config
                    | Component::DataServer );
+      return;
+    }
+
+    if( _use_renderer_per_screen )
+    {
+      _core.process( Component::Config
+                   | Component::DataServer
+                   | Component::Routing );
+
+      for(GLWindowRef& win: _render_windows)
+        win->process();
       return;
     }
 

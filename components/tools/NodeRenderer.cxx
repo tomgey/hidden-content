@@ -160,6 +160,57 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  bool NodeRenderer::wouldRenderNodes( const Rect& bbox_in,
+                                       const LinkDescription::nodes_t& nodes,
+                                       HyperEdgeQueue* hedges_open,
+                                       HyperEdgeSet* hedges_done,
+                                       bool render_all,
+                                       bool do_transform )
+  {
+    Rect bbox = bbox_in;
+    if( do_transform && !nodes.empty() && nodes.front()->getParent() )
+      bbox.translate(-nodes.front()->getParent()->get<float2>("screen-offset"));
+
+    for( auto node = nodes.begin(); node != nodes.end(); ++node )
+    {
+      bool hover = (*node)->get<bool>("hover");
+      float alpha = (*node)->get<float>("alpha", hover ? 1 : 0);
+      if( alpha > 0.01 )
+        hover = true;
+
+      if( !hover && (*node)->get<bool>("hidden") && !render_all )
+        continue;
+
+      if( hedges_open )
+      {
+        for(auto child = (*node)->getChildren().begin();
+                 child != (*node)->getChildren().end();
+               ++child )
+          hedges_open->push( child->get() );
+      }
+
+      if(    (*node)->getVertices().empty()
+          || (render_all && !(*node)->get<bool>("show-in-preview", true)) )
+        continue;
+
+      if( !render_all && hover )
+      {
+        if(    bbox.intersects((*node)->get<Rect>("covered-preview-region"))
+            || bbox.intersects((*node)->get<Rect>("covered-region")) )
+          return true;
+      }
+
+      for( auto vert = std::begin((*node)->getVertices());
+                vert != std::end((*node)->getVertices());
+              ++vert )
+        if( bbox.contains(*vert) )
+          return true;
+    }
+
+    return false;
+  }
+
+  //----------------------------------------------------------------------------
   bool NodeRenderer::renderRect( Rect const& rect,
                                  int b,
                                  unsigned int tex,
