@@ -62,6 +62,20 @@ namespace qtfullscreensystem
 
     protected:
 
+      typedef LR::SlotType::TextPopup::Popups Popups;
+      class PopupIndicatorWindow:
+        public QWindow
+      {
+        public:
+          PopupIndicatorWindow(const Popups::const_iterator popup);
+
+        private:
+          const Popups::const_iterator _popup;
+      };
+
+      typedef std::shared_ptr<PopupIndicatorWindow> PopupIndicatorWindowRef;
+      typedef std::map<Rect, PopupIndicatorWindowRef> PopupIndicatorMap;
+
       // ----------
       // Slots
       // ----------
@@ -73,11 +87,12 @@ namespace qtfullscreensystem
       LR::slot_t<LR::SlotType::Preview>::type           _slot_previews;
 
       // TODO make readonly
-      LR::slot_t<LR::SlotType::Image>::type             _subscribe_links,
-                                                        _subscribe_xray_fbo;
-      LR::slot_t<LR::SlotType::Image>::type             _subscribe_costmap;
+      LR::slot_t<LR::SlotType::Image          >::type   _subscribe_links,
+                                                        _subscribe_xray_fbo,
+                                                        _subscribe_costmap;
       LR::slot_t<LR::LinkDescription::LinkList>::type   _subscribe_routed_links;
-      LR::slot_t<LR::SlotType::CoveredOutline>::type    _subscribe_outlines;
+      LR::slot_t<LR::SlotType::CoveredOutline >::type   _subscribe_outlines;
+      LR::slot_t<LR::SlotType::TextPopup      >::type   _subscribe_popups;
 
       // ----------
       // Components
@@ -116,6 +131,12 @@ namespace qtfullscreensystem
       // Locks/Mutex
       QMutex            _mutex_slot_links;
       QWaitCondition    _cond_render;
+
+      PopupIndicatorMap _popup_windows;
+
+      void updateNoRendering();
+      void updateRendererPerScreen();
+      void updateGlobalRenderer();
   };
 
 } // namespace qtfullscreensystem

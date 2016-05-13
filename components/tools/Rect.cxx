@@ -124,6 +124,17 @@ bool Rect::operator!=(const Rect& rhs) const
 }
 
 //------------------------------------------------------------------------------
+bool Rect::operator<(const Rect& rhs) const
+{
+  if( pos.x < rhs.pos.x )
+    return true;
+  else if( pos.x == rhs.pos.x )
+    return size.x < rhs.size.x;
+  else
+    return false;
+}
+
+//------------------------------------------------------------------------------
 std::istream& operator>>(std::istream& strm, Rect& rect)
 {
   float l, r, t, b;

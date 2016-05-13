@@ -75,8 +75,6 @@ namespace qtfullscreensystem
   {
     _subscribe_links =
       slot_subscriber.getSlot<LR::LinkDescription::LinkList>("/links");
-    _subscribe_popups =
-      slot_subscriber.getSlot<LR::SlotType::TextPopup>("/popups");
     _subscribe_outlines =
       slot_subscriber.getSlot<LR::SlotType::CoveredOutline>("/covered-outlines");
     _subscribe_xray =

@@ -34,7 +34,6 @@ namespace qtfullscreensystem
       QRect     _geometry;
 
       LR::slot_t<LR::LinkDescription::LinkList>::type _subscribe_links;
-      LR::slot_t<LR::SlotType::TextPopup      >::type _subscribe_popups;
       LR::slot_t<LR::SlotType::CoveredOutline >::type _subscribe_outlines;
       LR::slot_t<LR::SlotType::XRayPopup      >::type _subscribe_xray;
 

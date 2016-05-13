@@ -277,7 +277,11 @@ namespace qtfullscreensystem
       w->subscribeSlots(slot_subscriber);
 
     if( _use_renderer_per_screen )
+    {
+      _subscribe_popups =
+        slot_subscriber.getSlot<LR::SlotType::TextPopup>("/popups");
       return;
+    }
 
     _subscribe_links =
       slot_subscriber.getSlot<LR::SlotType::Image>("/rendered-links");
@@ -306,23 +310,106 @@ namespace qtfullscreensystem
   void Application::update()
   {
     if( _disable_rendering )
+      updateNoRendering();
+    else if( _use_renderer_per_screen )
+      updateRendererPerScreen();
+    else
+      updateGlobalRenderer();
+  }
+
+  //----------------------------------------------------------------------------
+  Application::PopupIndicatorWindow::PopupIndicatorWindow(
+    Popups::const_iterator popup
+  ):
+      _popup(popup)
+  {
+    setGeometry(popup->region.region.toQRect());
+    setFlags( Qt::WindowStaysOnTopHint
+            | Qt::FramelessWindowHint );
+    show();
+
+    qDebug() << popup->region.region.toQRect() << popup->hover_region.region.toQRect();
+  }
+
+  //----------------------------------------------------------------------------
+  void Application::updateNoRendering()
+  {
+    _core.process( Component::Config
+                 | Component::DataServer );
+  }
+
+  //----------------------------------------------------------------------------
+  void Application::updateRendererPerScreen()
+  {
+    qDebug() << "updateRendererPerScreen()";
+    _core.process( Component::Config
+                 | Component::DataServer
+                 | Component::Routing );
+
+    for(GLWindowRef& win: _render_windows)
+      win->process();
+
+    return;
+    typedef LR::SlotType::TextPopup::Popup Popup;
+    const Popups& popups = _subscribe_popups->_data->popups;
+
+    // Delete popups not needed anymore
+    for(auto popup_window_it = _popup_windows.begin();
+             popup_window_it != _popup_windows.end(); )
     {
-      _core.process( Component::Config
-                   | Component::DataServer );
-      return;
+      if( std::find_if( popups.begin(),
+                        popups.end(),
+                        [&popup_window_it](Popup const& popup)
+                        {
+                          return popup.region.region == popup_window_it->first;
+                        }) == popups.end() )
+      {
+        qDebug() << "Delete popup" << popup_window_it->first.toQRect();
+        popup_window_it = _popup_windows.erase(popup_window_it);
+      }
+      else
+        ++popup_window_it;
     }
 
-    if( _use_renderer_per_screen )
+    // Create missing/new popups
+    for( Popups::const_iterator popup_it = popups.begin();
+                                popup_it != popups.end();
+                             ++popup_it )
     {
-      _core.process( Component::Config
-                   | Component::DataServer
-                   | Component::Routing );
+      if( _popup_windows.find(popup_it->region.region) != _popup_windows.end() )
+      {
+        qDebug() << "Still same popup" << popup_it->region.region.toQRect();
+        continue;
+      }
 
-      for(GLWindowRef& win: _render_windows)
-        win->process();
-      return;
+      qDebug() << "Create popup";
+      _popup_windows.insert({
+        popup_it->region.region,
+        std::make_shared<PopupIndicatorWindow>(popup_it)
+      });
+
+//      float2 pos = popup->region.region.pos
+//                 - float2(_geometry.x(), _geometry.y() + 1);
+//
+//      if(    pos.x < 0 || pos.x > _geometry.width()
+//          || pos.y < 0 || pos.y > _geometry.height()
+//          || !popup->region.isVisible()
+//          || (popup->node && popup->node->get<bool>("hidden")) )
+//        continue;
+//
+//      QRect text_rect(pos.toQPoint(), popup->region.region.size.toQSize());
+//
+//      painter.drawText(
+//        text_rect,
+//        Qt::AlignCenter,
+//        QString::fromStdString(popup->text)
+//      );
     }
+  }
 
+  //----------------------------------------------------------------------------
+  void Application::updateGlobalRenderer()
+  {
     int pass = 1;
     uint32_t _flags = LINKS_DIRTY | RENDER_DIRTY;
 
