@@ -710,11 +710,16 @@ namespace LinksRouting
     popup.hover_region.scroll_region.size = ci->preview_size;
     popup.hover_region.tile_map = ci->tile_map;
 
-    size_t height = ci->tile_map->partitions_src.back().y
-                  - ci->tile_map->partitions_src.front().x;
+    size_t height = ci->tile_map ? ci->tile_map->partitions_src.back().y
+                                 - ci->tile_map->partitions_src.front().x
+                                 : ci->scroll_region.height();
 
     if( height < 350 )
       popup.hover_region.zoom = 1;
+
+    if( !ci->tile_map )
+      qWarning() << "Missing tile_map for popup! title:" << ci->title()
+                                               << "url:" << ci->url();
 
     _popups.push_back( _ipc_server->addPopup(*ci, popup) );
   }

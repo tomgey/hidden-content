@@ -1197,6 +1197,9 @@ svg
              .attr('y', drag_start_pos[1])
              .attr('width', 0)
              .attr('height', 0);
+
+    if( !localBool('auto-link') )
+      abortAllLinks();
   })
   .on('wheel', function()
   {

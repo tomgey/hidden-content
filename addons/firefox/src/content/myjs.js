@@ -89,9 +89,9 @@ var do_report = true;
 var concept_graph = new ConceptGraph();
 Cu.import("resource://hidden-content/BrowserServer.js");
 
-var prefs = Cc["@mozilla.org/fuel/application;1"]
-              .getService(Ci.fuelIApplication)
-              .prefs;
+var prefs = Cc["@mozilla.org/preferences-service;1"]
+              .getService(Ci.nsIPrefService)
+              .getBranch("extensions.vislinks.");
 
 var session_store = Cc["@mozilla.org/browser/sessionstore;1"]
                       .getService(Ci.nsISessionStore);
@@ -144,14 +144,6 @@ Array.prototype.contains = function(obj)
 {
   return this.indexOf(obj) > -1;
 };
-
-/**
- * Get value of a preference
- */
-function getPref(key)
-{
-  return prefs.get("extensions.vislinks." + key).value;
-}
 
 /**
  * Set status icon
@@ -435,7 +427,7 @@ function onPageLoad(event)
   suspend_autostart = false;
   if( !stopped )
     setTimeout(onGeometryChange, 200, event, 'pageload', {title: doc.title});
-  else if( getPref("auto-connect") )
+  else if( prefs.getBoolPref("auto-connect") )
     setTimeout(start, 0, true, src_id);
 
   var src_id = doc._hcd_src_id;
@@ -758,7 +750,7 @@ function onGlobalWheel(e)
 
   send({
     'task': 'SEMANTIC-ZOOM',
-    'step': (getPref("invert-wheel") ? 1 : -1) * e.deltaY > 0 ? 1 : -1,
+    'step': (prefs.getBoolPref("invert-wheel") ? 1 : -1) * e.deltaY > 0 ? 1 : -1,
     'center': [e.screenX, e.screenY]
   });
 }
@@ -931,13 +923,13 @@ function start(match_title = false, src_id = 0, check = true)
 
     // console.log("Check if server is alive...");
     httpPing(
-      getPref('server.ping-address'),
+      prefs.getCharPref('server.ping-address'),
       function() {
         // console.log("Server alive => connect");
         setTimeout(start, 0, match_title, src_id, false);
       },
       function() {
-        if( !getPref("auto-connect") )
+        if( !prefs.getBoolPref("auto-connect") )
           ; //console.log("Server not alive.");
         else
         {
@@ -1119,6 +1111,9 @@ function onLoadState()
 //------------------------------------------------------------------------------
 function reportVisLinks(id, found, refs)
 {
+  if( content.location.href.indexOf('addons/concept-graph/index.html') > 0 )
+    return;
+
   if( !do_report || status != 'active' || !id.length )
     return;
 
@@ -1131,7 +1126,7 @@ function reportVisLinks(id, found, refs)
 
   if( !refs )
   {
-    if( !found && getPref("replace-route") )
+    if( !found && prefs.getBoolPref("replace-route") )
       abortAll();
 
     bbs = searchDocument(content.document, id);
@@ -1384,7 +1379,7 @@ function register(match_title = false, src_id = 0)
     tile_requests = new Stack(); //Queue();
 
     console.log("Creating new WebSocket.");
-    links_socket = new WebSocket(getPref('server.websocket-address'), 'VLP');
+    links_socket = new WebSocket(prefs.getCharPref('server.websocket-address'), 'VLP');
     links_socket.binaryType = "arraybuffer";
     links_socket.onopen = function(event)
     {
@@ -1398,7 +1393,7 @@ function register(match_title = false, src_id = 0)
       removeAllRouteData();
       stop();
 
-      if( getPref("auto-connect") )
+      if( prefs.getBoolPref("auto-connect") )
         setTimeout(start, 2850, true, src_id);
     };
     links_socket.onerror = function(event)
@@ -1425,7 +1420,7 @@ function register(match_title = false, src_id = 0)
           last_id = msg.id;
           last_stamp = msg.stamp;
 
-          if( getPref("use-gfindbar") )
+          if( prefs.getBoolPref("use-gfindbar") )
           {
             do_report = false;
 
