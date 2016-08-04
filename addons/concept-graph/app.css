@@ -400,6 +400,16 @@ circle.ref-highlight {
   stroke-dasharray: 3, 3;
 }
 
+.node.refs-collapsed g:not(.ref-action):nth-child(1n+6),
+.node.refs-collapsed g.ref-action:not(.ref-action-expand),
+.node.refs-expanded g.ref-action-expand {
+  display: none;
+}
+
+.node:not(.refs-collapsed) {
+
+}
+
 text {
   font: 12px sans-serif;
   pointer-events: none;

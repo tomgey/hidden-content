@@ -781,15 +781,19 @@ function restart(update_layout = true)
         .selectAll('g.ref')
         .data(function(d)
         {
+          if( !d.refs || d.refs.length <= 4 )
+            node.classed('refs-collapsed', false)
+                .classed('refs-expanded', false);
+
           if( !d.refs )
             return [];
 
           var refs = [];
           for(var url in d.refs)
-            refs[ refs.length ] = {
+            refs.push({
               url: url,
               data: d.refs[url]
-            };
+            });
 
           var num_cols = Math.min(4, refs.length);
           var pad = 5, w = 18, h = 18;
@@ -802,6 +806,26 @@ function restart(update_layout = true)
             refs[i]['x'] = x + (i % num_cols) * (w + pad);
             refs[i]['y'] = y + Math.floor(i / num_cols) * (h + pad);
           }
+
+          if( refs.length > 4 )
+          {
+            refs.push({
+              x: refs[refs.length - 1].x + w + pad,
+              y: refs[refs.length - 1].y,
+              url: 'action:collapse',
+              data: {icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAIZJREFUOI3tj1EKwkAMRLM5QTLJYYooVdzeoNAb9sNTeArxCi7sESr+tFCkZangX9/nJDOZEO38F1U9AKh+MpvZFUBS1Ze412t7YUkEEImofzO3RBTCMNyYucs534uXAUQASdxPkybuNYBkZueSuRlrH79ns5DLaoCoPpfM8xAxexTf2NnGB+xwGEJlykyCAAAAAElFTkSuQmCC'}
+            });
+
+            refs.push({
+              x: refs[3].x,
+              y: refs[3].y,
+              url: 'action:expand',
+              data: {icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAHdJREFUOI3tjjEOglAQBYcv/JrHnsjCQ3gDr4YEhYORUBuDNsSYn7CYYMnUs7MPdv6LzC5A4Shxdj6ERDhJui5EoqQmg6M3opDZTdI9iURJfWnWALkX+I50c8Q9zpxIzTQdAF4hPMZhOAPPte9ppK3M6l9m72zgDeTUFanvQpp2AAAAAElFTkSuQmCC'}
+            });
+
+            if( !node.classed('refs-expanded') )
+              node.classed('refs-collapsed', true);
+          }
           return refs;
         });
 
@@ -809,6 +833,8 @@ function restart(update_layout = true)
       ref_icons.enter()
         .append('g')
         .classed('ref', true)
+        .classed('ref-action', function(d) { return d.url.startsWith('action:'); })
+        .classed('ref-action-expand', function(d) { return d.url == 'action:expand'; })
         .classed('ref-open', function(d) { return active_urls.has(d.url); })
         .on('mousedown', function()
         {
@@ -821,8 +847,16 @@ function restart(update_layout = true)
       .attr('height', 18)
       .on('click', function(d)
        {
-         openURLorFocus(d.url, svgToScreenPos([node_data.x, node_data.y]));
-         sendInitiateForNode(node_data);
+         if( d.url.startsWith('action:') )
+         {
+           node.classed('refs-expanded', d.url.endsWith('expand'));
+           node.classed('refs-collapsed', d.url.endsWith('collapse'));
+         }
+         else
+         {
+           openURLorFocus(d.url, svgToScreenPos([node_data.x, node_data.y]));
+           sendInitiateForNode(node_data);
+         }
        });
     ref_enter
       .append('circle')
