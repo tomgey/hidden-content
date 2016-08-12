@@ -400,14 +400,19 @@ circle.ref-highlight {
   stroke-dasharray: 3, 3;
 }
 
-.node.refs-collapsed g:not(.ref-action):nth-child(1n+6),
-.node.refs-collapsed g.ref-action:not(.ref-action-expand),
-.node.refs-expanded g.ref-action-expand {
-  display: none;
+.ref-bg-collapsed,
+.ref-bg-expanded,
+.ref-action circle {
+  fill: #eee;
+  stroke: #333;
 }
 
-.node:not(.refs-collapsed) {
-
+.node.refs-collapsed g:not(.ref-action):nth-child(1n+8),
+.node.refs-collapsed g.ref-action:not(.ref-action-expand),
+.node.refs-expanded g.ref-action-expand,
+.node.refs-expanded .ref-bg-collapsed,
+.node.refs-collapsed .ref-bg-expanded {
+  display: none;
 }
 
 text {

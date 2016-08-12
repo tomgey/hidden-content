@@ -759,6 +759,14 @@ function restart(update_layout = true)
     .attr('x', 0)
     .attr('y', 4)
     .attr('class', 'id');
+  nodes_enter
+    .append('svg:rect')
+    .classed('ref-bg-collapsed', true)
+    .attr({rx: 5, ry: 5});
+  nodes_enter
+    .append('svg:rect')
+    .classed('ref-bg-expanded', true)
+    .attr({rx: 5, ry: 5});
 
   node_groups
     .classed('selected', function(d) { return concept_graph.selection.has(d.id); });
@@ -807,6 +815,23 @@ function restart(update_layout = true)
             refs[i]['y'] = y + Math.floor(i / num_cols) * (h + pad);
           }
 
+          var bg_pad = 3,
+              bg_x = x - bg_pad,
+              bg_y = y - bg_pad,
+              bg_w = num_cols * (w + pad) - pad + 2 * bg_pad,
+              bg_h = Math.ceil(refs.length / num_cols) * (h + pad) - pad + 2 * bg_pad;
+
+          node.select('.ref-bg-collapsed')
+            .attr({ x: bg_x,
+                    y: bg_y,
+                    width: bg_w,
+                    height: h + 2 * bg_pad });
+          node.select('.ref-bg-expanded')
+            .attr({ x: bg_x,
+                    y: bg_y,
+                    width: bg_w,
+                    height: bg_h });
+
           if( refs.length > 4 )
           {
             refs.push({
@@ -842,6 +867,10 @@ function restart(update_layout = true)
         });
 
     ref_enter
+      .append('circle')
+      .classed('ref-highlight', true)
+      .attr('r', 11);
+    ref_enter
       .append('image')
       .attr('width', 18)
       .attr('height', 18)
@@ -858,19 +887,15 @@ function restart(update_layout = true)
            sendInitiateForNode(node_data);
          }
        });
-    ref_enter
-      .append('circle')
-      .classed('ref-highlight', true)
-      .attr('r', 11);
 
+    ref_enter.selectAll('circle')
+      .attr('cx', function(d) { return d.x + 9; })
+      .attr('cy', function(d) { return d.y + 9; });
     ref_enter.selectAll('image')
       .attr('xlink:href', function(d) { return d.data.icon; })
       .attr('title', function(d) { return d.url; })
       .attr('x', function(d) { return d.x; })
       .attr('y', function(d) { return d.y; });
-    ref_enter.selectAll('circle')
-      .attr('cx', function(d) { return d.x + 9; })
-      .attr('cy', function(d) { return d.y + 9; });
   });
 
   if( update_layout )
