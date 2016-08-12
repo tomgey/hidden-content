@@ -95,9 +95,25 @@ var active_urls = new Map();
 var drag_start_pos = null,
     drag_start_selection = null;
 
+var mode_create_concept = false;
+
 function $(id)
 {
   return document.getElementById(id);
+}
+
+function setModeCreateConcept(val)
+{
+  if( mode_create_concept == val )
+    return;
+
+  mode_create_concept = val;
+  d3.select('main').classed('mode-create-concept', mode_create_concept);
+
+  if( mode_create_concept )
+    StatusMessage.show('Click to create concept ([ESC] to abort)');
+  else
+    StatusMessage.hide();
 }
 
 /**
@@ -974,6 +990,9 @@ function keydown()
     return;
   }
 
+  if( e.code == 'Escape' )
+    setModeCreateConcept(false);
+
   var cur_combo = '';
   if( e.shiftKey && e.key != 'Shift' )
     cur_combo += 'Shift+';
@@ -1173,6 +1192,18 @@ var NotificationMessage = {
   }
 }
 
+var StatusMessage = {
+  show: function(msg) {
+    d3.select('#status-message')
+      .style('visibility', 'visible')
+      .html(msg);
+  },
+  hide: function() {
+    d3.select('#status-message')
+      .style('visibility', 'hidden');
+  }
+}
+
 d3.select('#dlg-concept-name').on('submit', function() {
   d3.event.preventDefault();
   var name = d3.select('#dlg-concept-name-input')
@@ -1297,8 +1328,13 @@ svg
   })
   .on('mouseup', function()
   {
-    if( d3.event.button != 1 ) // only MMB
+    if( !(   d3.event.button == 1 // MMB
+         || (d3.event.button == 0 && mode_create_concept ) // LMB in concept
+                                                           // creation mode
+         ) )
       return;
+
+    setModeCreateConcept(false);
 
     var pos = screenToSVGPos(d3.mouse(this));
     addConceptWithDialog({
@@ -1653,6 +1689,8 @@ d3.select(window)
     restart();
     start();
     updateDrawArea(true);
+
+    StatusMessage.hide();
   })
   .on('visibilitychange', function() {
     if( document.hidden )
@@ -1767,7 +1805,10 @@ var user_actions = [
   { label: 'Add Concept',
     icon: 'add',
     shortcuts: ['Shift+A'],
-    action: addConceptWithDialog
+    action: function()
+    {
+      setModeCreateConcept(true);
+    }
   },
   { label: 'Select All Concepts and Relations',
     icon: 'select_all',

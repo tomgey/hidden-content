@@ -260,6 +260,10 @@ html.debug-mode .raw-data {
   user-select: none;
 }
 
+.mode-create-concept #graph-drawing-area {
+  cursor: crosshair;
+}
+
 #overlay {
   visibility: hidden;
   position: absolute;
@@ -291,6 +295,14 @@ html.debug-mode .raw-data {
 
 #overlay > .notification-message {
   margin-top: 0;
+}
+
+#status-message {
+  position: fixed;
+  left: 350px;
+  bottom: 0;
+  background-color: #fdd;
+  padding: 0.2em;
 }
 
 .mdl-button--fab.button-font-size-fab {
