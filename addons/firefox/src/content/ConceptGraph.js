@@ -444,6 +444,13 @@ ConceptGraph.prototype.updateSelection = function(action, id, send_msg = true)
   this._selected_relation_ids = null;
 
   this._callHandler('selection-change', this.selection, previous_selection);
+
+  if( send_msg )
+    send({
+      'task': 'CONCEPT-SELECTION-UPDATE',
+      'selection': [...this.selection]
+    });
+
   return true;
 }
 
@@ -748,6 +755,10 @@ ConceptGraph.prototype.pushStateToServer = function()
     msg.task = 'CONCEPT-LINK-NEW';
     send(msg);
   }
+  send({
+    'task': 'CONCEPT-SELECTION-UPDATE',
+    'selection': [...this.selection]
+  });
 }
 
 /** Internal callback handler */

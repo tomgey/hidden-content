@@ -3,6 +3,7 @@ var filtered_nodes = [],
     filtered_links = [];
 var filter = '';
 var try_connect = false;
+var auto_center = true;
 
 var app_id = Math.random().toString(36).substring(7);
 
@@ -211,6 +212,8 @@ function start(check = true)
         force.start();
         force.tick();
         force.stop();
+
+        auto_center = true;
       }
       return;
     }
@@ -370,13 +373,13 @@ function handleRequest(msg)
 
   active_links.add(msg.id);
 
-  var do_circle = true; //localStorage.getItem('link-circle') == 'true';
+  var do_circle = false; //localStorage.getItem('link-circle') == 'true';
   var bbs = [];
   node_groups
     .filter(function(d){ return d.id == node.id; })
     .selectAll('.ref image')
     .each(function(d) {
-      if( active_urls.has(d.url) )
+      if( !bbs.length && active_urls.has(d.url) )
         bbs.push(do_circle
           ? circlePoints({
               x: node.x + d.x + 8,
@@ -1345,6 +1348,7 @@ svg
 
 function updateDrawArea(arg)
 {
+  var center_view = arg == 'center';
   if( typeof arg == 'object' )
   {
     var force_limits = true,
@@ -1362,17 +1366,39 @@ function updateDrawArea(arg)
       bg_pad = 15,
       scroll_pad = 2;
 
+  var vp_width = svg.attr('width'),
+      vp_height = svg.attr('height')
+
+  if( auto_center || center_view )
+  {
+    scale =
+      Math.max(
+        0.1,
+        Math.min(
+          Math.min(
+            (vp_width - 2 * bg_pad) / (graph_bb.width + 2 * graph_pad),
+            (vp_height - 2 * bg_pad) / (graph_bb.height + 2 * graph_pad)
+          ), 1
+        ));
+    zoom.scale(scale);
+
+    auto_center = false;
+    force_limits = true;
+  }
+
+  console.log('scale', scale);
+
   var graph_x = scale * graph_bb.x - graph_pad,
       graph_y = scale * graph_bb.y - graph_pad,
       graph_width = scale * graph_bb.width + 2 * graph_pad,
-      graph_height = scale * graph_bb.height + 2 * graph_pad,
-      vp_width = svg.attr('width'),
-      vp_height = svg.attr('height');
+      graph_height = scale * graph_bb.height + 2 * graph_pad;
 
   if( graph_width < vp_width )
   // no horizontal overflow -> center
   {
-    tx = (vp_width - graph_width) / 2 - graph_x;
+    if( force_limits )
+      tx = (vp_width - graph_width) / 2 - graph_x;
+
     scroll_x.style('display', 'none');
   }
   // Scrollbar/Position indicator
@@ -1397,7 +1423,9 @@ function updateDrawArea(arg)
   if( graph_height < vp_height )
   // no vertical overflow -> center
   {
-    ty = (vp_height - graph_height) / 2 - graph_y;
+    if( force_limits )
+      ty = (vp_height - graph_height) / 2 - graph_y;
+
     scroll_y.style('display', 'none');
   }
   else
@@ -1848,6 +1876,15 @@ var user_actions = [
       concept_graph.addRelation({
         nodes: [...concept_graph.getSelectedConceptIds()]
       });
+    }
+  },
+  {
+    label: 'Fit Graph into View',
+    icon: 'settings_overscan',
+    shortcuts: ['Control+F'],
+    action: function()
+    {
+      updateDrawArea('center');
     }
   },
   { label: 'Remove \'fixed\' attribute',

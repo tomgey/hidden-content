@@ -341,7 +341,6 @@ namespace qtfullscreensystem
   //----------------------------------------------------------------------------
   void Application::updateRendererPerScreen()
   {
-    qDebug() << "updateRendererPerScreen()";
     _core.process( Component::Config
                  | Component::DataServer
                  | Component::Routing );
