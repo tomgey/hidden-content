@@ -457,6 +457,11 @@ namespace LinksRouting
     {
       if( !_session_state_dir.isEmpty() )
       {
+        // force saving of previous state even if data was not received from
+        // every client. This preserves the data already received and prevents
+        // not saving anything at all.
+        checkStateData(true);
+
         saveState( _session_state_dir
                  + "/" + QHostInfo::localHostName()
                  + "-" + dateTimeString()
@@ -1344,7 +1349,7 @@ namespace LinksRouting
   //    'id':   <concept-id>,
   //    'name': <concept-name> // (optional)
   //    <any optional addional object properties>
-  void IPCServer::onConceptNew(ClientRef client, QJsonObject const& msg)
+  void IPCServer::onConceptNew(ClientRef, QJsonObject const& msg)
   {
     auto insert_pair = getConcept(msg, true, "create concept");
     if( insert_pair.first == _concept_nodes.end() )
@@ -1378,7 +1383,7 @@ namespace LinksRouting
   //    'task': 'CONCEPT-UPDATE',
   //    'id':   <concpet-id>,
   //    <new values for all properties that should be changed>
-  void IPCServer::onConceptUpdate(ClientRef client, QJsonObject const& msg)
+  void IPCServer::onConceptUpdate(ClientRef, QJsonObject const& msg)
   {
     auto insert_pair = getConcept(msg, false, "update concept");
     if( insert_pair.first == _concept_nodes.end() )
@@ -1428,7 +1433,7 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   //    'task': 'CONCEPT-DELETE',
   //    'id':   <concept-id>
-  void IPCServer::onConceptDelete(ClientRef client, QJsonObject const& msg)
+  void IPCServer::onConceptDelete(ClientRef, QJsonObject const& msg)
   {
     auto insert_pair = getConcept(msg, false, "delete concept");
     if( insert_pair.first == _concept_nodes.end() )
@@ -1471,7 +1476,7 @@ namespace LinksRouting
   //    'nodes': [<node ids>]
   //    'id': <node id>:<node id> (optional instead of 'nodes', sorted
   //                               alphabetically ascending)
-  void IPCServer::onConceptLinkNew(ClientRef client, QJsonObject const& msg)
+  void IPCServer::onConceptLinkNew(ClientRef, QJsonObject const& msg)
   {
     QString const cmd = from_json<QString>(msg.value("cmd"));
     auto insert_pair = getConceptLink(msg, true, "create concept link");
@@ -1503,7 +1508,7 @@ namespace LinksRouting
   //    'nodes': [<node ids>]
   //    'id': <node id>:<node id> (optional instead of 'nodes', sorted
   //                               alphabetically ascending)
-  void IPCServer::onConceptLinkUpdate(ClientRef client, QJsonObject const& msg)
+  void IPCServer::onConceptLinkUpdate(ClientRef, QJsonObject const& msg)
   {
     auto insert_pair = getConceptLink(msg, false, "update concept link");
     if( insert_pair.first == _concept_links.end() )
@@ -1557,7 +1562,7 @@ namespace LinksRouting
   //    'nodes': [<node ids>]
   //    'id': <node id>:<node id> (optional instead of 'nodes', sorted
   //                               alphabetically ascending)
-  void IPCServer::onConceptLinkDelete(ClientRef client, QJsonObject const& msg)
+  void IPCServer::onConceptLinkDelete(ClientRef, QJsonObject const& msg)
   {
     auto insert_pair = getConceptLink(msg, false, "delete concept link");
     if( insert_pair.first == _concept_links.end() )
@@ -2913,17 +2918,25 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  void IPCServer::checkStateData()
+  void IPCServer::checkStateData(bool save_if_not_complete)
   {
     for(auto const& client: _clients)
       if(    client.second->supportsCommand("save-state")
           && client.second->stateData().isEmpty() )
       {
-        qDebug() << "Missing state for" << client.second->getWindowInfo().title;
-        return;
+        if( save_if_not_complete )
+        {
+          qDebug() << "Ignore missing state for" << client.second->getWindowInfo().title;
+          client.second->setStateData({{"data-missing", true}});
+        }
+        else
+        {
+          qDebug() << "Missing state for" << client.second->getWindowInfo().title;
+          return;
+        }
       }
 
-    qDebug() << "state complete";
+    qDebug() << "Going to save state...";
 
     QWebSocket* socket = nullptr;
     auto save_client = _save_state_client.lock();

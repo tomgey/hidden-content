@@ -258,7 +258,7 @@ namespace LinksRouting
       void dirtyRender();
 
       /** Check state save data and send to client if complete */
-      void checkStateData();
+      void checkStateData(bool save_if_not_complete = false);
 
       /** Increment counter for the given url */
       void urlInc(const QUrl& url);
