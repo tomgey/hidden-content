@@ -409,7 +409,8 @@ circle.ref-highlight {
 
 .ref-open circle.ref-highlight {
   stroke: #ff5252;
-  stroke-dasharray: 3, 3;
+  stroke-dasharray: 2, 1;
+  stroke-width: 2px;
 }
 
 .ref-bg-collapsed,

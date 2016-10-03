@@ -266,6 +266,6 @@ var SidePanel = {
       sendInitiateForNode(rel);
     }
 
-    openURL(url, svgToScreenPos(pos));
+    openURLorFocus(url, svgToScreenPos(pos));
   }
 };
