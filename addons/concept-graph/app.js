@@ -42,6 +42,7 @@ var concept_graph =
     updateDetailDialogs();
 
     concept_graph.updateSelection('set', id, false);
+    sendInitiateForNode(node);
   })
   .on('concept-update', function(id, concept)
   {
@@ -94,7 +95,8 @@ var active_links = new Set();
 var active_urls = new Map();
 
 var drag_start_pos = null,
-    drag_start_selection = null;
+    drag_start_selection = null,
+    drag_cur_selection = null;
 
 var mode_create_concept = false;
 
@@ -952,19 +954,32 @@ function openURLorFocus(url, screen_pos)
   }
   else
   {
-    var graph_bb = getViewport(),
+    var w = 1000,
+        h = 800,
+        l = screenX,
+        t = screenY,
+        graph_bb = getViewport(),
         dx = screen_pos[0] - svg.attr('width') / 2,
         dy = screen_pos[1] - svg.attr('height') / 2,
-        dlen = Math.sqrt(dx * dx + dy * dy),
-        new_len = graph_bb[2] / 1.8 + 600,
-        fac = new_len / dlen,
-        new_x = screenX + graph_bb[0] + graph_bb[2] / 2 + fac * dx,
-        new_y = screenY + graph_bb[1] + graph_bb[3] / 2 + fac * dy;
+        dlen = Math.sqrt(dx * dx + dy * dy);
 
-    var l = new_x - 500,
-        t = new_y - 500,
-        w = 1000,
-        h = 800;
+    if( dlen < 5 )
+    {
+      l += graph_bb[0] + graph_bb[2] / 2 - w / 2,
+      t += graph_bb[1] + graph_bb[3] + 10;
+      console.log(dlen, screenX, graph_bb[0], graph_bb[2], l);
+    }
+    else
+    {
+      var new_len = graph_bb[2] / 1.8 + 600,
+          fac = new_len / dlen,
+          new_x = graph_bb[0] + graph_bb[2] / 2 + fac * dx,
+          new_y = graph_bb[1] + graph_bb[3] / 2 + fac * dy;
+
+      l += new_x - w / 2;
+      t += new_y - h / 2;
+    }
+
     openURL(url, [l, t, w, h]);
   }
 }
@@ -1283,6 +1298,7 @@ svg
 
     if( !d3.event.ctrlKey )
       concept_graph.updateSelection('set', null);
+
     drag_start_selection = new Set(concept_graph.selection);
 
     drag_start_pos = d3.mouse(this);
@@ -1545,7 +1561,7 @@ d3.select(window)
     y1 = (y1 - ty) / scale;
     y2 = (y2 - ty) / scale;
 
-    var selection = new Set(drag_start_selection);
+    drag_cur_selection = new Set(drag_start_selection);
 
     for(var node of filtered_nodes)
     {
@@ -1554,8 +1570,8 @@ d3.select(window)
         continue;
 
       // Toggle selection of element
-      if( !selection.delete(node.id) )
-        selection.add(node.id);
+      if( !drag_cur_selection.delete(node.id) )
+        drag_cur_selection.add(node.id);
     }
 
     for(var link of filtered_links)
@@ -1565,11 +1581,18 @@ d3.select(window)
         continue;
 
       // Toggle..
-      if( !selection.delete(link.id) )
-        selection.add(link.id);
+      if( !drag_cur_selection.delete(link.id) )
+        drag_cur_selection.add(link.id);
     }
 
-    concept_graph.updateSelection('set', selection);
+    link_groups.classed('selected', function(d)
+    {
+      return drag_cur_selection.has(d.id);
+    });
+    node_groups.classed('selected', function(d)
+    {
+      return drag_cur_selection.has(d.id);
+    });
   })
 
   // ----------------------
@@ -1581,6 +1604,12 @@ d3.select(window)
 
     drag_start_pos = null;
     drag_rect.attr('width', 0);
+
+    if( drag_cur_selection )
+    {
+      concept_graph.updateSelection('set', drag_cur_selection);
+      drag_cur_selection = null;
+    }
   })
 
   // -------------------
