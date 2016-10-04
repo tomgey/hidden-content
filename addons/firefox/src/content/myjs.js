@@ -850,6 +850,7 @@ window.addEventListener("load", function window_load()
   // Drag tabs from address bar/identity icon
   var ibox = $("identity-box");
   ibox.addEventListener('dragstart', onDragStart, false);
+  gBrowser.addEventListener("dragstart", onDragStart, false);
   document.addEventListener('click', onTabDblClick, true);
 
   // Global mousewheel handler (for semantic zoom/level of detail)
@@ -949,7 +950,7 @@ function start(match_title = false, src_id = 0, check = true)
   {
 //    window.addEventListener('unload', stopVisLinks, false);
     window.addEventListener("DOMAttrModified", attrModified, false);
-//    window.addEventListener('resize', resize, false);
+    window.addEventListener('resize', onResize, false);
 //    window.addEventListener("DOMContentLoaded", windowChanged, false);
   }
 }
@@ -1281,7 +1282,7 @@ function stop()
 //	setStatus('');
 //	window.removeEventListener('unload', stopVisLinks, false);
   window.removeEventListener("DOMAttrModified", attrModified, false);
-//  window.removeEventListener('resize', resize, false);
+  window.removeEventListener('resize', onResize, false);
 
   if( links_socket )
   {
@@ -1678,6 +1679,21 @@ function onGeometryChange(event, type, user_data)
     for(var route_id in active_routes)
       reportVisLinks(route_id, true)
   }
+}
+
+//------------------------------------------------------------------------------
+function onResize(event)
+{
+  var last_scale = scale;
+  updateScale();
+
+  if( scale == last_scale )
+    return;
+
+  console.log('Scale changed --> reroute');
+
+  for(var route_id in active_routes)
+    reportVisLinks(route_id, true)
 }
 
 //------------------------------------------------------------------------------
