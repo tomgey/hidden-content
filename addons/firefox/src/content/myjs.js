@@ -782,8 +782,8 @@ function onDocumentClick(e)
 
 function onTabDblClick(e)
 {
-  if( e.ctrlKey )
-    return _websocketDrag(e);
+//  if( e.ctrlKey )
+//    return _websocketDrag(e);
 }
 
 function onGlobalWheel(e)
