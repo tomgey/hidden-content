@@ -87,6 +87,12 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  void ClientInfo::setPointerId(uint16_t ptr_id)
+  {
+    _window_info.ptr_id = ptr_id;
+  }
+
+  //----------------------------------------------------------------------------
   const WindowInfo& ClientInfo::getWindowInfo() const
   {
     return _window_info;

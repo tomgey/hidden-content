@@ -56,6 +56,7 @@ namespace LinksRouting
     ~ClientInfo();
 
     void setWindowId(WId wid);
+    void setPointerId(uint16_t ptr_id); //!< Set owning pointer (mpx) id
     const WindowInfo& getWindowInfo() const;
 
     void setId(const QString& id);

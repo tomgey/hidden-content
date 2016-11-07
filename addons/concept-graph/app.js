@@ -41,8 +41,11 @@ var concept_graph =
     restart();
     updateDetailDialogs();
 
-    concept_graph.updateSelection('set', id, false);
-    sendInitiateForNode(node);
+    if( node.creator == app_id )
+    {
+      concept_graph.updateSelection('set', id, false);
+      sendInitiateForNode(node);
+    }
   })
   .on('concept-update', function(id, concept)
   {
@@ -250,6 +253,10 @@ function start(check = true)
         var [w, h] = msg.val;
         localStorage.setItem('desktop.width', w);
         localStorage.setItem('desktop.height', h);
+      }
+      else if( msg.id == '/mouse/dragdata' )
+      {
+        onDropData(msg.val);
       }
       else
         console.log("Received unknown value: " + event.data);
@@ -494,6 +501,58 @@ function getElementById(list, id)
       return list[i];
 
   return null;
+}
+
+var drop_ctx = null,
+    drop_data = null,
+    drop_handler = null;
+
+function onDrop(ctx)
+{
+  drop_ctx = ctx;
+  drop_ctx.screen_pos = [d3.event.screenX, d3.event.screenY];
+
+  var dt = d3.event.dataTransfer;
+  var data = dt.getData("text/plain") || localStorage.getItem("hcd/dt");
+  try
+  {
+    drop_data = JSON.parse(data);
+  }
+  catch(e)
+  {
+    console.log('invalid drop data', data, ctx);
+  }
+
+  send({
+    'task': 'GET',
+    'id': '/mouse/dragdata',
+    'pos': drop_ctx.screen_pos
+  });
+}
+
+function onDropData(dt)
+{
+  var data = dt || drop_data;
+  console.log('drop-data', data, dt, drop_ctx);
+
+  if( drop_ctx.task == 'add-reference' )
+  {
+    var url = Object.keys(data.refs)[0],
+        ref = data.refs[url];
+
+    ref.url = url;
+    ref.ranges = ref.selections[0];
+    delete ref.selections;
+
+    concept_graph.addReference(drop_ctx.id, ref);
+  }
+  else if( drop_ctx.task == 'add-concept' )
+  {
+    data.x = drop_ctx.pos[0];
+    data.y = drop_ctx.pos[1];
+
+    addConceptWithDialog(data);
+  }
 }
 
 // init D3 force layout
@@ -929,17 +988,28 @@ function restart(update_layout = true)
 
 function openURL(url, region)
 {
-  var open_url_options =
-    'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
-
-  window.open(
-    url,
-    '_blank',
-    open_url_options + ',left=' + region[0]
-                     + ',top=' + region[1]
-                     + ',width=' + region[2]
-                     + ',height=' + region[3]
+  if( links_socket )
+  {
+    send({
+      task: 'WM',
+      cmd: 'open-url',
+      url: url,
+      region: region
+    });
+  }
+  else
+  {
+    var open_url_options =
+      'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
+    window.open(
+      url,
+      '_blank',
+      open_url_options + ',left=' + region[0]
+                       + ',top=' + region[1]
+                       + ',width=' + region[2]
+                       + ',height=' + region[3]
     );
+  }
 }
 
 function openURLorFocus(url, screen_pos)
@@ -967,7 +1037,6 @@ function openURLorFocus(url, screen_pos)
     {
       l += graph_bb[0] + graph_bb[2] / 2 - w / 2,
       t += graph_bb[1] + graph_bb[3] + 10;
-      console.log(dlen, screenX, graph_bb[0], graph_bb[2], l);
     }
     else
     {
@@ -1112,23 +1181,10 @@ function applyMouseSelectionHandler(sel, drop_class_parent = false)
       d3.event.preventDefault();
       d3.event.stopPropagation();
 
-      var dt = d3.event.dataTransfer;
-      try
-      {
-        var data = JSON.parse(dt.getData("text/plain")),
-            url = Object.keys(data.refs)[0],
-            ref = data.refs[url];
-
-        ref.url = url;
-        ref.ranges = ref.selections[0];
-        delete ref.selections;
-
-        concept_graph.addReference(d.id, ref);
-      }
-      catch(e)
-      {
-        console.log('concept: invalid drop data', e, dt);
-      }
+      onDrop({
+        'task': 'add-reference',
+        'id': d.id
+      });
     });
 }
 
@@ -1246,7 +1302,7 @@ function addConceptWithDialog(cfg)
 {
   var cfg = cfg || {};
   cfg.fixed = cfg.x !== undefined;
-  console.log(typeof cfg.x, cfg);
+  cfg.creator = app_id;
 
   dlgConceptName.show(function(name){
     var name = name.trim();
@@ -1330,20 +1386,10 @@ svg
     d3.select(this).classed('drag-over', false);
     d3.event.preventDefault();
 
-    var dt = d3.event.dataTransfer;
-    try
-    {
-      var new_concept = JSON.parse(dt.getData("text/plain")),
-          pos = screenToSVGPos(d3.mouse(this));
-      new_concept.x = pos[0];
-      new_concept.y = pos[1];
-
-      addConceptWithDialog(new_concept);
-    }
-    catch(e)
-    {
-      console.log('svg: invalid drop data', e, dt);
-    }
+    onDrop({
+      'task': 'add-concept',
+      'pos': screenToSVGPos(d3.mouse(this))
+    });
   })
   .on('mouseup', function()
   {
@@ -1401,8 +1447,6 @@ function updateDrawArea(arg)
     auto_center = false;
     force_limits = true;
   }
-
-  console.log('scale', scale);
 
   var graph_x = scale * graph_bb.x - graph_pad,
       graph_y = scale * graph_bb.y - graph_pad,

@@ -26,7 +26,7 @@ function getContentUrl(_location)
   if( location.hostname.length )
     var path = location.origin + location.pathname;
   else
-    var path = location.href;
+    var path = location.href.split('#')[0];
 
   return decodeURIComponent(path);
 }
@@ -155,6 +155,9 @@ function setStatus(stat)
     .classed(stat, true);
 
   status = stat;
+
+  if( status == 'active' )
+    setBrowserBorderColor('red');
 }
 
 function setStatusSync(stat)
@@ -173,6 +176,12 @@ function setStatusSync(stat)
   var hidden = (stat == 'no-src');
   sync_icon.node().hidden = hidden;
   $('vislink-sync-src').hidden = hidden;
+}
+
+function setBrowserBorderColor(color)
+{
+  d3.select('#tab-view-deck')
+    .style('border', '2px solid ' + color);
 }
 
 /** Send data via the global WebSocket
@@ -500,7 +509,9 @@ function onPageLoad(event)
   content.addEventListener("keydown", onKeyDown, false);
   content.addEventListener("keyup", onKeyUp, false);
   content.addEventListener('scroll', onScroll, false);
+  content.addEventListener('click', onClick, true);
 
+  var win = doc.defaultView;
   console.log("tab: id=" + doc._hcd_tab_id
               + ", src=" + doc._hcd_src_id);
 
@@ -657,6 +668,41 @@ function onKeyUp(e)
   }
 }
 
+function onClick(e)
+{
+  if( stopped )
+    return;
+
+  // intercept (left/center) click on <a> aka. opening links
+  if( e.target.nodeName != 'A' || e.button > 1 )
+    return;
+
+  var loc = content.location;
+  if( e.target.href.startsWith(loc.origin + loc.pathname + '#') && e.button == 0 )
+    return; // Ignore jumping to an anchor on the same page (MMB would open
+            // in a new page/tab, so we need to intercept it also)
+
+  var target = e.target.getAttribute('target')
+            || (e.button == 1 ? '_blank' : '_self'); // MMB open in new window/tab
+
+  if( target == '_self' )
+    return; // Normal link opening in same tab/window
+
+  var vp = getViewport("abs");
+  vp[0] += 50;
+  vp[1] += 50;
+
+  send({
+    task: 'WM',
+    cmd: 'open-url',
+    url: e.target.href,
+    region: vp
+  });
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}
+
 function _getCurrentTabData(e)
 {
   var tab = e ? gBrowser.tabContainer._getDragTargetTab(e) : null;
@@ -785,6 +831,12 @@ function onDragStart(e)
 
   utils.addReference(data, cfg);
   dt.setData("text/plain", JSON.stringify(data));
+
+  send({
+    'task': 'WM',
+    'cmd': 'dragstart',
+    'data': data
+  });
 }
 
 function onContextMenu()
@@ -856,6 +908,13 @@ window.addEventListener("load", function window_load()
   // Global mousewheel handler (for semantic zoom/level of detail)
   var main_window = $("main-window");
   main_window.addEventListener("wheel", onGlobalWheel, true);
+  main_window.addEventListener("drop", function(e)
+  {
+    e.target.ownerDocument.defaultView.localStorage.setItem(
+      'hcd/dt',
+      e.dataTransfer.getData("text/plain")
+    );
+  }, true);
 
   // Drag tabs from tab bar
 //  gBrowser.tabContainer.addEventListener('dragstart', onDragStart, true);
@@ -1527,21 +1586,36 @@ function register(match_title = false, src_id = 0)
       {
         if( msg.cmd == 'open-url' )
         {
-          var flags = 'menubar,toolbar,location,status,scrollbars';
+          var open_url_options =
+            'toolbar=1,location=1,menubar=1,scrollbars=1,resizable=1';
           var url = msg.url;
 
           delete msg.cmd;
           delete msg.task;
           delete msg.url;
 
+          var region = null;
           if( typeof(msg.view) != 'undefined' )
           {
-            flags += ',width=' + msg.view[0] + ',height=' + msg.view[1];
-            delete msg.view;
+             region = msg.view;
+             delete msg.view;
+          }
+          else if( typeof(msg.region) != 'undefined' )
+          {
+             region = msg.region;
+             delete msg.region;
+          }
+
+          if( region )
+          {
+            open_url_options += ',left=' + region[0]
+                              + ',top=' + region[1]
+                              + ',width=' + region[2]
+                              + ',height=' + region[3];
           }
 
           url += '#hidden-content-data=' + JSON.stringify(msg);
-          window.open(url, '_blank', flags);
+          window.open(url, '_blank', open_url_options);
         }
         else
           console.log("Unknown command: " + event.data);
@@ -1551,6 +1625,10 @@ function register(match_title = false, src_id = 0)
       else if( msg.task == 'OPENED-URLS-UPDATE' )
       {
         // ignore
+      }
+      else if( msg.task == "WM" && msg.cmd == "windowownerchange" )
+      {
+        setBrowserBorderColor(msg.color);
       }
       else
         console.log("Unknown message: " + event.data);
@@ -1664,7 +1742,7 @@ function onGeometryChange(event, type, user_data)
 
   for(var k in user_data)
     msg[k] = user_data[k];
-  
+
   console.log(msg);
 
   if( type != 'move' )

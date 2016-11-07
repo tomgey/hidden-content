@@ -162,6 +162,11 @@ ConceptGraph.prototype.updateConcept = function( new_cfg,
       continue;
 
     concept[prop] = new_cfg[prop];
+
+    // it is required to change x/px y/py at the same time..
+    if( prop == 'x' || prop == 'y' )
+      concept['p' + prop] = new_cfg[prop];
+
     changed = true;
   }
 

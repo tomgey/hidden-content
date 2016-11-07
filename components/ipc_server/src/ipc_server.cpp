@@ -1688,6 +1688,15 @@ namespace LinksRouting
     {
       msg_ret["val"] = to_json(desktopRect().bottomRight().toQSize());
     }
+    else if( id == "/mouse/dragdata" )
+    {
+      QJsonObject msg_drag(msg);
+      msg_drag["wid"] = qint64(client->getWindowInfo().id);
+
+      qDebug() << "get dragdata" << msg_drag;
+
+      sendMessageToSupportedClient(msg_drag, "cursor-info", client);
+    }
     else
     {
       std::string val_std;
@@ -1715,18 +1724,31 @@ namespace LinksRouting
   void IPCServer::onValueGetFound(ClientRef client, QJsonObject const& msg)
   {
     QString const id = from_json<QString>(msg.value("id"));
-    if( id != "/state/all" )
+    if( id == "/state/all" )
     {
-      qWarning() << "Unknown value for GET-FOUND" << msg;
-      return;
+      client->setStateData(msg.value("data").toObject());
+      QJsonValue layout = client->stateData().value("concept-layout");
+      if( layout.isObject() )
+        _concept_layout = from_json<PropertyObjectMap>(layout);
+
+      checkStateData();
     }
+    else if( id == "/mouse/dragdata" )
+    {
+      WId wid = from_json<quintptr>(msg.value("wid"));
 
-    client->setStateData(msg.value("data").toObject());
-    QJsonValue layout = client->stateData().value("concept-layout");
-    if( layout.isObject() )
-      _concept_layout = from_json<PropertyObjectMap>(layout);
+      for(auto& wclient: _clients)
+      {
+        if( wclient.second->getWindowInfo().id != wid )
+          continue;
 
-    checkStateData();
+        qDebug() << "send dragdata" << wclient.second->getWindowInfo().title;
+
+        sendMessage(msg, wclient.second);
+      }
+    }
+    else
+      qWarning() << "Unknown value for GET-FOUND" << msg;
   }
 
   //----------------------------------------------------------------------------
@@ -1763,10 +1785,11 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  void IPCServer::onWindowManagementCommand(ClientRef, QJsonObject const& msg)
+  void IPCServer::onWindowManagementCommand( ClientRef client,
+                                             QJsonObject const& msg )
   {
     QString const cmd = from_json<QString>(msg.value("cmd"));
-    if( cmd == "activate-window" )
+    if( cmd == "activate-window" || cmd == "open-url" )
     {
       QUrl const url = from_json<QUrl>(msg.value("url"));
       if( !url.isValid() )
@@ -1775,11 +1798,35 @@ namespace LinksRouting
         return;
       }
 
-      for(auto client: _clients)
+      if( cmd == "activate-window" )
+        for(auto c: _clients)
+        {
+          if( c.second->url() == url )
+            c.second->activateWindow();
+        }
+      else
+        sendMessageToSupportedClient(msg, "wm-open-url", client);
+    }
+    else if( cmd == "windowownerchange" )
+    {
+      WId wid = from_json<quintptr>(msg.value("wid"));
+
+      for(auto& wclient: _clients)
       {
-        if( client.second->url() == url )
-          client.second->activateWindow();
+        if( wclient.second->getWindowInfo().id != wid )
+          continue;
+
+        qDebug() << "send windowownerchange" << wclient.second->getWindowInfo().title;
+
+        wclient.second->setPointerId(from_json<int>(msg.value("id")));
+        sendMessage(msg, wclient.second);
       }
+    }
+    else if( cmd == "dragstart" )
+    {
+      QJsonObject msg_cursor(msg);
+      msg_cursor["ptr-id"] = client->getWindowInfo().ptr_id;
+      sendMessageToSupportedClient(msg_cursor, "cursor-info", client);
     }
     else
       qWarning() << "Unknown window management command:" << msg;
@@ -2290,6 +2337,13 @@ namespace LinksRouting
         return it.second->id() == id;
       }
     );
+  }
+
+  //----------------------------------------------------------------------------
+  ClientRef IPCServer::getClientByWId(WId wid)
+  {
+    auto client_info = findClientInfo(wid);
+    return client_info != _clients.end() ? client_info->second : ClientRef{};
   }
 
   //----------------------------------------------------------------------------
@@ -2901,6 +2955,34 @@ namespace LinksRouting
                                      ClientRef sender ) const
   {
     distributeMessage(msg, clientList<ClientList>(), sender);
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::sendMessage( const QJsonObject& msg,
+                               ClientRef receiver ) const
+  {
+    distributeMessage(msg, ClientList({receiver}));
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::sendMessageToSupportedClient( const QJsonObject& msg,
+                                                const QString& required_cmd,
+                                                ClientRef sender ) const
+  {
+    for(auto const& c: _clients)
+    {
+      if( c.second->supportsCommand(required_cmd) )
+      {
+        sendMessage(msg, c.second);
+        return;
+      }
+    }
+
+    QJsonObject msg_ret(msg);
+    msg_ret["task"] = "CMD";
+    msg_ret["status"] = "missing-client";
+
+    sendMessage(msg_ret, sender);
   }
 
   //----------------------------------------------------------------------------

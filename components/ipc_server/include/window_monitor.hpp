@@ -24,6 +24,7 @@ namespace LinksRouting
   {
     WId         id;
     uint32_t    pid;
+    uint16_t    ptr_id;
     bool        minimized,
                 covered;
     QRect       region,
@@ -37,6 +38,7 @@ namespace LinksRouting
                          const QString& title = "" ):
       id(id),
       pid(pid),
+      ptr_id(2), // Virtual core pointer has always id=2
       minimized(minimized),
       covered(false),
       region(region),
@@ -45,7 +47,7 @@ namespace LinksRouting
 
     bool operator==(const WindowInfo& rhs) const
     {
-      // We don't care about title changes -> Only compare other values
+      // We don't care about title and ptr changes -> Only compare other values
       return id == rhs.id
           && region == rhs.region
           && minimized == rhs.minimized

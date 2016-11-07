@@ -208,6 +208,7 @@ namespace LinksRouting
       void regionsChanged(const WindowRegions& regions);
       ClientInfos::iterator findClientInfo(WId wid);
       ClientInfos::iterator findClientInfoById(QString const& cid);
+      ClientRef getClientByWId(WId wid);
 
       LinkDescription::LinkList::iterator findLink(const QString& id);
       bool requireLink( const QJsonObject& msg,
@@ -253,6 +254,12 @@ namespace LinksRouting
       /** Send message to all clients except the sender */
       void distributeMessage( const QJsonObject& msg,
                               ClientRef sender = nullptr ) const;
+
+      void sendMessage( const QJsonObject& msg,
+                        ClientRef receiver ) const;
+      void sendMessageToSupportedClient( const QJsonObject& msg,
+                                         const QString& required_cmd,
+                                         ClientRef sender ) const;
 
       void dirtyLinks();
       void dirtyRender();
