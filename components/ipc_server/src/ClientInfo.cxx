@@ -411,7 +411,7 @@ namespace LinksRouting
     if( checkMatchOne(possible_windows, "process id") )
       return true;
 
-    bool is_firefox = type() == "Firefox";
+    bool is_browser = type() == "Browser";
     const QRect& geom = reportedGeometry();
 
     QString clean_title = cleanedString(title());
@@ -433,7 +433,7 @@ namespace LinksRouting
 
       qDebug() << " - region match" << w->region << w->title;
 
-      if( is_firefox && !w->title.contains("Mozilla Firefox")
+      if( is_browser && !w->title.contains("Mozilla Firefox")
                      && !w->title.contains("Aurora") )
       {
         qDebug() << " - region not a Firefox window";

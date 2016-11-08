@@ -342,7 +342,7 @@ function sendMsgRegister()
     'type': "Graph",
     'pid': localStorage.getItem('pid'),
     'cmds': ['create-concept', 'save-state'],
-    "client-id": 'testing',
+    "client-id": 'concept-graph-' + app_id,
     'geom': [
       window.screenX, window.screenY,
       window.outerWidth, window.outerHeight
@@ -1109,7 +1109,8 @@ function sendInitiateForNode(n)
   send({
     'task': 'INITIATE',
     'id': 'link://concept/' + n.id,
-    'refs': n.refs || {}
+    'refs': n.refs || {},
+    'whitelist': ['type/Browser', 'this']
   });
   active_links.add('link://concept/' + n.id);
 }

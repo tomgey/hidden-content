@@ -205,6 +205,10 @@ namespace LinksRouting
       void onLinkAbort( ClientRef, QJsonObject const& msg,
                                    QString const& msg_raw );
 
+      FilterList parseFilterList( ClientRef client,
+                                  const QStringList& filter_strings,
+                                  const WindowRegions& windows );
+
       void regionsChanged(const WindowRegions& regions);
       ClientInfos::iterator findClientInfo(WId wid);
       ClientInfos::iterator findClientInfoById(QString const& cid);

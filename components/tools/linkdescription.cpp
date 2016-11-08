@@ -27,6 +27,23 @@ namespace std
 
     return strm << "]";
   }
+
+  template<class T>
+  std::ostream& operator<<(std::ostream& strm, QVector<T> const& list)
+  {
+    return strm << list.toStdVector();
+  }
+
+  template<class T>
+  std::ostream& operator<<(std::ostream& strm, QList<T> const& list)
+  {
+    return strm << list.toVector().toStdVector();
+  }
+
+  std::ostream& operator<<(std::ostream& strm, QString const& str)
+  {
+    return strm << str.toStdString();
+  }
 }
 
 namespace LinksRouting

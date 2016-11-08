@@ -8,6 +8,7 @@
 
 #include <QMap>
 #include <QVariant>
+#include <QVector>
 
 #include <functional>
 #include <list>
@@ -16,7 +17,7 @@
 #include <memory>
 #include <iostream>
 
-typedef std::vector<std::string> StringList;
+typedef QVector<QStringList> FilterList; // Each filter consists of one or more parts
 typedef QMap<QString, QVariantMap> PropertyObjectMap;
 
 namespace LinksRouting
@@ -334,8 +335,8 @@ namespace LinkDescription
                      uint32_t stamp,
                      const HyperEdgePtr& link,
                      const Color& color,
-                     const StringList& client_whitelist,
-                     const StringList& client_blacklist,
+                     const FilterList& client_whitelist,
+                     const FilterList& client_blacklist,
                      const QVariantMap& props ):
       _id( id ),
       _stamp( stamp ),
@@ -354,7 +355,7 @@ namespace LinkDescription
     uint32_t      _stamp;
     HyperEdgePtr  _link;
     Color         _color;
-    StringList    _client_whitelist,
+    FilterList    _client_whitelist,
                   _client_blacklist;
     QVariantMap   _props;
   };

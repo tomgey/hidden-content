@@ -1373,7 +1373,7 @@ function sendMsgRegister(match_title, src_id, click_pos)
 
   var msg = {
     'task': 'REGISTER',
-    'type': "Firefox",
+    'type': "Browser",
     'pid': getPid(),
     'cmds': cmds,
     'viewport': getViewport(),

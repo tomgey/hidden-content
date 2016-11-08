@@ -43,11 +43,12 @@ namespace LinksRouting
     return json;
   }
 
-  QJsonArray to_json(StringList const& list)
+  template<class T>
+  QJsonArray to_json(QVector<T> const& list)
   {
     QJsonArray json;
     for(auto const& s: list)
-      json.push_back(QString::fromStdString(s));
+      json.push_back(to_json(s));
 
     return json;
   }
@@ -1873,60 +1874,19 @@ namespace LinksRouting
 #endif
 
     auto window_list = _window_monitor.getWindows();
-    StringList client_whitelist,
-               client_blacklist;
-    for( QString const& entry:
-           from_json<QStringList>(msg.value("whitelist"), {}) )
+    auto parseList = [&](const QString& name)
     {
-      if( entry == "this" )
-      {
-        client_whitelist.push_back(client->id().toStdString());
-        continue;
-      }
+      return parseFilterList(
+        client,
+        from_json<QStringList>(msg.value(name), {}),
+        window_list
+      );
+    };
 
-      QStringList path_parts = entry.split('/', QString::SkipEmptyParts);
-      if( path_parts.empty() )
-      {
-        LOG_WARN("INITIATE: skip empty whitelist entry.");
-        continue;
-      }
-
-      // window-at/<pos-x>|<pos-y>
-      if( path_parts[0] == "window-at" )
-      {
-        QStringList pos_parts;
-        if( path_parts.size() == 2 )
-          pos_parts = path_parts[1].split('|');
-
-        if( pos_parts.size() != 2 )
-        {
-          LOG_WARN( "INITIATE: invalid whitelist entry,"
-                    " should be 'window-at/<pos-x>|<pos-y>'" );
-          continue;
-        }
-
-        QPoint pos(pos_parts[0].toInt(), pos_parts[1].toInt());
-        auto window = window_list.windowAt(pos);
-        if( window == window_list.rend() )
-        {
-          LOG_WARN("INITIATE: whitelist: no match for '" << entry << "'");
-          return;
-        }
-
-        auto other_client = findClientInfo(window->id);
-        if( other_client == _clients.end() )
-        {
-          LOG_WARN("INITIATE: can not link to not connected window");
-          return;
-        }
-
-        client_whitelist.push_back(other_client->second->id().toStdString());
-      }
-      else
-      {
-        client_whitelist.push_back(entry.toStdString());
-      }
-    }
+    FilterList client_whitelist = parseList("whitelist"),
+               client_blacklist = parseList("blacklist");
+    qDebug() << "white" << client_whitelist;
+    qDebug() << "black" << client_blacklist;
 
     Color link_color = from_json<Color>(msg.value("color"));
 
@@ -2096,10 +2056,72 @@ namespace LinksRouting
     {
       std::remove( link->_client_whitelist.begin(),
                    link->_client_whitelist.end(),
-                   client->id().toStdString() );
+                   QStringList({client->id()}) );
     }
 
     abortLinking(link, abort_wid);
+  }
+
+
+  //----------------------------------------------------------------------------
+  FilterList IPCServer::parseFilterList( ClientRef client,
+                                         const QStringList& filter_strings,
+                                         const WindowRegions& windows )
+  {
+    FilterList filter_list;
+    for(QString const& entry: filter_strings)
+    {
+      if( entry == "this" )
+      {
+        filter_list.push_back({client->id()});
+        continue;
+      }
+
+      QStringList path_parts = entry.split('/', QString::SkipEmptyParts);
+      if( path_parts.empty() )
+      {
+        qWarning() << "filterlist: skip empty entry.";
+        continue;
+      }
+
+      // window-at/<pos-x>|<pos-y>
+      if( path_parts[0] == "window-at" )
+      {
+        QStringList pos_parts;
+        if( path_parts.size() == 2 )
+          pos_parts = path_parts[1].split('|');
+
+        if( pos_parts.size() != 2 )
+        {
+          qWarning() << "invalid filterlist entry, "
+                        "should be 'window-at/<pos-x>|<pos-y>'";
+          continue;
+        }
+
+        QPoint pos(pos_parts[0].toInt(), pos_parts[1].toInt());
+        auto window = windows.windowAt(pos);
+        if( window == windows.rend() )
+        {
+          qWarning() << "filterlist: no match for" << entry;
+          continue;
+        }
+
+        auto other_client = findClientInfo(window->id);
+        if( other_client == _clients.end() )
+        {
+          qWarning() << "filterlist: not connected window" << window->id;
+          continue;
+        }
+
+        filter_list.push_back({other_client->second->id()});
+      }
+      else
+      {
+        filter_list.push_back(path_parts);
+      }
+    }
+
+    return filter_list;
   }
 
   //----------------------------------------------------------------------------
@@ -2902,19 +2924,28 @@ namespace LinksRouting
               << QString::fromLocal8Bit(msg_data).toStdString() << std::endl;
 
     auto isOnList = []( ClientRef const& client,
-                        StringList const& list )
+                        FilterList const& list )
     {
       return std::find_if(
         std::begin(list),
         std::end(list),
-        [&](std::string const& client_id)
+        [&](QStringList const& filter)
         {
-          return client_id == client->id().toStdString();
+          if( filter.isEmpty() )
+          {
+            qWarning() << "Empty filter!!";
+            return false;
+          }
+
+          if( filter.first() == "type" )
+            return filter.last() == client->type();
+          else
+            return filter.first() == client->id();
         }
       ) != std::end(list);
     };
 
-    StringList const& whitelist = link._client_whitelist,
+    FilterList const& whitelist = link._client_whitelist,
                       blacklist = link._client_blacklist;
 
     for(auto client: clients)
