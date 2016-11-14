@@ -1852,20 +1852,24 @@ namespace LinksRouting
   //----------------------------------------------------------------------------
   void IPCServer::onLinkInitiate(ClientRef client, QJsonObject const& msg)
   {
-    QString const id = from_json<QString>(msg.value("id")).trimmed();
-    if( id.length() > 256 )
+    qDebug() << "INITIATE: active links";
+    for(auto const& l: *_slot_links->_data)
+      qDebug() << "-" << l._id << l._props;
+
+    QString const link_id = from_json<QString>(msg.value("id")).trimmed();
+    if( link_id.length() > 256 )
     {
       LOG_WARN("Search identifier too long!");
       return;
     }
 
-    qDebug() << "INITATE" << id;
+    qDebug() << "INITATE" << link_id;
 
 #if 0
     std::string history;
     (*_subscribe_user_config->_data)->getString("QtWebsocketServer:SearchHistory", history);
 
-    QString clean_id = QString(id).replace(",","") + ",";
+    QString clean_id = QString(link_id).replace(",","") + ",";
     QString new_history = clean_id
                         + QString::fromStdString(history).replace(clean_id, "");
 
@@ -1873,35 +1877,42 @@ namespace LinksRouting
       ->setString("QtWebsocketServer:SearchHistory", to_string(new_history));
 #endif
 
-    auto window_list = _window_monitor.getWindows();
-    auto parseList = [&](const QString& name)
-    {
-      return parseFilterList(
-        client,
-        from_json<QStringList>(msg.value(name), {}),
-        window_list
-      );
-    };
-
-    FilterList client_whitelist = parseList("whitelist"),
-               client_blacklist = parseList("blacklist");
-    qDebug() << "white" << client_whitelist;
-    qDebug() << "black" << client_blacklist;
+    bool merge = from_json<bool>(msg.value("merge"), true);
+    LinkDescription::LinkDescription* new_link = nullptr;
 
     Color link_color = from_json<Color>(msg.value("color"));
 
     // Remove eventually existing search for same id
-    auto link = findLink(id);
+    auto link = findLink(link_id);
     if( link != _slot_links->_data->end() )
     {
       if( !link_color.isVisible() )
         // keep color if none is requested
         link_color = link->_color;
 
-      qDebug() << "Replacing search for" << link->_id;
-      abortLinking(link, client->getWindowInfo().id);
+      WId wid = merge ? client->getWindowInfo().id : 0;
+      if( link == abortLinking(link, wid) )
+      {
+        new_link = &(*link);
+        qDebug() << "Merge link for" << link_id;
+      }
+      else
+      {
+        qDebug() << "Remove link for" << link_id;
+      }
     }
-    else if( !link_color.isVisible() )
+
+    if( !new_link )
+    {
+      qDebug() << "New link for" << link_id;
+
+      _slot_links->_data->push_back(LinkDescription::LinkDescription(link_id));
+      new_link = &_slot_links->_data->back();
+    }
+    new_link->_stamp = from_json<uint32_t>(msg.value("stamp"));
+
+
+    if( !link_color.isVisible() )
     {
       // get first unused color
       for(Color const& color: _colors)
@@ -1924,12 +1935,35 @@ namespace LinksRouting
         // No unused color available -> need to reuse, so use a "random" one.
         link_color = _colors[ _slot_links->_data->size() % _colors.size() ];
     }
+    new_link->_color = link_color;
+
+
+    auto window_list = _window_monitor.getWindows();
+    auto parseList = [&](FilterList& existing_list, const QString& name)
+    {
+      return parseFilterList(
+        existing_list,
+        client,
+        from_json<QStringList>(msg.value(name), {}),
+        window_list
+      );
+    };
+
+    parseList(new_link->_client_whitelist, "whitelist");
+    parseList(new_link->_client_blacklist, "blacklist");
+
+    qDebug() << "white" << new_link->_client_whitelist;
+    qDebug() << "black" << new_link->_client_blacklist;
+
 
     auto hedge = LinkDescription::HyperEdge::make_shared();
-    hedge->set("link-id", to_string(id));
+    hedge->set("link-id", to_string(link_id));
     hedge->addNode( client->parseRegions(msg) );
     client->update(window_list);
     updateCenter(hedge.get());
+
+    new_link->_link = hedge;
+
 
     QJsonObject link_props(msg);
     link_props.remove("color"); // TODO sync color? store it here?
@@ -1938,28 +1972,18 @@ namespace LinksRouting
     link_props.remove("task");
     link_props.remove("whitelist");
 
-    uint32_t stamp = from_json<uint32_t>(msg.value("stamp"));
-    _slot_links->_data->push_back(
-      LinkDescription::LinkDescription(
-        id,
-        stamp,
-        hedge,
-        link_color,
-        client_whitelist,
-        client_blacklist,
-        link_props.toVariantMap()
-      )
-    );
+    new_link->_props = link_props.toVariantMap();
+
+
     _slot_links->setValid(true);
-    auto const& new_link = _slot_links->_data->back();
 
     QJsonObject req;
     req["task"] = "REQUEST";
-    req["id"] = id;
-    req["stamp"] = qint64(stamp);
+    req["id"] = link_id;
+    req["stamp"] = qint64(new_link->_stamp);
     req["data"] = link_props;
 
-    distributeMessage(new_link, req);
+    distributeMessage(*new_link, req);
   }
 
   //----------------------------------------------------------------------------
@@ -2064,16 +2088,24 @@ namespace LinksRouting
 
 
   //----------------------------------------------------------------------------
-  FilterList IPCServer::parseFilterList( ClientRef client,
+  FilterList IPCServer::parseFilterList( FilterList& filter_list,
+                                         ClientRef client,
                                          const QStringList& filter_strings,
                                          const WindowRegions& windows )
   {
-    FilterList filter_list;
+    auto insert_unique = [&filter_list](const QStringList& filter)
+    {
+      if( std::find( std::begin(filter_list),
+                     std::end(filter_list),
+                     filter ) == std::end(filter_list) )
+        filter_list.push_back(filter);
+    };
+
     for(QString const& entry: filter_strings)
     {
       if( entry == "this" )
       {
-        filter_list.push_back({client->id()});
+        insert_unique({client->id()});
         continue;
       }
 
@@ -2113,11 +2145,11 @@ namespace LinksRouting
           continue;
         }
 
-        filter_list.push_back({other_client->second->id()});
+        insert_unique({other_client->second->id()});
       }
       else
       {
-        filter_list.push_back(path_parts);
+        insert_unique(path_parts);
       }
     }
 
@@ -2920,8 +2952,8 @@ namespace LinksRouting
   ) const
   {
     QByteArray msg_data = QJsonDocument(msg).toJson(QJsonDocument::Compact);
-    std::cout << "message: "
-              << QString::fromLocal8Bit(msg_data).toStdString() << std::endl;
+    qDebug() << "distributeMessage" << link._id
+             << QString::fromLocal8Bit(msg_data);
 
     auto isOnList = []( ClientRef const& client,
                         FilterList const& list )
@@ -2950,20 +2982,28 @@ namespace LinksRouting
 
     for(auto client: clients)
     {
-      LOG_DEBUG("check: " << client->getWindowInfo().title.toStdString());
+#ifdef DEBUG_LINK_FILTER_LIST
+      qDebug() << "check:" << client->getWindowInfo().title;
+#endif
       if( isOnList(client, blacklist) )
       {
-        LOG_DEBUG("on blacklist");
+#ifdef DEBUG_LINK_FILTER_LIST
+        qDebug() << "on blacklist";
+#endif
         continue;
       }
 
       if( !whitelist.empty() && !isOnList(client, whitelist) )
       {
-        LOG_DEBUG("not on whitelist");
+#ifdef DEBUG_LINK_FILTER_LIST
+        qDebug() << "not on whitelist";
+#endif
         continue;
       }
 
-      LOG_DEBUG("allowed");
+#ifdef DEBUG_LINK_FILTER_LIST
+      qDebug() << "allowed";
+#endif
       client->socket->sendTextMessage(msg_data);
     }
   }
@@ -3044,12 +3084,12 @@ namespace LinksRouting
         }
         else
         {
-          qDebug() << "Missing state for" << client.second->getWindowInfo().title;
+          //qDebug() << "Missing state for" << client.second->getWindowInfo().title;
           return;
         }
       }
 
-    qDebug() << "Going to save state...";
+    //qDebug() << "Going to save state...";
 
     QWebSocket* socket = nullptr;
     auto save_client = _save_state_client.lock();

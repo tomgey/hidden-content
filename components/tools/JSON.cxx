@@ -74,6 +74,17 @@ template<> QUrl from_json<QUrl>( const QJsonValue& val,
 }
 
 //------------------------------------------------------------------------------
+template<> bool from_json<bool>( const QJsonValue& val,
+                                 const bool& def )
+{
+  QVariant var = val.toVariant();
+  if( !var.isValid() )
+    return def;
+
+  return var.toBool();
+}
+
+//------------------------------------------------------------------------------
 template<>
 quintptr from_json<quintptr>( const QJsonValue& val,
                               const quintptr& def )

@@ -126,6 +126,11 @@ namespace LinksRouting
     void removeLink(LinkDescription::HyperEdge* hedge);
 
     /**
+     * Check if client is connected to the given link
+     */
+    bool hasLink(LinkDescription::HyperEdge* hedge) const;
+
+    /**
      * Get viewport in absolute (screen) coordinates
      */
     QRect getViewportAbs() const;

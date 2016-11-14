@@ -332,12 +332,12 @@ namespace LinkDescription
   struct LinkDescription
   {
     LinkDescription( const QString& id,
-                     uint32_t stamp,
-                     const HyperEdgePtr& link,
-                     const Color& color,
-                     const FilterList& client_whitelist,
-                     const FilterList& client_blacklist,
-                     const QVariantMap& props ):
+                     uint32_t stamp = 0,
+                     const HyperEdgePtr& link = {},
+                     const Color& color = {},
+                     const FilterList& client_whitelist = {},
+                     const FilterList& client_blacklist = {},
+                     const QVariantMap& props = {}):
       _id( id ),
       _stamp( stamp ),
       _link( link ),

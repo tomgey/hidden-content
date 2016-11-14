@@ -1121,7 +1121,7 @@ function abortLink(id)
     'task': 'ABORT',
     'id': id,
     'stamp': 0,
-    'scope': 'all'
+    'scope': 'this', //'all'
   });
   active_links.delete(id);
 }

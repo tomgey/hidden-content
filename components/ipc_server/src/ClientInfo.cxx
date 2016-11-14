@@ -392,7 +392,9 @@ namespace LinksRouting
       WindowInfo const& winfo = *w_its.front();
       if( winfo.id == _window_info.id )
       {
+#ifdef WINDOW_MATCH_DEBUG
         qDebug() << "Not updating already correct match";
+#endif
         return true;
       }
 
@@ -427,16 +429,22 @@ namespace LinksRouting
              // they are integrated into the global menubar
           || std::abs(w->region.height() - geom.height()) > 30 )
       {
+#ifdef WINDOW_MATCH_DEBUG
         qDebug() << " - region mismatch" << w->region << w->title;
+#endif
         continue;
       }
 
+#ifdef WINDOW_MATCH_DEBUG
       qDebug() << " - region match" << w->region << w->title;
+#endif
 
       if( is_browser && !w->title.contains("Mozilla Firefox")
                      && !w->title.contains("Aurora") )
       {
+#ifdef WINDOW_MATCH_DEBUG
         qDebug() << " - region not a Firefox window";
+#endif
         continue;
       }
 
@@ -445,11 +453,15 @@ namespace LinksRouting
 
       if( !clean_window_title.startsWith(clean_title) )
       {
+#ifdef WINDOW_MATCH_DEBUG
         qDebug() << " - title missmatch" << clean_window_title << clean_title;
+#endif
         continue;
       }
 
+#ifdef WINDOW_MATCH_DEBUG
       qDebug() << " - match";
+#endif
       matching_windows.push_back(w);
     }
 
@@ -556,6 +568,18 @@ namespace LinksRouting
       else
         ++preview;
     }
+  }
+
+  //----------------------------------------------------------------------------
+  bool ClientInfo::hasLink(LinkDescription::HyperEdge* hedge) const
+  {
+    for(auto const& node: _nodes)
+    {
+      if( node->getParent().get() == hedge )
+        return true;
+    }
+
+    return false;
   }
 
   //----------------------------------------------------------------------------

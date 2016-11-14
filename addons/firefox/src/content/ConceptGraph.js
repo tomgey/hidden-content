@@ -704,7 +704,7 @@ ConceptGraph.prototype.handleMessage = function(msg)
   }
   else if( msg.task == 'CONCEPT-SELECTION-UPDATE' )
   {
-    this.updateSelection('set', msg.selection, false);
+    //this.updateSelection('set', msg.selection, false);
     return true;
   }
   else if( msg.task == 'GET-FOUND' && msg.id == '/concepts/all' )

@@ -8,15 +8,43 @@
 #include <linkdescription.h>
 #include <limits>
 
+template<typename>
+struct is_container:
+  public std::false_type
+{};
+
+#define IS_CONTAINER(type)\
+  template<>\
+  struct is_container<type>:\
+    public std::true_type\
+  {};
+
+#define IS_CONTAINER_T(type)\
+  template<class T>\
+  struct is_container<type<T>>:\
+    public std::true_type\
+  {};
+
+IS_CONTAINER_T(std::vector)
+
+IS_CONTAINER_T(QList)
+IS_CONTAINER_T(QSet)
+IS_CONTAINER_T(QVector)
+
+IS_CONTAINER(QStringList)
+
 namespace std
 {
+//  template<class T>
+//    std::ostream& operator<<(std::ostream& strm, std::vector<T> const& list)
   template<class T>
-  std::ostream& operator<<(std::ostream& strm, std::vector<T> const& list)
+  typename std::enable_if<is_container<T>::value, std::ostream&>::type
+  operator<<(std::ostream& strm, T const& list)
   {
     strm << "[";
 
     bool first = true;
-    for(T const& str: list)
+    for(auto const& str: list)
     {
       if( first )
         first = false;
@@ -26,18 +54,6 @@ namespace std
     }
 
     return strm << "]";
-  }
-
-  template<class T>
-  std::ostream& operator<<(std::ostream& strm, QVector<T> const& list)
-  {
-    return strm << list.toStdVector();
-  }
-
-  template<class T>
-  std::ostream& operator<<(std::ostream& strm, QList<T> const& list)
-  {
-    return strm << list.toVector().toStdVector();
   }
 
   std::ostream& operator<<(std::ostream& strm, QString const& str)
