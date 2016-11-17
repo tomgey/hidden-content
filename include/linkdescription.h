@@ -1,14 +1,16 @@
 #ifndef LR_LINKDESCRIPTION
 #define LR_LINKDESCRIPTION
 
-#include "color.h"
+#include <QColor>
+#include <QJsonObject>
+#include <QMap>
+#include <QPoint>
+#include <QVariant>
+#include <QVector>
+
 #include "datatypes.h"
 #include "float2.hpp"
 #include "string_utils.h"
-
-#include <QMap>
-#include <QVariant>
-#include <QVector>
 
 #include <functional>
 #include <list>
@@ -334,10 +336,10 @@ namespace LinkDescription
     LinkDescription( const QString& id,
                      uint32_t stamp = 0,
                      const HyperEdgePtr& link = {},
-                     const Color& color = {},
+                     const QColor& color = {},
                      const FilterList& client_whitelist = {},
                      const FilterList& client_blacklist = {},
-                     const QVariantMap& props = {}):
+                     const QJsonObject& props = {}):
       _id( id ),
       _stamp( stamp ),
       _link( link ),
@@ -354,10 +356,10 @@ namespace LinkDescription
     QString       _id;
     uint32_t      _stamp;
     HyperEdgePtr  _link;
-    Color         _color;
+    QColor        _color;
     FilterList    _client_whitelist,
                   _client_blacklist;
-    QVariantMap   _props;
+    QJsonObject   _props;
   };
 
   typedef std::list<LinkDescription> LinkList;

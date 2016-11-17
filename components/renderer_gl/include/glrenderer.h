@@ -40,7 +40,7 @@ namespace LinksRouting
 
     protected:
 
-      Color                 _color_cur,
+      QColor                _color_cur,
                             _color_covered_cur;
       int                   _num_blur;
 
@@ -67,7 +67,7 @@ namespace LinksRouting
       typedef std::queue<const LinkDescription::HyperEdge*> HyperEdgeQueue;
       typedef std::set<const LinkDescription::HyperEdge*> HyperEdgeSet;
 
-      Color getCurrentColor() const;
+      QColor getCurrentColor() const;
 
       void blur(gl::FBO& fbo);
 

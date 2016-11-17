@@ -11,5 +11,5 @@ set(SOURCE_FILES ${COMPONENTSRC_DIR}/cpurouting.cpp
     )
 
 add_library(cpurouting ${HEADER_FILES} ${SOURCE_FILES})
-target_link_libraries(cpurouting Qt5::Core)
+target_link_libraries(cpurouting Qt5::Core Qt5::Widgets)
 add_component_data(${COMPONENTINC_DIR} cpurouting)

@@ -257,29 +257,35 @@ namespace LinksRouting
       return node;
     }
 
-    QVariantList regions = from_json<QVariantList>(msg.value("regions"));
+    QJsonArray regions = msg.value("regions").toArray();
+    if( regions.isEmpty() )
+    {
+      qWarning() << "Empty or missing 'regions'." << msg;
+      return node;
+    }
 
     LinkDescription::PropertyMap node_props;
-    for(auto region = regions.begin(); region != regions.end(); ++region)
+    for(auto region: regions)
     {
-      if( region->type() != QVariant::Map )
-        continue;
-
-      auto map = region->toMap();
-      for( auto it = map.constBegin(); it != map.constEnd(); ++it )
-        node_props.set(to_string(it.key()), it->toString());
+      QJsonObject props = region.toObject();
+      for(auto prop = props.begin(); prop != props.end(); ++prop)
+        node_props.set( prop.key().toStdString(),
+                        prop->toString().toStdString() );
     }
 
     float2 top_left( getViewportAbs().topLeft() ),
            scroll_offset( scroll_region.topLeft() );
     LinkDescription::nodes_t nodes;
 
+    qDebug() << "top_left" << top_left.toQPoint()
+             << "scroll_offset" << scroll_offset.toQPoint();
+
     bool const node_rel = node_props.get<bool>("rel", false);
     std::string const node_ref = node_props.get<std::string>("ref", "abs");
 
-    for(auto region = regions.begin(); region != regions.end(); ++region)
+    for(auto region: regions)
     {
-      if( region->type() != QVariant::List )
+      if( !region.isArray() )
         continue;
 
       LinkDescription::points_t points;
@@ -288,19 +294,20 @@ namespace LinksRouting
       float min_y = std::numeric_limits<float>::max(),
             max_y = std::numeric_limits<float>::lowest();
 
-      //for(QVariant point: region.toList())
-      auto regionlist = region->toList();
-      for(auto point = regionlist.begin(); point != regionlist.end(); ++point)
+      for(auto point: region.toArray())
       {
-        if( point->type() == QVariant::Map )
+        if( point.isObject() )
         {
-          auto map = point->toMap();
-          for( auto it = map.constBegin(); it != map.constEnd(); ++it )
-            region_props.set(to_string(it.key()), it->toString());
+          auto point_props = point.toObject();
+          for( auto it = point_props.constBegin();
+                    it != point_props.constEnd();
+                  ++it )
+            region_props.set( it.key().toStdString(),
+                              it->toString().toStdString() );
         }
         else
         {
-          points.push_back( JSONNode(*point).getValue<float2>() );
+          points.push_back(from_json<float2>(point));
 
           if( points.back().y > max_y )
             max_y = points.back().y;
@@ -642,7 +649,7 @@ namespace LinksRouting
                           std::string const& indent_incr ) const
   {
     strm << indent << "<ClientInfo address=\"" << this << "\">\n"
-         << indent << indent_incr << "title: " << _window_info.title << "\n";
+         << indent << indent_incr << "title: " << _window_info.title.toStdString() << "\n";
 
     for(auto const& node: _nodes)
       node->print(strm, indent + indent_incr, indent_incr);

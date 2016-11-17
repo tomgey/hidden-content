@@ -70,7 +70,7 @@ set( INTERFACE_FILES
   ${LINKS_INCLUDE_DIR}/renderer.h
   ${LINKS_INCLUDE_DIR}/routing.h
   ${LINKS_INCLUDE_DIR}/transparencyanalysis.h
-  ${LINKS_INCLUDE_DIR}/color.h
+  ${LINKS_INCLUDE_DIR}/color_helpers.h
   ${LINKS_INCLUDE_DIR}/linkdescription.h
 )
 

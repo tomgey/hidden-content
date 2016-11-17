@@ -9,13 +9,13 @@
 
 #include "LinkRenderer.hpp"
 #include "NodeRenderer.hpp"
+#include "color_helpers.h"
 
 #include <QDebug>
 #include <GL/gl.h>
 
 namespace LinksRouting
 {
-
   //----------------------------------------------------------------------------
   bool LinkRenderer::renderLinks(const LinkDescription::LinkList& links)
   {
@@ -28,8 +28,8 @@ namespace LinksRouting
 
     for(auto link = links.begin(); link != links.end(); ++link)
     {
-      Color color_cur = link->_color,
-            color_covered_cur = 0.4f * color_cur;
+      QColor color_cur = link->_color,
+             color_covered_cur = 0.4f * color_cur;
       renderer.setColor(color_cur, color_covered_cur);
 
       HyperEdgeQueue hedges_open;
@@ -45,9 +45,9 @@ namespace LinksRouting
           continue;
 
         if( hedge->get<bool>("covered") || hedge->get<bool>("outside") )
-          glColor4fv(color_covered_cur);
+          qtGlColor(color_covered_cur);
         else
-          glColor4fv(color_cur);
+          qtGlColor(color_cur);
 
         auto fork = hedge->getHyperEdgeDescription();
         if( !fork )
@@ -90,9 +90,9 @@ namespace LinksRouting
                                                        false,
                                                        widen_size );
 
-              glColor4fv(   segment.get<bool>("covered")
-                          ? color_covered_cur
-                          : color_cur );
+              qtGlColor(   segment.get<bool>("covered")
+                         ? color_covered_cur
+                         : color_cur );
               glBegin(GL_TRIANGLE_STRIP);
               for( auto first = std::begin(region.first),
                         second = std::begin(region.second);

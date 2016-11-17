@@ -9,7 +9,6 @@
 #include "ipc_server.hpp"
 #include "log.hpp"
 #include "ClientInfo.hxx"
-#include "JSONParser.h"
 #include "JSON.hpp"
 #include "common/PreviewWindow.hpp"
 
@@ -63,16 +62,6 @@ namespace LinksRouting
     return json;
   }
 
-  QJsonValue to_json(Color const& color)
-  {
-    return QColor(
-      color.r * 255 + .5f,
-      color.g * 255 + .5f,
-      color.b * 255 + .5f,
-      color.a * 255 + .5f
-    ).name();
-  }
-
   using namespace std::placeholders;
 
   std::string to_string(const QRect& r)
@@ -87,6 +76,11 @@ namespace LinksRouting
     return to_string( r.toQRect() );
   }
 
+  std::string to_string(const QString& s)
+  {
+    return s.toStdString();
+  }
+
   template<typename T>
   void clampedStep( T& val,
                     T step,
@@ -96,6 +90,18 @@ namespace LinksRouting
   {
     step = std::max(-max_step, std::min(step, max_step));
     clamp<T>(val += step, min, max);
+  }
+
+  QJsonArray::iterator jsonObjectArrayFind( QJsonArray& array,
+                                            const QString& key,
+                                            const QJsonValue& val )
+  {
+    return std::find_if( array.begin(),
+                         array.end(),
+                         [&](const QJsonValue& entry)
+                         {
+                           return entry.toObject().value(key) == val;
+                         });
   }
 
   class IPCServer::TileHandler:
@@ -280,10 +286,7 @@ namespace LinksRouting
     color[1] = strtol(end,         &end, 10);
     color[2] = strtol(end,         0,    10);
 
-    _colors.push_back( Color( color[0] / 255.f,
-                              color[1] / 255.f,
-                              color[2] / 255.f,
-                              0.7f ) );
+    _colors.push_back( QColor(color[0], color[1], color[2], 180) );
     //std::cout << "GlRenderer: Added color (" << val << ")" << std::endl;
 
     return true;
@@ -829,8 +832,8 @@ namespace LinksRouting
 
     _clients[ client ].reset(new ClientInfo(client, this));
 
-    LOG_INFO( "Client connected: " << client->peerAddress().toString()
-                                   << ":" << client->peerPort() );
+    qDebug() << "Client connected:" << client->peerAddress().toString()
+                                    << ":" << client->peerPort();
   }
 
   //----------------------------------------------------------------------------
@@ -839,13 +842,13 @@ namespace LinksRouting
     auto client = _clients.find(qobject_cast<QWebSocket*>(sender()));
     if( client == _clients.end() )
     {
-      LOG_WARN("Received message from unknown client: " << data);
+      qWarning() << "Received message from unknown client:" << data;
       return;
     }
 
     ClientRef client_info = client->second;
-    std::cout << "Received (" << client_info->getWindowInfo().id << "): "
-              << data.left(200) << std::endl;
+    qDebug() << "Received (" << client_info->getWindowInfo().id << "):"
+              << data.left(200);
 
     try
     {
@@ -1078,7 +1081,7 @@ namespace LinksRouting
       req["task"] = "REQUEST";
       req["id"] = link._id;
       req["stamp"] = qint64(link._stamp);
-      req["data"] = QJsonObject::fromVariantMap(link._props);
+      req["data"] = link._props;
 
       distributeMessage(link, req, {client});
     }
@@ -1709,7 +1712,7 @@ namespace LinksRouting
               to_string(from_json<QString>(msg.value("type")))
             ) )
       {
-        LOG_WARN("Requesting unknown value: " << id);
+        qWarning() << "Requesting unknown value:" << id;
         return;
       }
 
@@ -1765,7 +1768,7 @@ namespace LinksRouting
                link != _slot_links->_data->end();
                ++link )
         link->_stamp += 1;
-      LOG_INFO("Trigger reroute -> routing algorithm changed");
+      qDebug() << "Trigger reroute -> routing algorithm changed";
     }
     else
     {
@@ -1777,7 +1780,7 @@ namespace LinksRouting
               to_string(from_json<QString>(msg.value("type")))
             ) )
       {
-        LOG_WARN("Request setting unknown value: " << id);
+        qWarning() << "Request setting unknown value:" << id;
         return;
       }
     }
@@ -1880,13 +1883,13 @@ namespace LinksRouting
     bool merge = from_json<bool>(msg.value("merge"), true);
     LinkDescription::LinkDescription* new_link = nullptr;
 
-    Color link_color = from_json<Color>(msg.value("color"));
+    QColor link_color = from_json<QColor>(msg.value("color"));
 
     // Remove eventually existing search for same id
     auto link = findLink(link_id);
     if( link != _slot_links->_data->end() )
     {
-      if( !link_color.isVisible() )
+      if( !link_color.isValid() )
         // keep color if none is requested
         link_color = link->_color;
 
@@ -1909,33 +1912,11 @@ namespace LinksRouting
       _slot_links->_data->push_back(LinkDescription::LinkDescription(link_id));
       new_link = &_slot_links->_data->back();
     }
+
     new_link->_stamp = from_json<uint32_t>(msg.value("stamp"));
+    new_link->_color = getLinkColor(client->getWindowInfo().ptr_id, link_color);
 
-
-    if( !link_color.isVisible() )
-    {
-      // get first unused color
-      for(Color const& color: _colors)
-      {
-        if( std::find_if(
-              _slot_links->_data->begin(),
-              _slot_links->_data->end(),
-              [color](const LinkDescription::LinkDescription& desc)
-              {
-                return desc._color == color;
-              }
-            ) == _slot_links->_data->end() )
-        {
-          link_color = color;
-          break;
-        }
-      }
-
-      if( !link_color.isVisible() )
-        // No unused color available -> need to reuse, so use a "random" one.
-        link_color = _colors[ _slot_links->_data->size() % _colors.size() ];
-    }
-    new_link->_color = link_color;
+    qDebug() << "LINK COLOR" << new_link->_color;
 
 
     auto window_list = _window_monitor.getWindows();
@@ -1971,10 +1952,28 @@ namespace LinksRouting
     link_props.remove("stamp");
     link_props.remove("task");
     link_props.remove("whitelist");
+    link_props.remove("blacklist");
 
-    new_link->_props = link_props.toVariantMap();
+    QJsonArray owners = new_link->_props.value("owners").toArray();
+    if( link_props.value("own").toBool() )
+    {
+      if(    owners.isEmpty()
+          || jsonObjectArrayFind(owners, "client-id", client->id())
+             == owners.end() )
+      {
+        owners.push_back(QJsonObject{
+          {"pointer-id", client->getWindowInfo().ptr_id},
+          {"window-id", qint64(client->getWindowInfo().id)},
+          {"client-id", client->id()},
+          {"is-owner", owners.isEmpty()}
+        });
+      }
+    }
+    link_props["owners"] = owners;
+    link_props.remove("own");
 
 
+    new_link->_props = link_props;
     _slot_links->setValid(true);
 
     QJsonObject req;
@@ -1984,6 +1983,8 @@ namespace LinksRouting
     req["data"] = link_props;
 
     distributeMessage(*new_link, req);
+
+    qDebug() << "LINK OWNERS" << link_props.value("owners");
   }
 
   //----------------------------------------------------------------------------
@@ -2064,7 +2065,46 @@ namespace LinksRouting
       return;
 
     WId abort_wid = client->getWindowInfo().id;
-    QString const scope = from_json<QString>(msg.value("scope"), "all");
+    QString scope = from_json<QString>(msg.value("scope"), "all");
+
+    if( scope == "this" )
+    {
+      std::remove( link->_client_whitelist.begin(),
+                   link->_client_whitelist.end(),
+                   QStringList({client->id()}) );
+
+      QJsonArray owners = link->_props.value("owners").toArray();
+      if( !owners.isEmpty() )
+      {
+        auto own = jsonObjectArrayFind(owners, "client-id", client->id());
+        bool was_owner = false;
+
+        if( own != owners.end() )
+        {
+          auto own_obj = own->toObject();
+          was_owner = own_obj.value("is-owner").toBool();
+          owners.erase(own);
+        }
+
+        link->_props["owners"] = owners;
+        qDebug() << "LINK OWNERS CHANGED" << was_owner << owners;
+
+        if( owners.isEmpty() )
+        {
+          // No owners anymore -> Abort all
+          scope = "all";
+        }
+
+        // TODO check new owner/color
+
+//        owners.push_back(QJsonObject{
+//          {"pointer-id", client->getWindowInfo().ptr_id},
+//          {"window-id", qint64(client->getWindowInfo().id)},
+//          {"client-id", client->id()},
+//          {"is-owner", owners.isEmpty()}
+//        });
+      }
+    }
 
     if( scope == "all" )
     {
@@ -2072,20 +2112,13 @@ namespace LinksRouting
       abort_wid = 0;
 
       // Forward to clients
-      for(auto socket = _clients.begin(); socket != _clients.end(); ++socket)
-        if( sender() != socket->first )
-          socket->first->sendTextMessage(msg_raw);
-    }
-    else if( scope == "this" )
-    {
-      std::remove( link->_client_whitelist.begin(),
-                   link->_client_whitelist.end(),
-                   QStringList({client->id()}) );
+      for(auto other: _clients)
+        if( sender() != other.first )
+          other.first->sendTextMessage(msg_raw);
     }
 
     abortLinking(link, abort_wid);
   }
-
 
   //----------------------------------------------------------------------------
   FilterList IPCServer::parseFilterList( FilterList& filter_list,
@@ -3277,28 +3310,86 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
+  QColor IPCServer::getLinkColor( uint8_t cursor_id,
+                                  const QColor& link_color )
+  {
+    qDebug() << "getLinkColor" << link_color << link_color.isValid() << QColor() << QColor().isValid();
+    if( link_color.isValid() )
+      return link_color;
+
+    // get first unused color
+    for(QColor const& color: _colors)
+    {
+      if( std::find_if(
+            _slot_links->_data->begin(),
+            _slot_links->_data->end(),
+            [color](const LinkDescription::LinkDescription& desc)
+            {
+              return desc._color == color;
+            }
+          ) == _slot_links->_data->end() )
+        return color;
+    }
+
+    // No unused color available -> need to reuse, so use a "random" one.
+    return _colors[ _slot_links->_data->size() % _colors.size() ];
+  }
+
+  //----------------------------------------------------------------------------
   LinkDescription::LinkList::iterator
   IPCServer::abortLinking( const LinkDescription::LinkList::iterator& link,
                            WId wid )
   {
-    size_t remove_count = 0;
+    bool keep = false;
     for(auto const& client: _clients)
     {
+#ifdef DEBUG_ABORT_LINK
+      qDebug() << "check" << client.second->getWindowInfo().id
+                          << client.second->id()
+                          << client.second->getViewportAbs()
+                          << client.second->getWindowInfo().title;
+#endif
+
       if( !wid || client.second->getWindowInfo().id == wid )
       {
-        qDebug() << "remove link for " << client.second->getWindowInfo().title;
+#ifdef DEBUG_ABORT_LINK
+        qDebug() << "remove";
+#endif
+
         client.second->removeLink(link->_link.get());
-        remove_count += 1;
+        link->_client_whitelist.removeOne({client.second->id()});
+
+#ifdef DEBUG_ABORT_LINK
+        qDebug() << "whitelist" << link->_client_whitelist;
+#endif
+      }
+      else if( client.second->hasLink(link->_link.get()) )
+      {
+#ifdef DEBUG_ABORT_LINK
+        qDebug() << "keep";
+#endif
+        keep = true;
+      }
+      else
+      {
+#ifdef DEBUG_ABORT_LINK
+        qDebug() << "Not connected";
+#endif
       }
     }
 
-    return remove_count == _clients.size() ? _slot_links->_data->erase(link)
-                                           : link;
+    if( keep )
+      return link;
+
+    qDebug() << "delete link" << _slot_links->_data->size() << link->_id;
+    return _slot_links->_data->erase(link);
   }
 
   //----------------------------------------------------------------------------
   void IPCServer::abortAll()
   {
+    qDebug() << "Abort all links";
+
     QMutexLocker lock_links(_mutex_slot_links);
     for(auto link = _slot_links->_data->begin();
              link != _slot_links->_data->end(); )

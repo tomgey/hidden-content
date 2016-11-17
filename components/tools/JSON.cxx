@@ -23,6 +23,18 @@ QJsonObject parseJson(const QByteArray& msg)
 }
 
 //------------------------------------------------------------------------------
+QJsonArray parseJsonArray(const QByteArray& msg)
+{
+  QJsonParseError error;
+  QJsonDocument doc = QJsonDocument::fromJson(msg, &error);
+  if( doc.isArray() && error.error == QJsonParseError::NoError )
+    return doc.array();
+
+  qWarning() << "Failed to parse json: " << error.errorString() << error.offset << ": " << msg.left(200);
+  return QJsonArray();
+}
+
+//------------------------------------------------------------------------------
 QJsonArray to_json(const QPoint& p)
 {
   QJsonArray a;
@@ -65,7 +77,7 @@ QString from_json<QString>( const QJsonValue& val,
   return val.toVariant().toString();
 }
 
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 template<> QUrl from_json<QUrl>( const QJsonValue& val,
                                  const QUrl& def )
 {
@@ -187,23 +199,11 @@ template<>
 QColor from_json<QColor>( const QJsonValue& val,
                           const QColor& def )
 {
-  return from_json<QString>(val, def.name(QColor::HexArgb));
-}
+  QString color_str = from_json<QString>(val);
+  if( color_str.isEmpty() )
+    return def;
 
-//------------------------------------------------------------------------------
-template<>
-LinksRouting::Color from_json<LinksRouting::Color>( const QJsonValue& val,
-                                                    const LinksRouting::Color& def )
-{
-  QColor color_def;
-  color_def.setRgbF(def.r, def.g, def.b, def.a);
-  QColor color = from_json<QColor>(val, color_def);
-  return {
-    static_cast<float>(color.redF()),
-    static_cast<float>(color.greenF()),
-    static_cast<float>(color.blueF()),
-    static_cast<float>(color.alphaF())
-  };
+  return QColor(color_str);
 }
 
 //------------------------------------------------------------------------------
@@ -219,6 +219,14 @@ QPoint from_json<QPoint>( const QJsonValue& val,
     return def;
 
   return QPoint(a.at(0).toInt(0), a.at(1).toInt(0));
+}
+
+//------------------------------------------------------------------------------
+template<>
+float2 from_json<float2>( const QJsonValue& val,
+                          const float2& def )
+{
+  return from_json<QPoint>(val, def.toQPoint());
 }
 
 //------------------------------------------------------------------------------

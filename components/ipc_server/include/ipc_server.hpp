@@ -31,7 +31,6 @@
 #include <stdint.h>
 
 class QMutex;
-class JSONParser;
 
 namespace LinksRouting
 {
@@ -304,7 +303,7 @@ namespace LinksRouting
       uint32_t            _dirty_flags;
 
       MsgCallbackMap      _msg_handlers;
-      std::vector<Color>  _colors; //!< Available link colors
+      QVector<QColor>     _colors; //!< Available link colors
 
       ClientWeakRef       _save_state_client;
       QString             _save_state_file;
@@ -351,8 +350,9 @@ namespace LinksRouting
       slot_t<SlotType::TextPopup>::type   _subscribe_popups;
       slot_t<SlotType::Preview>::type     _subscribe_previews;
 
-      void updateScrollRegion( const JSONParser& json,
-                               ClientInfo& client_info );
+
+      QColor getLinkColor( uint8_t cursor_id,
+                           const QColor& requested_color = {} );
 
       /**
        * Clear all data for the given link.

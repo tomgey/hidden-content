@@ -505,7 +505,7 @@ namespace LinkDescription
     strm << indent << "<LinkDescription>\n"
          << indent << indent_incr << "id: \"" << _id.toLocal8Bit().data() << "\"\n"
          << indent << indent_incr << "stamp: " << _stamp << "\n"
-         << indent << indent_incr << "color: " << _color << "\n"
+         << indent << indent_incr << "color: " << _color.name() << " alpha=" << _color.alpha() << "\n"
          << indent << indent_incr << "whitelist: " << _client_whitelist << "\n"
          << indent << indent_incr << "blacklist: " << _client_blacklist << "\n";
 

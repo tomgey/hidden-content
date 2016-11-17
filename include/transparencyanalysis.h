@@ -1,7 +1,6 @@
 #ifndef LR_TRANSPARENCYANALYSIS
 #define LR_TRANSPARENCYANALYSIS
 #include <component.h>
-#include <color.h>
 
 namespace LinksRouting
 {

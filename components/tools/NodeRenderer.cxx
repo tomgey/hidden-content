@@ -1,10 +1,10 @@
 #include "NodeRenderer.hpp"
 
+#include "color_helpers.h"
 #include <GL/gl.h>
 
 namespace LinksRouting
 {
-
   //----------------------------------------------------------------------------
   NodeRenderer::NodeRenderer( Partitions *partitions_src,
                               Partitions *partitions_dest,
@@ -13,8 +13,8 @@ namespace LinksRouting
     _partitions_dest(partitions_dest),
     _margin_left(margin_left),
     _use_stencil(false),
-    _color(1,0,0),
-    _color_covered(0.8,0,0,0.5),
+    _color(255,0,0),
+    _color_covered(200,0,0,127),
     _line_width(3)
   {
 
@@ -27,8 +27,8 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  void NodeRenderer::setColor( Color const& color,
-                               Color const& color_covered )
+  void NodeRenderer::setColor( QColor const& color,
+                               QColor const& color_covered )
   {
     _color = color;
     _color_covered = color_covered;
@@ -95,7 +95,7 @@ namespace LinksRouting
       {
         if( !render_all && hover )
         {
-          Color c = alpha * _color;
+          QColor c = alpha * _color;
           const Rect rp = (*node)->get<Rect>("covered-preview-region");
           renderRect(rp, 2.f, 0, 0.05 * c, 2 * c);
           const Rect r = (*node)->get<Rect>("covered-region");
@@ -105,13 +105,13 @@ namespace LinksRouting
         continue;
       }
 
-      Color color_cur = !render_all && ( (   (*node)->get<bool>("covered")
-                                         && !(*node)->get<bool>("hover")
-                                         )
-                                       || (*node)->get<bool>("outside")
-                                       )
-                      ? _color_covered
-                      : _color;
+      QColor color_cur = !render_all && ( (   (*node)->get<bool>("covered")
+                                          && !(*node)->get<bool>("hover")
+                                          )
+                                        || (*node)->get<bool>("outside")
+                                        )
+                       ? _color_covered
+                       : _color;
 
       if( (*node)->get<bool>("outline-title") )
         color_cur *= 0.5;
@@ -122,9 +122,9 @@ namespace LinksRouting
           && !(*node)->get<bool>("outline-only")
           && !(*node)->get<bool>("is-window-outline") )
       {
-        Color light(0,0,0,0);// = 0.5 * color_cur;
-        light.a *= 0.6;
-        glColor4fv(light);
+        QColor light(0,0,0,0);// = 0.5 * color_cur;
+        light.setAlpha(light.alpha() * 0.6);
+        qtGlColor(light);
         glBegin(GL_POLYGON);
         for( auto vert = std::begin((*node)->getVertices());
                   vert != std::end((*node)->getVertices());
@@ -132,7 +132,7 @@ namespace LinksRouting
           glVertex2f(vert->x, vert->y);
         glEnd();
       }
-      glColor4fv(color_cur);
+      qtGlColor(color_cur);
       line_borders_t region = calcLineBorders( (*node)->getVertices(),
                                                _line_width,
                                                true );
@@ -214,13 +214,13 @@ namespace LinksRouting
   bool NodeRenderer::renderRect( Rect const& rect,
                                  int b,
                                  unsigned int tex,
-                                 Color const& fill,
-                                 Color const& border )
+                                 QColor const& fill,
+                                 QColor const& border )
   {
-    if( border.a > 0.05 )
+    if( border.alpha() > 10 )
     {
-      glColor4fv(border);
-      glBegin(fill.a < 0.5 ? GL_LINE_LOOP : GL_QUADS);
+      qtGlColor(border);
+      glBegin(fill.alpha() < 127 ? GL_LINE_LOOP : GL_QUADS);
         glVertex2f(rect.pos.x - b,               rect.pos.y - b);
         glVertex2f(rect.pos.x + rect.size.x + b, rect.pos.y - b);
         glVertex2f(rect.pos.x + rect.size.x + b, rect.pos.y + rect.size.y + b);
@@ -228,8 +228,8 @@ namespace LinksRouting
       glEnd();
     }
 
-    if( fill.a < 0.05 )
-      return border.a > 0.05;
+    if( fill.alpha() < 10 )
+      return border.alpha() > 10;
 
     if( tex )
     {
@@ -237,7 +237,7 @@ namespace LinksRouting
       glBindTexture(GL_TEXTURE_2D, tex);
     }
 
-    glColor4fv(fill);
+    qtGlColor(fill);
     glBegin(GL_QUADS);
       glTexCoord2f(0, 0);
       glVertex2f(rect.pos.x,               rect.pos.y);

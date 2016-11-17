@@ -20,9 +20,9 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
   AnimatedPopup.cxx
+  color_helpers.cxx
   fbo.cxx
   HierarchicTileMap.cxx
-  JSONParser.cxx
   JSON.cxx
   linkdescription.cpp
   LinkRenderer.cxx

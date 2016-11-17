@@ -28,8 +28,8 @@ namespace LinksRouting
                              unsigned int margin_left = 0 );
 
       void setUseStencil(bool use);
-      void setColor( Color const& color,
-                     Color const& color_covered );
+      void setColor( QColor const& color,
+                     QColor const& color_covered );
       void setLineWidth(float w);
 
       bool renderNodes( const LinkDescription::nodes_t& nodes,
@@ -49,8 +49,8 @@ namespace LinksRouting
       bool renderRect( const Rect& rect,
                        int margin = 2,
                        unsigned int tex = 0,
-                       const Color& fill = Color(1, 1, 1, 1),
-                       const Color& border = Color(0.3, 0.3, 0.3, 0.8) );
+                       const QColor& fill = QColor(255, 255, 255, 255),
+                       const QColor& border = QColor(80, 80, 80, 200) );
 
       float2 glVertex2f(float x, float y);
 
@@ -59,7 +59,7 @@ namespace LinksRouting
                   *_partitions_dest;
       unsigned int _margin_left;
       bool         _use_stencil;
-      Color        _color,
+      QColor       _color,
                    _color_covered;
       float        _line_width;
   };

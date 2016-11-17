@@ -1110,7 +1110,8 @@ function sendInitiateForNode(n)
     'task': 'INITIATE',
     'id': 'link://concept/' + n.id,
     'refs': n.refs || {},
-    'whitelist': ['type/Browser', 'this']
+    'whitelist': ['type/Browser', 'this'],
+    'own': true
   });
   active_links.add('link://concept/' + n.id);
 }

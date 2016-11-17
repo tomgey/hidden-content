@@ -1,6 +1,7 @@
 #include "glrenderer.h"
 #include "NodeRenderer.hpp"
 #include "log.hpp"
+#include "color_helpers.h"
 
 #include <GL/glu.h>
 #include <iostream>
@@ -155,7 +156,7 @@ namespace LinksRouting
                   ? 1
                   : 0.5;
 
-        Color default_color(.9, .1, .1);
+        QColor default_color(230, 25, 25);
         renderer.renderRect(reg_title, 0, 0, fac * default_color);
       }
     }
@@ -235,11 +236,14 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  Color GlRenderer::getCurrentColor() const
+  QColor GlRenderer::getCurrentColor() const
   {
     GLfloat cur_color[4];
     glGetFloatv(GL_CURRENT_COLOR, cur_color);
-    return Color(cur_color[0], cur_color[1], cur_color[2], cur_color[3]);
+    return QColor( cur_color[0] * 255,
+                   cur_color[1] * 255,
+                   cur_color[2] * 255,
+                   cur_color[3] * 255 );
   }
 
   //----------------------------------------------------------------------------
@@ -281,7 +285,7 @@ namespace LinksRouting
                                 int pass )
   {
     bool rendered_anything = false;
-    _color_cur = Color(1.0, 0.2, 0.2);
+    _color_cur = QColor(255, 50, 50);
 
     NodeRenderer renderer;
     renderer.setUseStencil(true);
@@ -307,9 +311,9 @@ namespace LinksRouting
           continue;
 
         if( hedge->get<bool>("covered") || hedge->get<bool>("outside") )
-          glColor4fv(_color_covered_cur);
+          qtGlColor(_color_covered_cur);
         else
-          glColor4fv(_color_cur);
+          qtGlColor(_color_cur);
 
         auto fork = hedge->getHyperEdgeDescription();
         if( !fork )
@@ -352,9 +356,9 @@ namespace LinksRouting
                                                        false,
                                                        widen_size );
 
-              glColor4fv(   segment.get<bool>("covered")
-                          ? _color_covered_cur
-                          : _color_cur );
+              qtGlColor(   segment.get<bool>("covered")
+                        ? _color_covered_cur
+                        : _color_cur );
               glBegin(GL_TRIANGLE_STRIP);
               for( auto first = std::begin(region.first),
                         second = std::begin(region.second);

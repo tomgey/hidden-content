@@ -8,7 +8,7 @@
 #include "window_monitor.hpp"
 #include "log.hpp"
 #include "qt_helper.hxx"
-#include "JSONParser.h"
+#include "JSON.hpp"
 
 #include <QApplication>
 #include <QDesktopWidget>
@@ -354,24 +354,18 @@ namespace LinksRouting
 #ifdef __linux__
     dconf.waitForFinished();
 
-    try
-    {
-      JSONParser favorites(dconf.readAllStandardOutput());
-      QStringList launchers =
-        favorites.getRoot().getValue<QStringList>()
-                           .replaceInStrings(".desktop", "")
-                           .replaceInStrings("application://", "");
+    QByteArray dconf_response = dconf.readAllStandardOutput();
+    dconf_response.replace('\'', '"');
 
-      if( launchers != _launchers )
-      {
-        _launchers = launchers;
-        _cb_regions_changed( getWindows() );
-      }
-    }
-    catch(std::runtime_error& ex)
+    QStringList launchers =
+      from_json<QStringList>(parseJsonArray(dconf_response))
+      .replaceInStrings(".desktop", "")
+      .replaceInStrings("application://", "");
+
+    if( launchers != _launchers )
     {
-      LOG_WARN( "Failed to parse '/com/canonical/unity/launcher/favorites': "
-                << ex.what() );
+      _launchers = launchers;
+      _cb_regions_changed( getWindows() );
     }
 #endif
 

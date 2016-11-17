@@ -1,7 +1,6 @@
 #ifndef CC_JSON_HPP
 #define CC_JSON_HPP
 
-#include "color.h"
 #include "linkdescription.h"
 
 #include <QByteArray>
@@ -16,6 +15,7 @@
 #include <QVariant>
 
 QJsonObject parseJson(const QByteArray& msg);
+QJsonArray parseJsonArray(const QByteArray& msg);
 
 QJsonArray to_json(const QPoint&);
 QJsonArray to_json(const QSize&);
