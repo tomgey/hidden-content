@@ -1032,7 +1032,7 @@ namespace LinksRouting
 //        for(auto& node: _nodes)
 //          node->set("hidden", true);
 
-      if( !_nodes.empty() )
+      if( !_nodes.empty() && _nodes.front()->getParent() )
       {
         _outlines.back()->preview = _ipc_server->addCoveredPreview
         (

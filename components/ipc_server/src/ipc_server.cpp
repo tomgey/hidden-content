@@ -2094,8 +2094,13 @@ namespace LinksRouting
           // No owners anymore -> Abort all
           scope = "all";
         }
-
-        // TODO check new owner/color
+        else if( was_owner )
+        {
+          QJsonObject new_owner = owners[0].toObject();
+          new_owner["is-owner"] = true;
+          link->_color = getLinkColor(from_json<int>(new_owner["pointer-id"], 2));
+          owners[0] = new_owner;
+        }
 
 //        owners.push_back(QJsonObject{
 //          {"pointer-id", client->getWindowInfo().ptr_id},
@@ -3313,13 +3318,32 @@ namespace LinksRouting
   QColor IPCServer::getLinkColor( uint8_t cursor_id,
                                   const QColor& link_color )
   {
-    qDebug() << "getLinkColor" << link_color << link_color.isValid() << QColor() << QColor().isValid();
     if( link_color.isValid() )
       return link_color;
 
-    // get first unused color
-    for(QColor const& color: _colors)
+    int min_color = 0,
+        max_color = _colors.size() - 1;
+
+    if( cursor_id == 2 )
     {
+      min_color = 0;
+      max_color = 4;
+    }
+    else
+    {
+      min_color = 5;
+      max_color = 9;
+      //return _colors.at(1);
+    }
+
+    assert(min_color < max_color);
+    assert(min_color >= 0);
+    assert(max_color < _colors.size());
+
+    // get first unused color
+    for(int i = min_color; i <= max_color; ++i)
+    {
+      QColor const& color = _colors.at(i);
       if( std::find_if(
             _slot_links->_data->begin(),
             _slot_links->_data->end(),
@@ -3332,7 +3356,9 @@ namespace LinksRouting
     }
 
     // No unused color available -> need to reuse, so use a "random" one.
-    return _colors[ _slot_links->_data->size() % _colors.size() ];
+    return _colors[
+      min_color + (_slot_links->_data->size() % (max_color - min_color))
+    ];
   }
 
   //----------------------------------------------------------------------------

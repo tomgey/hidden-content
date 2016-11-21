@@ -17,6 +17,18 @@
     <OutsideSeeThrough type="Bool" val="false" />
     <AutoSaveInterval type="Integer" val="60" />
 
+    <link-color type="String" val="153 0 13" />
+    <link-color type="String" val="203 24 29" />
+    <link-color type="String" val="239 59 44" />
+    <link-color type="String" val="251 106 74" />
+    <link-color type="String" val="252 146 114" />
+
+    <link-color type="String" val="8 69 148" />
+    <link-color type="String" val="33 113 181" />
+    <link-color type="String" val="66 146 198" />
+    <link-color type="String" val="107 174 214" />
+    <link-color type="String" val="158 202 225" />
+
     <link-color type="String" val="228 26 28" />
     <link-color type="String" val="55 126 184" />
     <link-color type="String" val="77 175 74" />
