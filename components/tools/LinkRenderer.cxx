@@ -172,35 +172,9 @@ namespace LinksRouting
           LinkDescription::nodes_t nodes;
           for( auto& segment: fork->outgoing )
           {
-            if( !segment.trail.empty() )
-            {
-              // Draw path
-              float widen_size = 0.f;
-              if(   !segment.nodes.empty()
-                  && segment.nodes.back()->getChildren().empty()
-                  && segment.get<bool>("widen-end", true) )
-              {
-                if( !segment.nodes.back()
-                            ->get<std::string>("virtual-outside").empty() )
-                  widen_size = 13;
-                else
-                  widen_size = 55;
-              }
-              line_borders_t region = calcLineBorders( segment.trail,
-                                                       3,
-                                                       false,
-                                                       widen_size );
-
-              for( auto first = std::begin(region.first),
-                        second = std::begin(region.second);
-                   first != std::end(region.first);
-                   ++first,
-                   ++second )
-              {
-                glVertex2f(first->x, first->y);
-                glVertex2f(second->x, second->y);
-              }
-            }
+            for(auto const& p: segment.trail)
+              if( bbox.contains(p) )
+                return true;
 
             if( node_renderer.wouldRenderNodes( bbox,
                                                 segment.nodes,
