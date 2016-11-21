@@ -481,20 +481,49 @@ function onPageLoad(event)
       var color = data['color'];
       if( typeof(color) === 'string' )
         $('vislink-sync-src').style.color = color;
+      
+      if( data['resize-to-content'] )
+      {
+        // Resize to approximate content size
+        var min_size = [300, 200],
+            max_size = [1200, 800],
+            os_pad = [8, 79 + 14];
+
+        var bb_body = content.document.body.getBoundingClientRect(),
+            cont_w = bb_body.width,
+            cont_h = bb_body.height,
+            cont_a = cont_w * cont_h,
+            vp = getViewport(),
+            vp_w = vp[2],
+            vp_h = vp[3],
+            vp_a = vp_w * vp_h,
+            min_a = min_size[0] * min_size[1],
+            max_a = max_size[0] * max_size[1],
+            ratio = min_size[0] / min_size[1];
+
+        var new_a = Math.max(min_a, Math.min(cont_a, max_a)),
+            new_h = Math.sqrt(new_a / ratio),
+            new_w = new_a / Math.floor(new_h);
+
+        content.resizeTo( new_w + os_pad[0],
+                          new_h + os_pad[1] );
+
+        console.log("autoresize", bb_body, getViewport(), [new_w, new_h]);
+      }
     }
   }
 
-    var msg = {
-      task: "REGISTER",
-      pid: getPid(),
-      title: doc.title
-    };
-    if( pos instanceof Array )
-      msg["pos"] = pos;
-    if( src_id )
-      msg["src-id"] = src_id;
+  var msg = {
+    task: "REGISTER",
+    pid: getPid(),
+    title: doc.title
+  };
+  if( pos instanceof Array )
+    msg["pos"] = pos;
+  if( src_id )
+    msg["src-id"] = src_id;
 
-    ctrlSend(msg, true);
+  ctrlSend(msg, true);
 
   if( !src_id )
     src_id = session_store.getTabValue(tab, "hcd/src-id");
