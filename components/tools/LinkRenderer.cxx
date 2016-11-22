@@ -11,7 +11,6 @@
 #include "NodeRenderer.hpp"
 #include "color_helpers.h"
 
-#include <QDebug>
 #include <GL/gl.h>
 
 namespace LinksRouting

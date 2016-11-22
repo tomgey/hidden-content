@@ -38,9 +38,19 @@ struct float2
     y(p.y())
   {}
 
+  float2(const QPointF& p):
+    x(p.x()),
+    y(p.y())
+  {}
+
   QPoint toQPoint() const
   {
     return QPoint(x, y);
+  }
+
+  QPointF toQPointF() const
+  {
+    return QPointF(x, y);
   }
 #endif
 

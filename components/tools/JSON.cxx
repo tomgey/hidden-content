@@ -208,8 +208,8 @@ QColor from_json<QColor>( const QJsonValue& val,
 
 //------------------------------------------------------------------------------
 template<>
-QPoint from_json<QPoint>( const QJsonValue& val,
-                          const QPoint& def )
+QPointF from_json<QPointF>( const QJsonValue& val,
+                            const QPointF& def )
 {
   if( !val.isArray() )
     return def;
@@ -218,7 +218,16 @@ QPoint from_json<QPoint>( const QJsonValue& val,
   if( a.size() != 2 )
     return def;
 
-  return QPoint(a.at(0).toInt(0), a.at(1).toInt(0));
+  return QPointF( a.at(0).toDouble(std::nan("")),
+                  a.at(1).toDouble(std::nan("")) );
+}
+
+//------------------------------------------------------------------------------
+template<>
+QPoint from_json<QPoint>( const QJsonValue& val,
+                          const QPoint& def )
+{
+  return from_json<QPointF>(val, def).toPoint();
 }
 
 //------------------------------------------------------------------------------
@@ -226,7 +235,7 @@ template<>
 float2 from_json<float2>( const QJsonValue& val,
                           const float2& def )
 {
-  return from_json<QPoint>(val, def.toQPoint());
+  return from_json<QPointF>(val, def.toQPointF());
 }
 
 //------------------------------------------------------------------------------

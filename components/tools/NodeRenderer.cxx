@@ -132,6 +132,7 @@ namespace LinksRouting
           glVertex2f(vert->x, vert->y);
         glEnd();
       }
+
       qtGlColor(color_cur);
       line_borders_t region = calcLineBorders( (*node)->getVertices(),
                                                _line_width,
