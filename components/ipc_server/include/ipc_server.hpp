@@ -114,6 +114,8 @@ namespace LinksRouting
       void saveState(const QString& file_name = "");
       void loadState(const QString& file_name);
 
+      void replayLog(const QString& file_name);
+
       void clearConceptGraph();
 
     private slots:
@@ -198,6 +200,7 @@ namespace LinksRouting
 
       void onSaveState(ClientRef, QJsonObject const& msg);
       void onLoadState(ClientRef, QJsonObject const& msg);
+      void onReplayLog(ClientRef, QJsonObject const& msg);
 
       void onLinkInitiate(ClientRef, QJsonObject const& msg);
       void onLinkUpdate(ClientRef, QJsonObject const& msg);

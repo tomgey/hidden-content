@@ -198,6 +198,8 @@ namespace LinksRouting
       std::bind(&IPCServer::onLoadState, this, _1, _2);
     _msg_handlers["REGISTER"] =
       std::bind(&IPCServer::onClientRegister, this, _1, _2);
+    _msg_handlers["REPLAY-LOG"] =
+      std::bind(&IPCServer::onReplayLog, this, _1, _2);
     _msg_handlers["RESIZE"] =
       std::bind(&IPCServer::onClientResize, this, _1, _2);
     _msg_handlers["SAVE-STATE"] =
@@ -784,11 +786,64 @@ namespace LinksRouting
       return;
     }
 
-    QJsonObject clients = state["clients"].toObject(),
-                links = state["links"].toObject(),
-                screen = state["screen"].toObject();
+    QJsonArray clients = state["clients"].toArray(),
+               links = state["links"].toArray(),
+               screen = state["screen"].toArray();
+
+    distributeMessage({
+      {"id", "/clients/all"},
+      {"task", "GET-FOUND"},
+      {"clients", clients}
+    });
 
     loadConceptGraphFromJson(state["concepts"].toObject());
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::replayLog(const QString& file_name)
+  {
+    qDebug() << "Loading log from" << file_name;
+
+    QFile state_file(file_name);
+    if( !state_file.open(QIODevice::ReadOnly | QIODevice::Text) )
+    {
+      qWarning() << "Failed to open log file" << file_name;
+      return;
+    }
+
+    QJsonArray state = parseJsonArray(state_file.readAll());
+    for(QJsonValue const& msg: state)
+    {
+      if( !msg.isObject() )
+      {
+        qWarning() << "Ignoring invalid log entry" << msg;
+        continue;
+      }
+
+      QJsonObject msg_obj = msg.toObject();
+      QString task = msg_obj.value("task").toString();
+      if( !task.startsWith("CONCEPT-") )
+        continue;
+
+      try
+      {
+        auto msg_handler = _msg_handlers.find(task);
+        if( msg_handler == _msg_handlers.end() )
+          qWarning() << "Replay: Unknown message type:" << task;
+        else
+          msg_handler->second(
+            nullptr,
+            msg_obj,
+            QString::fromLocal8Bit(
+              QJsonDocument(msg_obj).toJson(QJsonDocument::Compact)
+            )
+          );
+      }
+      catch(std::runtime_error& ex)
+      {
+        qWarning() << "Failed to replay message:" << msg_obj << ex.what();
+      }
+    }
   }
 
   //----------------------------------------------------------------------------
@@ -1850,6 +1905,16 @@ namespace LinksRouting
       loadState(file_name);
     else
       qWarning() << "Missing 'path' for loading state!";
+  }
+
+  //----------------------------------------------------------------------------
+  void IPCServer::onReplayLog(ClientRef, QJsonObject const& msg)
+  {
+    QString const file_name = from_json<QString>(msg.value("path")).trimmed();
+    if( !file_name.isEmpty() )
+      replayLog(file_name);
+    else
+      qWarning() << "Missing 'path' for replaying log!";
   }
 
   //----------------------------------------------------------------------------

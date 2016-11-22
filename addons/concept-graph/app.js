@@ -4,6 +4,7 @@ var filtered_nodes = [],
 var filter = '';
 var try_connect = false;
 var auto_center = true;
+var load_state = true;
 
 var app_id = Math.random().toString(36).substring(7);
 
@@ -253,6 +254,19 @@ function start(check = true)
         var [w, h] = msg.val;
         localStorage.setItem('desktop.width', w);
         localStorage.setItem('desktop.height', h);
+      }
+      else if( msg.id == '/clients/all' )
+      {
+        if( true || !load_state )
+          console.log('not gonna load state again..');
+        else
+        {
+          for(var client of msg.clients)
+            if( client.data && client.data.type == 'browser' )
+              openURL(client.data.url, client.region);
+
+          load_state = false;
+        }
       }
       else if( msg.id == '/mouse/dragdata' )
       {

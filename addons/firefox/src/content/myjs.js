@@ -1182,19 +1182,34 @@ function onSaveState()
 }
 
 //------------------------------------------------------------------------------
-function onLoadState()
+function onLoadFileForTask(task, filter_name, filter)
 {
   var nsIFilePicker = Ci.nsIFilePicker;
   var fp = Cc["@mozilla.org/filepicker;1"].createInstance(nsIFilePicker);
   fp.init(window, "Select a File", nsIFilePicker.modeOpen);
-  fp.appendFilter( "Concept State File (*.concept-local.json)",
-                   "*.concept-local.json" );
+  fp.appendFilter(filter_name, filter);
 
   var res = fp.show();
   if( res == nsIFilePicker.returnCancel )
     return;
 
-  send({'task': 'LOAD-STATE', 'path': fp.fileURL.path});
+  send({'task': task, 'path': fp.fileURL.path});
+}
+
+//------------------------------------------------------------------------------
+function onLoadState()
+{
+  onLoadFileForTask( 'LOAD-STATE',
+                     "Concept State File (*.concept-local.json)",
+                     "*.concept-local.json" );
+}
+
+//------------------------------------------------------------------------------
+function onReplayLog()
+{
+  onLoadFileForTask( 'REPLAY-LOG',
+                     "Concept Log File (*.concept-log.json)",
+                     "*.concept-log.json" );
 }
 
 //------------------------------------------------------------------------------
