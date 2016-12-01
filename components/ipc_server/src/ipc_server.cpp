@@ -902,14 +902,13 @@ namespace LinksRouting
     }
 
     ClientRef client_info = client->second;
-    qDebug() << "Received (" << client_info->getWindowInfo().id << "):"
-              << data.left(200);
-
     try
     {
       {
         QJsonObject msg = parseJson(data.toLocal8Bit());
         QString task = msg.value("task").toString();
+
+        qDebug() << "Message from" << client_info->getWindowInfo().id << msg;
 
         auto msg_handler = _msg_handlers.find(task);
         if( msg_handler == _msg_handlers.end() )
