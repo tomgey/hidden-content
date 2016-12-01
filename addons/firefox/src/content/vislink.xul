@@ -58,7 +58,7 @@
                          class="preferences"
                          oncommand="UI.showPreferences()">
             <menupopup id="ctx-vislink_menu">
-              <menuitem label="Abort all" oncommand="onAbort('', -1)"/>
+              <menuitem label="Abort all" oncommand="abortAll()"/>
               <menuitem label="Settings" oncommand="UI.showPreferences()"/>
               <menuitem label="Dump Links" oncommand="onDump()"/>
               <menuitem label="Save State" oncommand="onSaveState()"/>
@@ -84,7 +84,7 @@
         <menuitem label="No routing algorithm" disabled="true" />
       </div>
       <menuseparator />
-      <menuitem label="Abort all" oncommand="onAbort('', -1)"/>
+      <menuitem label="Abort all" oncommand="abortAll()"/>
       <menuitem label="Settings" oncommand="UI.showPreferences()"/>
       <menuitem label="Dump Links" oncommand="onDump()"/>
       <menuitem label="Save State" oncommand="onSaveState()"/>

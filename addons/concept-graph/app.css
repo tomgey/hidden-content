@@ -424,7 +424,8 @@ circle.ref-highlight {
 .node.refs-collapsed g.ref-action:not(.ref-action-expand),
 .node.refs-expanded g.ref-action-expand,
 .node.refs-expanded .ref-bg-collapsed,
-.node.refs-collapsed .ref-bg-expanded {
+.node.refs-collapsed .ref-bg-expanded,
+.node:not(.has-refs) .ref-bg {
   display: none;
 }
 

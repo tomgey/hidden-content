@@ -721,6 +721,12 @@ function onClick(e)
   vp[0] += 50;
   vp[1] += 50;
 
+  if( loc.href.endsWith('addons/starter/index.html') )
+  {
+    vp[2] = 800;
+    vp[3] = 600;
+  }
+
   send({
     task: 'WM',
     cmd: 'open-url',
@@ -1125,7 +1131,7 @@ function removeRouteData(id)
 }
 
 //------------------------------------------------------------------------------
-function onAbort(id, stamp, send_msg = true, all_clients = true)
+function onAbort(id, stamp, scope = 'all', send_msg = true)
 {
   // TODO
   last_id = null;
@@ -1148,14 +1154,14 @@ function onAbort(id, stamp, send_msg = true, all_clients = true)
       'task': 'ABORT',
       'id': id,
       'stamp': stamp,
-      'scope': (all_clients ? 'all' : 'this')
+      'scope': scope
     });
 }
 
 //------------------------------------------------------------------------------
-function abortAll()
+function abortAll(scope = 'all')
 {
-  onAbort('', -1);
+  onAbort('', -1, scope);
 }
 
 //------------------------------------------------------------------------------
@@ -1231,7 +1237,7 @@ function reportVisLinks(id, found, refs)
   if( !refs )
   {
     if( !found && prefs.getBoolPref("replace-route") )
-      abortAll();
+      abortAll('this-ptr');
 
     bbs = searchDocument(content.document, id);
 
@@ -1281,6 +1287,7 @@ function reportVisLinks(id, found, refs)
     'title': document.title,
     'id': id,
     'stamp': last_stamp,
+    'own': true
   };
 
   if( bbs.length > 0 )
@@ -1559,7 +1566,7 @@ function register(match_title = false, src_id = 0)
       }
       else if( msg.task == 'ABORT' )
       {
-        onAbort(msg.id, msg.stamp, false);
+        onAbort(msg.id, msg.stamp, 'all', false);
       }
       else if( msg.task == 'GET-FOUND' )
       {

@@ -371,8 +371,10 @@ namespace LinksRouting
 
       /**
        * Clear all links
+       *
+       * @ptr_id  If given clear only the links owned by the given pointer id
        */
-      void abortAll();
+      void abortAll(uint8_t ptr_id = 0);
 
       std::string   _debug_regions,
                     _debug_full_preview_path;

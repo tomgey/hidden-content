@@ -1144,6 +1144,17 @@ namespace LinksRouting
     QMutexLocker lock_links(_mutex_slot_links);
     client->update(windows);
 
+    if( client->getWindowInfo().isValid() )
+    {
+      sendMessageToSupportedClient(
+        {{"task", "WM"},
+         {"cmd", "getWindowOwner"},
+         {"wid", qint64(client->getWindowInfo().id)}},
+        "cursor-info",
+        client
+      );
+    }
+
     qDebug() << "connected"
              << "\n  region:" << client->getWindowInfo().region
              << "\n  viewport:" << client->getViewportAbs();
@@ -2120,9 +2131,10 @@ namespace LinksRouting
   {
     QString const id = from_json<QString>(msg.value("id"));
     uint32_t stamp = from_json<uint32_t>(msg.value("stamp"));
+    QString scope = from_json<QString>(msg.value("scope"), "all");
 
     if( id.isEmpty() && stamp == (uint32_t)-1 )
-      return abortAll();
+      return abortAll(scope == "this-ptr" ? client->getWindowInfo().ptr_id : 0);
 
     QMutexLocker lock_links(_mutex_slot_links);
     LinkDescription::LinkList::iterator link;
@@ -2130,7 +2142,6 @@ namespace LinksRouting
       return;
 
     WId abort_wid = client->getWindowInfo().id;
-    QString scope = from_json<QString>(msg.value("scope"), "all");
 
     if( scope == "this" )
     {
@@ -3058,6 +3069,14 @@ namespace LinksRouting
     qDebug() << "distributeMessage" << link._id
              << QString::fromLocal8Bit(msg_data);
 
+    // Send info message (eg. about link initiating) also to clients which are
+    // not part of the link so that they can show information about it.
+    QJsonObject msg_info(msg);
+    msg_info["orig-task"] = msg["task"];
+    msg_info["task"] = "INFO";
+    QByteArray msg_info_data =
+      QJsonDocument(msg_info).toJson(QJsonDocument::Compact);
+
     auto isOnList = []( ClientRef const& client,
                         FilterList const& list )
     {
@@ -3093,21 +3112,25 @@ namespace LinksRouting
 #ifdef DEBUG_LINK_FILTER_LIST
         qDebug() << "on blacklist";
 #endif
-        continue;
       }
 
-      if( !whitelist.empty() && !isOnList(client, whitelist) )
+      else if( !whitelist.empty() && !isOnList(client, whitelist) )
       {
 #ifdef DEBUG_LINK_FILTER_LIST
         qDebug() << "not on whitelist";
 #endif
+      }
+
+      else
+      {
+#ifdef DEBUG_LINK_FILTER_LIST
+        qDebug() << "allowed";
+#endif
+        client->socket->sendTextMessage(msg_data);
         continue;
       }
 
-#ifdef DEBUG_LINK_FILTER_LIST
-      qDebug() << "allowed";
-#endif
-      client->socket->sendTextMessage(msg_data);
+      client->socket->sendTextMessage(msg_info_data);
     }
   }
 
@@ -3477,15 +3500,31 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  void IPCServer::abortAll()
+  void IPCServer::abortAll(uint8_t ptr_id)
   {
-    qDebug() << "Abort all links";
+    qDebug() << "Abort all links" << ptr_id;
 
     QMutexLocker lock_links(_mutex_slot_links);
     for(auto link = _slot_links->_data->begin();
              link != _slot_links->_data->end(); )
+    {
+      if( ptr_id )
+      {
+        QJsonArray owners = link->_props.value("owners").toArray();
+        qDebug() << link->_id << "owners" << owners;
+        auto own = jsonObjectArrayFind(owners, "pointer-id", ptr_id);
+        if(     own == owners.end()
+            || !own->toObject().value("is-owner").toBool() )
+        {
+          qDebug() << "Not aborting link" << link->_id;
+          ++link;
+          continue;
+        }
+      }
+
       link = abortLinking(link);
-    assert( _slot_links->_data->empty() );
+    }
+    //assert( _slot_links->_data->empty() );
   }
 
   //----------------------------------------------------------------------------

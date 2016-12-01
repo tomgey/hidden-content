@@ -277,8 +277,8 @@ namespace LinksRouting
            scroll_offset( scroll_region.topLeft() );
     LinkDescription::nodes_t nodes;
 
-    qDebug() << "top_left" << top_left.toQPoint()
-             << "scroll_offset" << scroll_offset.toQPoint();
+//    qDebug() << "top_left" << top_left.toQPoint()
+//             << "scroll_offset" << scroll_offset.toQPoint();
 
     bool const node_rel = node_props.get<bool>("rel", false);
     std::string const node_ref = node_props.get<std::string>("ref", "abs");
@@ -490,7 +490,7 @@ namespace LinksRouting
   {
     if( !updateWindowInfo(windows) )
     {
-      qDebug() << "Failed to get a matching window info.";
+      qDebug() << "Failed to get a matching window info." << id() << title();
       return false;
     }
 

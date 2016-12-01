@@ -6,6 +6,8 @@ var try_connect = false;
 var auto_center = true;
 var load_state = true;
 
+const CONCEPT_URI = 'link://concept/';
+
 var app_id = Math.random().toString(36).substring(7);
 
 var concept_graph =
@@ -68,7 +70,7 @@ var concept_graph =
   .on('selection-remove', function(id, type)
   {
     if( type == 'concept' )
-      abortLink('link://concept/' + id);
+      abortLink(CONCEPT_URI + id);
   })
   .on('relation-new', function(id)
   {
@@ -97,6 +99,7 @@ var request_queue = []; // Pending requests (if no node exists yet)
 var queue_timeout = null;
 var active_links = new Set();
 var active_urls = new Map();
+var info_links = new Map();
 
 var drag_start_pos = null,
     drag_start_selection = null,
@@ -289,7 +292,7 @@ function start(check = true)
     }
     else if( msg.task == 'REQUEST' )
     {
-      if( !handleRequest(msg) )
+      if( !handleRequest(msg, true) )
       {
         request_queue.push(msg);
         console.log("Storing link request for later handling: " + event.data);
@@ -298,7 +301,21 @@ function start(check = true)
     else if( msg.task == 'ABORT' )
     {
       active_links.delete(msg.id);
+
+      if( info_links.delete(msg.id) );
+        restart();
+
       console.log('ABORT', msg);
+    }
+    else if( msg.task == 'INFO' )
+    {
+      if( msg['orig-task'] == 'REQUEST' )
+        handleInfoRequest(msg);
+    }
+    else if( msg.task == "WM" && msg.cmd == "windowownerchange" )
+    {
+      d3.select('header')
+        .style('background-color', msg.color);
     }
     else
       console.log("Unknown message: " + event.data);
@@ -378,12 +395,25 @@ function localBool(key)
   return localStorage.getItem(key) == 'true';
 }
 
-function handleRequest(msg)
+function handleInfoRequest(msg)
 {
-  var c = 'link://concept/';
-  if( msg.id.startsWith(c) )
+  if( !msg.id.startsWith(CONCEPT_URI) )
+    return false;
+
+  console.log('info', msg);
+
+  info_links.set(msg.id, msg);
+  if( !active_links.has(msg.id) )
+    restart();
+
+  return true;
+}
+
+function handleRequest(msg, update_link_list = false)
+{
+  if( msg.id.startsWith(CONCEPT_URI) )
   {
-    var node = concept_graph.getById( msg.id.substring(c.length) );
+    var node = concept_graph.getById( msg.id.substring(CONCEPT_URI.length) );
     if( !node )
       return false; // Try again (eg. if new nodes arrive)
   }
@@ -393,8 +423,6 @@ function handleRequest(msg)
     if( !node )
       return true; // Just ignore keyword links not matching any concept
   }
-
-  active_links.add(msg.id);
 
   var do_circle = false; //localStorage.getItem('link-circle') == 'true';
   var bbs = [];
@@ -426,6 +454,13 @@ function handleRequest(msg)
     'regions': bbs
   });
 
+  if( update_link_list )
+  {
+    active_links.add(msg.id);
+    if( info_links.has(msg.id) )
+      restart();
+  }
+
   return true;
 }
 
@@ -450,7 +485,7 @@ function checkRequestQueue()
 {
   for(var i = request_queue.length - 1; i >= 0; --i)
   {
-    if( handleRequest(request_queue[i]) )
+    if( handleRequest(request_queue[i], true) )
     {
       request_queue.splice(i, 1);
       console.log("done", request_queue);
@@ -855,12 +890,16 @@ function restart(update_layout = true)
     .attr('class', 'id');
   nodes_enter
     .append('svg:rect')
-    .classed('ref-bg-collapsed', true)
-    .attr({rx: 5, ry: 5});
+    .attr({
+      'class': 'ref-bg ref-bg-collapsed',
+      rx: 5, ry: 5
+    });
   nodes_enter
     .append('svg:rect')
-    .classed('ref-bg-expanded', true)
-    .attr({rx: 5, ry: 5});
+    .attr({
+      'class': 'ref-bg ref-bg-expanded',
+       rx: 5, ry: 5
+    });
 
   node_groups
     .classed('selected', function(d) { return concept_graph.selection.has(d.id); });
@@ -874,82 +913,79 @@ function restart(update_layout = true)
 
   node_groups.selectAll('g.ref')
     .remove();
+  node_groups.selectAll('.link-info')
+    .remove();
 
   node_groups.each(function(node_data)
   {
     var node = d3.select(this);
-    var ref_icons =
-      node
-        .selectAll('g.ref')
-        .data(function(d)
-        {
-          if( !d.refs || d.refs.length <= 4 )
-            node.classed('refs-collapsed', false)
-                .classed('refs-expanded', false);
 
-          if( !d.refs )
-            return [];
+    var refs = [];
+    for(var url in node_data.refs)
+      refs.push({
+        url: url,
+        data: node_data.refs[url]
+      });
 
-          var refs = [];
-          for(var url in d.refs)
-            refs.push({
-              url: url,
-              data: d.refs[url]
-            });
+    node.classed('has-refs', refs.length);
+    if( refs.length <= 4 )
+      node.classed('refs-collapsed', false)
+          .classed('refs-expanded', false);
 
-          var num_cols = Math.min(4, refs.length);
-          var pad = 5, w = 18, h = 18;
-          var x = -num_cols / 2 * w - (num_cols - 1) / 2 * pad,
-              y = 25;
+    var num_cols = Math.min(4, refs.length);
+    var pad = 5, w = 18, h = 18;
+    var x = -num_cols / 2 * w - (num_cols - 1) / 2 * pad,
+        y = 25;
 
-          for(var i = 0; i < refs.length; ++i)
-          {
-            var col = i % num_cols;
-            refs[i]['x'] = x + (i % num_cols) * (w + pad);
-            refs[i]['y'] = y + Math.floor(i / num_cols) * (h + pad);
-          }
+    for(var i = 0; i < refs.length; ++i)
+    {
+      var col = i % num_cols;
+      refs[i]['x'] = x + (i % num_cols) * (w + pad);
+      refs[i]['y'] = y + Math.floor(i / num_cols) * (h + pad);
+    }
 
-          var bg_pad = 3,
-              bg_x = x - bg_pad,
-              bg_y = y - bg_pad,
-              bg_w = num_cols * (w + pad) - pad + 2 * bg_pad,
-              bg_h = Math.ceil(refs.length / num_cols) * (h + pad) - pad + 2 * bg_pad;
+    var bg_pad = 3,
+        bg_x = x - bg_pad,
+        bg_y = y - bg_pad,
+        bg_w = num_cols * (w + pad) - pad + 2 * bg_pad,
+        bg_h = Math.ceil(refs.length / num_cols) * (h + pad) - pad + 2 * bg_pad;
 
-          node.select('.ref-bg-collapsed')
-            .attr({ x: bg_x,
-                    y: bg_y,
-                    width: bg_w,
-                    height: h + 2 * bg_pad });
-          node.select('.ref-bg-expanded')
-            .attr({ x: bg_x,
-                    y: bg_y,
-                    width: bg_w,
-                    height: bg_h });
+    node.select('.ref-bg-collapsed')
+      .attr({ x: bg_x,
+              y: bg_y,
+              width: bg_w,
+              height: h + 2 * bg_pad });
+    node.select('.ref-bg-expanded')
+      .attr({ x: bg_x,
+              y: bg_y,
+              width: bg_w,
+              height: bg_h });
 
-          if( refs.length > 4 )
-          {
-            refs.push({
-              x: refs[refs.length - 1].x + w + pad,
-              y: refs[refs.length - 1].y,
-              url: 'action:collapse',
-              data: {icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAIZJREFUOI3tj1EKwkAMRLM5QTLJYYooVdzeoNAb9sNTeArxCi7sESr+tFCkZangX9/nJDOZEO38F1U9AKh+MpvZFUBS1Ze412t7YUkEEImofzO3RBTCMNyYucs534uXAUQASdxPkybuNYBkZueSuRlrH79ns5DLaoCoPpfM8xAxexTf2NnGB+xwGEJlykyCAAAAAElFTkSuQmCC'}
-            });
+    if( refs.length > 4 )
+    {
+      refs.push({
+        x: refs[refs.length - 1].x + w + pad,
+        y: refs[refs.length - 1].y,
+        url: 'action:collapse',
+        data: {icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAIZJREFUOI3tj1EKwkAMRLM5QTLJYYooVdzeoNAb9sNTeArxCi7sESr+tFCkZangX9/nJDOZEO38F1U9AKh+MpvZFUBS1Ze412t7YUkEEImofzO3RBTCMNyYucs534uXAUQASdxPkybuNYBkZueSuRlrH79ns5DLaoCoPpfM8xAxexTf2NnGB+xwGEJlykyCAAAAAElFTkSuQmCC'}
+      });
 
-            refs.push({
-              x: refs[3].x,
-              y: refs[3].y,
-              url: 'action:expand',
-              data: {icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAHdJREFUOI3tjjEOglAQBYcv/JrHnsjCQ3gDr4YEhYORUBuDNsSYn7CYYMnUs7MPdv6LzC5A4Shxdj6ERDhJui5EoqQmg6M3opDZTdI9iURJfWnWALkX+I50c8Q9zpxIzTQdAF4hPMZhOAPPte9ppK3M6l9m72zgDeTUFanvQpp2AAAAAElFTkSuQmCC'}
-            });
+      refs.push({
+        x: refs[3].x,
+        y: refs[3].y,
+        url: 'action:expand',
+        data: {icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAHdJREFUOI3tjjEOglAQBYcv/JrHnsjCQ3gDr4YEhYORUBuDNsSYn7CYYMnUs7MPdv6LzC5A4Shxdj6ERDhJui5EoqQmg6M3opDZTdI9iURJfWnWALkX+I50c8Q9zpxIzTQdAF4hPMZhOAPPte9ppK3M6l9m72zgDeTUFanvQpp2AAAAAElFTkSuQmCC'}
+      });
 
-            if( !node.classed('refs-expanded') )
-              node.classed('refs-collapsed', true);
-          }
-          return refs;
-        });
+      if( !node.classed('refs-expanded') )
+        node.classed('refs-collapsed', true);
+    }
 
     var ref_enter =
-      ref_icons.enter()
+      node
+        .selectAll('g.ref')
+        .data(refs)
+        .enter()
         .append('g')
         .classed('ref', true)
         .classed('ref-action', function(d) { return d.url.startsWith('action:'); })
@@ -990,6 +1026,27 @@ function restart(update_layout = true)
       .attr('title', function(d) { return d.url; })
       .attr('x', function(d) { return d.x; })
       .attr('y', function(d) { return d.y; });
+
+    var link_id = CONCEPT_URI + node_data.id,
+        link_data = info_links.get(link_id);
+
+    if( link_data && !active_links.has(link_id) )
+    {
+      var px = x + num_cols * (w + pad) + pad,
+          py = y;
+
+      var owners = link_data.data.owners,
+          ptr_id = (owners && owners.length) ? owners[0]['pointer-id'] : 2;
+
+      node
+        .append('svg:path')
+        .classed('link-info', true)
+        .attr({
+          d: 'M1408,1533c0,80-24.333,143.167-73,189.5s-113.333,69.5-194,69.5H267c-80.667,0-145.333-23.167-194-69.5S0,1613,0,1533  c0-35.333,1.167-69.833,3.5-103.5s7-70,14-109S33.333,1245.333,44,1212s25-65.833,43-97.5s38.667-58.667,62-81  c23.333-22.333,51.833-40.167,85.5-53.5s70.833-20,111.5-20c6,0,20,7.167,42,21.5s46.833,30.333,74.5,48  c27.667,17.667,63.667,33.667,108,48S659.333,1099,704,1099s89.167-7.167,133.5-21.5s80.333-30.333,108-48  c27.667-17.667,52.5-33.667,74.5-48s36-21.5,42-21.5c40.667,0,77.833,6.667,111.5,20s62.167,31.167,85.5,53.5  c23.333,22.333,44,49.333,62,81s32.333,64.167,43,97.5s19.5,69.5,26.5,108.5s11.667,75.333,14,109S1408,1497.667,1408,1533z   M1088,640c0,106-37.5,196.5-112.5,271.5S810,1024,704,1024s-196.5-37.5-271.5-112.5S320,746,320,640s37.5-196.5,112.5-271.5  S598,256,704,256s196.5,37.5,271.5,112.5S1088,534,1088,640z',
+          transform: 'translate(' + px + ',' + py + ') scale(0.0078)',
+          fill: ptr_id == 2 ? 'red' : 'blue'
+        });
+    }
   });
 
   if( update_layout )
@@ -1120,14 +1177,17 @@ function keydown()
 
 function sendInitiateForNode(n)
 {
+  var link_id = CONCEPT_URI + n.id;
   send({
     'task': 'INITIATE',
-    'id': 'link://concept/' + n.id,
+    'id': link_id,
     'refs': n.refs || {},
     'whitelist': ['type/Browser', 'this'],
     'own': true
   });
-  active_links.add('link://concept/' + n.id);
+  active_links.add(link_id);
+  if( info_links.has(link_id) )
+    restart();
 }
 
 function abortLink(id)
@@ -1139,6 +1199,8 @@ function abortLink(id)
     'scope': 'this', //'all'
   });
   active_links.delete(id);
+  if( info_links.has(id) )
+    restart();
 }
 
 function abortAllLinks()
