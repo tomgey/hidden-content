@@ -16,6 +16,8 @@
 #include <QProcess>
 #include <QWindow>
 
+//#define WINDOW_MONITOR_LOG_REGION_CHANGES
+
 namespace LinksRouting
 {
   //----------------------------------------------------------------------------
