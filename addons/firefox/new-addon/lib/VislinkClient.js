@@ -23,13 +23,7 @@ function VislinkClient(application_name)
     if( status == 'error' )
     {
       _socket = 0;
-      window.removeEventListener('resize', function(){ this._onResize(); }, false);
     }
-  };
-  
-  this._onResize = function()
-  {
-  //  this.send({task: 'RESIZE', region: this.getRegion()});
   };
 
 // public:
@@ -42,8 +36,6 @@ function VislinkClient(application_name)
     try
     {
       _socket = new WebSocket(url, 'VLP');
-      window.addEventListener('resize', function(){ $this._onResize(); }, false);
-
       _socket.onopen = function(event)
       {
         $this._setStatus('active');

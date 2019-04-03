@@ -21,6 +21,16 @@ client.onopen = () => {
     forEachActiveTab((tab, port) => port.postMessage({task: "NOTIFY-SIZE"}))
 }
 
+/** Update icon according to status */
+client.onstatus = status => {
+    let icon_path = "icons/icon"
+    if (status != '') {
+        icon_path += '-' + status
+    }
+
+    browser.browserAction.setIcon({path: icon_path + '.png'});
+}
+
 /** Messages from the links server */
 client.onmessage = msg => {
     console.log("message", msg)
