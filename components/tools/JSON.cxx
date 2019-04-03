@@ -13,25 +13,31 @@ QString to_qstring(const QString& str)
 //------------------------------------------------------------------------------
 QJsonObject parseJson(const QByteArray& msg)
 {
+  if( msg.isEmpty() )
+    return {};
+
   QJsonParseError error;
   QJsonDocument doc = QJsonDocument::fromJson(msg, &error);
   if( doc.isObject() && error.error == QJsonParseError::NoError )
     return doc.object();
 
   qWarning() << "Failed to parse json: " << error.errorString() << ": " << msg.left(100);
-  return QJsonObject();
+  return {};
 }
 
 //------------------------------------------------------------------------------
 QJsonArray parseJsonArray(const QByteArray& msg)
 {
+  if( msg.isEmpty() )
+    return {};
+
   QJsonParseError error;
   QJsonDocument doc = QJsonDocument::fromJson(msg, &error);
   if( doc.isArray() && error.error == QJsonParseError::NoError )
     return doc.array();
 
   qWarning() << "Failed to parse json: " << error.errorString() << error.offset << ": " << msg.left(200);
-  return QJsonArray();
+  return {};
 }
 
 //------------------------------------------------------------------------------

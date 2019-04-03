@@ -16,6 +16,7 @@
 #include <QDesktopWidget>
 #include <QElapsedTimer>
 #include <QScreen>
+#include <QSurfaceFormat>
 
 #include <iostream>
 
@@ -101,6 +102,10 @@ namespace qtfullscreensystem
     setOrganizationDomain("icg.tugraz.at");
     setOrganizationName("icg.tugraz.at");
     setApplicationName("VisLinks");
+
+    auto fmt = QSurfaceFormat::defaultFormat();
+    fmt.setMajorVersion(2);
+    QSurfaceFormat::setDefaultFormat(fmt);
 
     const QDir config_dir =
       QStandardPaths::writableLocation(QStandardPaths::DataLocation);
@@ -188,6 +193,7 @@ namespace qtfullscreensystem
         fmt.setRenderableType(QSurfaceFormat::RenderableType::OpenGL);
         fmt.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
         fmt.setAlphaBufferSize(8);
+        fmt.setMajorVersion(4);
 
         _gl_ctx.setFormat(fmt);
         if( !_gl_ctx.create() )

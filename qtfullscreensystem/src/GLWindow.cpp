@@ -42,6 +42,7 @@ namespace qtfullscreensystem
 
     // Transparent background/blending with desktop
     QSurfaceFormat format;
+    format.setMajorVersion(2);
     format.setAlphaBufferSize(8);
     setFormat(format);
   }

@@ -80,6 +80,8 @@ set(COMMON_FILES  ${LINKS_INCLUDE_DIR}/common/plainlinkdescription.h
                   ${LINKS_INCLUDE_DIR}/common/componentarguments.h
                   )
 
+set(OpenGL_GL_PREFERENCE LEGACY)
+
 if(WIN32)
   add_definitions(/wd4250 /wd4800 -DNOMINMAX -DWIN32_LEAN_AND_MEAN -D_USE_MATH_DEFINES)
 endif(WIN32)

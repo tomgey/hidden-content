@@ -6,56 +6,85 @@
   <link rel="stylesheet" href="menu.css"/>
 </head>
 <!-- https://firefoxux.github.io/StyleGuide/#/navigation -->
-<body class="panel">
-<header class="panel-section panel-section-header">
-  <div class="icon-section-header"><!-- An image goes here. --></div>
-  <div class="text-section-header">Visual Links</div>
-</header>
+<body>
 
-<div class="panel-section panel-section-list">
-  <div class="panel-list-item click routing-algorithm"
+<div class="panel" id="main-page">
+  <header class="panel-section panel-section-header">
+    <div class="icon-section-header"><!-- An image goes here. --></div>
+    <div class="text-section-header">Visual Links</div>
+  </header>
+
+  <div class="panel-section panel-section-list">
+    <div class="panel-list-item click routing-algorithm"
        data-algorithm="CPURouting">
-    <div class="icon"></div>
-    <div class="text">CPURouting</div>
-    <div class="text-shortcut">Ctrl-1</div>
-  </div>
-  
-  <div class="panel-list-item click routing-algorithm"
+      <div class="icon"></div>
+      <div class="text">CPURouting</div>
+      <div class="text-shortcut">Ctrl-1</div>
+    </div>
+
+    <div class="panel-list-item click routing-algorithm"
        data-algorithm="CPURoutingDijkstra">
-    <div class="icon"></div>
-    <div class="text">CPURoutingDijkstra</div>
-    <div class="text-shortcut">Ctrl-2</div>
-  </div>
-  
-  <div class="panel-list-item click routing-algorithm"
+      <div class="icon"></div>
+      <div class="text">CPURoutingDijkstra</div>
+      <div class="text-shortcut">Ctrl-2</div>
+    </div>
+
+    <div class="panel-list-item click routing-algorithm"
        data-algorithm="NoRouting">
-    <div class="icon"></div>
-    <div class="text">NoRouting</div>
-    <div class="text-shortcut">Ctrl-3</div>
+      <div class="icon"></div>
+      <div class="text">NoRouting</div>
+      <div class="text-shortcut">Ctrl-3</div>
+    </div>
+
+    <div class="panel-section-separator"></div>
+
+    <div class="panel-list-item click change-page">
+      <div class="icon"></div>
+      <div class="text">Routing Settings</div>
+      <div class="text-shortcut"></div>
+    </div>
+
+    <div class="panel-section-separator"></div>
+
+    <div class="panel-list-item click abort">
+      <div class="icon"></div>
+      <div class="text">Abort all links</div>
+      <div class="text-shortcut"></div>
+    </div>
   </div>
 
-  <div class="panel-section-separator"></div>
-
-  <div class="panel-list-item disabled">
-    <div class="icon"></div>
-    <div class="text">Disabled List Item</div>
-    <div class="text-shortcut"></div>
-  </div>
-  
-  <div class="panel-section-separator"></div>
-  
-  <div class="panel-list-item click abort">
-    <div class="icon"></div>
-    <div class="text">Abort all links</div>
-    <div class="text-shortcut"></div>
-  </div>
+  <footer class="panel-section panel-section-footer">
+    <div class="panel-section-footer-button click">Cancel</div>
+    <div class="panel-section-footer-separator"></div>
+    <div class="panel-section-footer-button click default connect">Connect</div>
+  </footer>
 </div>
 
-<footer class="panel-section panel-section-footer">
-  <div class="panel-section-footer-button click">Cancel</div>
-  <div class="panel-section-footer-separator"></div>
-  <div class="panel-section-footer-button click default connect">Connect</div>
-</footer>
+<div class="panel hidden" id="routing-page">
+  <header class="panel-section panel-section-header">
+    <div class="icon-section-header"><!-- An image goes here. --></div>
+    <div class="text-section-header">CPU Routing Settings</div>
+  </header>
+
+  <div class="panel-section panel-section-list">
+    <input id="CPURouting:NumSteps"
+           class="panel-list-item input-change"
+           type="number"
+           data-type="Integer"
+           value="3"
+           min="0"
+           max="12"
+           increment="1"
+           size="2" maxlength="2" />
+  </div>
+
+  <footer class="panel-section panel-section-footer">
+    <div class="panel-section-footer-button click">Cancel</div>
+    <div class="panel-section-footer-separator"></div>
+    <div class="panel-section-footer-button click change-page">Back</div>
+  </footer>
+</div>
+
 <script src="menu.js"></script>
 </body>
 </html>

@@ -34,6 +34,10 @@ document.addEventListener("click", e => {
             'id': '/routing',
             'val': element.dataset.algorithm
         });
+    } else if (class_list.contains("change-page")) {
+        $("#main-page").classList.toggle("hidden");
+        $("#routing-page").classList.toggle("hidden");
+        return
     } else if (class_list.contains("abort")) {
         browser.runtime.sendMessage({
           'task': 'ABORT',
@@ -44,7 +48,21 @@ document.addEventListener("click", e => {
     }
 
     close();
-    //      $("#page-connect").classList.add("hidden");
-    //    $("#page-menu").classList.remove("hidden");
 });
+
+document.addEventListener("change", e => {
+    const element = e.target.closest(".input-change");
+    if (!element)
+    {
+        return;
+    }
+
+    browser.runtime.sendMessage({
+      'task': 'SET',
+      'id': '/config',
+      'id': element.id,
+      'val': element.value,
+      'type': element.dataset.type
+    });
+})
 })()

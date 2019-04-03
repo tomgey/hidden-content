@@ -272,7 +272,7 @@ namespace LinksRouting
   }
 
   //----------------------------------------------------------------------------
-  bool CPURouting::startup(Core* core, unsigned int type)
+  bool CPURouting::startup(Core* /*core*/, unsigned int /*type*/)
   {
     return true;
   }
@@ -291,7 +291,7 @@ namespace LinksRouting
 
 #define GLOBAL_ROUTING
   //----------------------------------------------------------------------------
-  uint32_t CPURouting::process(unsigned int type)
+  uint32_t CPURouting::process(unsigned int /*type*/)
   {
     if( !_subscribe_links->isValid() )
       return 0;

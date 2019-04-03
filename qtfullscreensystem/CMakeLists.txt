@@ -39,8 +39,6 @@ set (ADDITIONAL_LIBS
 )
 
 # dependencies & build
-find_package(OpenGL REQUIRED)
-
 if(LinksComponent_routing_gpu)
   find_package(OpenCL REQUIRED)
   include_directories(${OPENCL_INCLUDE_DIRS})
@@ -60,7 +58,6 @@ include_directories(
   ${LINKS_INCLUDE_DIR}
   ${COMPONENTS_INC_DIR}
   ${SYSTEMROOT}
-  ${OPENGL_INCLUDE_DIR}
   ${ADDITIONAL_INCLUDE_DIRS}
   include
 )
@@ -68,7 +65,6 @@ include_directories(
 add_executable(qtfullscreensystem ${HEADER_FILES} ${SOURCE_FILES} ${SHADER_FILES})
 use_components(qtfullscreensystem)
 target_link_libraries( qtfullscreensystem
-  ${OPENGL_gl_LIBRARY}
   ${ADDITIONAL_LIBS}
   Qt5::Core
   Qt5::Gui

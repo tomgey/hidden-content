@@ -37,7 +37,7 @@ namespace qtfullscreensystem
       LR::slot_t<LR::SlotType::CoveredOutline >::type _subscribe_outlines;
       LR::slot_t<LR::SlotType::XRayPopup      >::type _subscribe_xray;
 
-      virtual void paintGL();
+      void paintGL() override;
 //      virtual void moveEvent(QMoveEvent *event);
 //      virtual void paintEvent(QPaintEvent* e);
   };

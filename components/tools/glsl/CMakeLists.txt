@@ -14,7 +14,8 @@ endif(WIN32)
 
 add_library(glsl glinfo.h glsl.h glutils.h glinfo.cpp glsl.cpp glutils.cpp)
 target_link_libraries(glsl
-  ${OPENGL_LIBRARIES}
+	OpenGL::GL
+	OpenGL::GLU
 )
 
 set(GLSL_LIBRARIES ${LocalGLSL_libs} CACHE STRING "Libs for glsl" FORCE)

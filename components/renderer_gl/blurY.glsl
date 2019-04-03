@@ -1,3 +1,5 @@
+#version 130
+
 uniform sampler2D inputTex;
 uniform float scale;
 uniform int normalize_color;

@@ -27,13 +27,13 @@ namespace LinksRouting
 
       CPURouting();
 
-      void publishSlots(SlotCollector& slots);
-      void subscribeSlots(SlotSubscriber& slot_subscriber);
+      void publishSlots(SlotCollector& slots) override;
+      void subscribeSlots(SlotSubscriber& slot_subscriber) override;
 
-      bool startup(Core* core, unsigned int type);
-      void init();
-      void shutdown();
-      bool supports(unsigned int type) const
+      bool startup(Core* core, unsigned int type) override;
+      void init() override;
+      void shutdown() override;
+      bool supports(unsigned int type) const override
       {
         return (type & Component::Routing);
       }
